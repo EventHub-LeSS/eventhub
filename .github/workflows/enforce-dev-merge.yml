@@ -1,0 +1,17 @@
+name: Enforce Development-only Merges to Main
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify source branch is development
+        if: github.head_ref != 'development'
+        run: |
+          echo "ERROR: You can only merge into 'main' from the 'development' branch."
+          echo "Current source branch is: '${{ github.head_ref }}'"
+          exit 1
