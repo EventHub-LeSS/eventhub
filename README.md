@@ -1,5 +1,7 @@
 # eventhub
 
+![CI Build](https://github.com/EventHub-LeSS/eventhub/actions/workflows/ci.yml/badge.svg)
+
 ## Projekt klonen und starten
 
 1. Repository klonen:

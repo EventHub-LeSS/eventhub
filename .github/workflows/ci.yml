@@ -1,0 +1,69 @@
+name: CI Build
+
+on:
+  push:
+    branches:
+      - main
+      - development
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - development
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # TODO: Echten Build-Befehl einsetzen sobald Tech-Stack feststeht
+      # Beispiele:
+      #   Maven:  mvn clean package -DskipTests
+      #   Gradle: ./gradlew build -x test
+      #   Node:   npm ci && npm run build
+      #   Python: pip install -r requirements.txt
+      - name: Build project
+        run: |
+          echo "=== Build Step ==="
+          echo "TODO: Echten Build-Befehl hier einsetzen"
+          echo "Build erfolgreich (Platzhalter)"
+
+  startup-check:
+    name: Startup Check
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # TODO: Echten Startup-Check einsetzen sobald Tech-Stack feststeht
+      # Beispiele:
+      #   Spring Boot: java -jar target/*.jar & sleep 15 && curl http://localhost:8080/actuator/health
+      #   Node/Express: npm start & sleep 10 && curl http://localhost:3000/health
+      #   Django:       python manage.py check --deploy
+      - name: Verify application starts
+        run: |
+          echo "=== Startup Check ==="
+          echo "TODO: Echten Startup-Check hier einsetzen"
+          echo "Startup-Check erfolgreich (Platzhalter)"
+
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # TODO: Echten Linter einsetzen sobald Tech-Stack feststeht
+      # Beispiele:
+      #   Java:   mvn checkstyle:check
+      #   Node:   npx eslint .
+      #   Python: flake8 . oder ruff check .
+      - name: Run linter
+        run: |
+          echo "=== Lint Step ==="
+          echo "TODO: Echten Linter hier einsetzen"
+          echo "Lint erfolgreich (Platzhalter)"
