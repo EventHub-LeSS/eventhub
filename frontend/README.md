@@ -1,39 +1,68 @@
-# EventHub Frontend
+# React + TypeScript + Vite + shadcn/ui
 
-The web frontend for EventHub — create, manage, and share events.
+This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
 
-## Getting started
+## Project structure
 
-You need [Node.js](https://nodejs.org) (v20+). Either npm (ships with Node) or [Bun](https://bun.sh) works; Bun is recommended for noticeably faster installs and dev startup.
+Application code is organized by feature under `src/features`:
 
-### Install
-
-```bash
-# with bun (recommended)
-bun install
-
-# or with npm
-npm install
+```text
+src/features/
+	app/
+		App.tsx
+		index.ts
+	shared/
+		components/
+		lib/
+		index.ts
+	src/router.tsx
 ```
 
-### Run the dev server
+Every feature must define an `index.ts` as its public API. Cross-feature imports
+must use that barrel instead of importing internal files:
 
-```bash
-bun dev      # or: npm run dev
+```tsx
+import { App } from "@/features/app"
+import { Button, ThemeProvider } from "@/features/shared"
 ```
 
-The app runs at <http://localhost:5173>.
+Add exports deliberately when another feature needs them. Shared components and
+utilities belong in `features/shared` and may be imported by every feature.
 
-### Other scripts
+## Routing
+
+The app uses TanStack Router. Define the route tree in `src/router.tsx` and
+import route components through their feature's public `index.ts`. The root `/`
+route currently renders the app feature.
+
+## Code quality
+
+The project uses [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) and
+[Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html). Oxfmt also sorts imports
+and Tailwind CSS classes.
 
 ```bash
-bun run build      # type-check and build for production
-bun run preview    # serve the production build locally
-bun run lint       # run ESLint
+bun run lint
+bun run lint:fix
+bun run format
+bun run format:check
 ```
 
-(Swap `bun` for `npm run` if you're using npm.)
+## Adding components
 
-## Stack
+To add components to your app, run the following command:
 
-React 19 with TypeScript, bundled by Vite. Routing is handled by TanStack Router using file-based routes in `src/routes`. Styling is Tailwind CSS v4, with UI components from shadcn/ui and icons from lucide-react. Server state is managed with TanStack Query.
+```bash
+npx shadcn@latest add button
+```
+
+This places UI components in `src/features/shared/components/ui`. Export any
+component used outside `shared` from `src/features/shared/index.ts`.
+
+## Using components
+
+To use the components in your app, import them as follows:
+
+```tsx
+import { Button } from "@/features/shared"
+```
