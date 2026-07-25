@@ -22,9 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-*.copilot
-*.claude
-*.env
-
-.tanstack

@@ -1,16 +1,23 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "react-perf", "typescript", "oxc"],
-  "env": {
-    "browser": true,
-    "es2024": true
-  },
-  "ignorePatterns": ["dist"],
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
   "categories": {
     "correctness": "error"
   },
   "rules": {
-    "react-hooks/rules-of-hooks": "error",
-    "react-hooks/exhaustive-deps": "warn"
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["@/features/*/**"],
+            "message": "Import from the feature's public index.ts instead."
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "builtin": true
   }
 }
