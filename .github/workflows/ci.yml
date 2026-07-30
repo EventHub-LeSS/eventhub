@@ -19,17 +19,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # TODO: Echten Build-Befehl einsetzen sobald Tech-Stack feststeht
-      # Beispiele:
-      #   Maven:  mvn clean package -DskipTests
-      #   Gradle: ./gradlew build -x test
-      #   Node:   npm ci && npm run build
-      #   Python: pip install -r requirements.txt
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Build project
+        working-directory: frontend
         run: |
-          echo "=== Build Step ==="
-          echo "TODO: Echten Build-Befehl hier einsetzen"
-          echo "Build erfolgreich (Platzhalter)"
+          bun install
+          bun run build
 
   startup-check:
     name: Startup Check
@@ -39,16 +36,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # TODO: Echten Startup-Check einsetzen sobald Tech-Stack feststeht
-      # Beispiele:
-      #   Spring Boot: java -jar target/*.jar & sleep 15 && curl http://localhost:8080/actuator/health
-      #   Node/Express: npm start & sleep 10 && curl http://localhost:3000/health
-      #   Django:       python manage.py check --deploy
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Verify application starts
+        working-directory: frontend
         run: |
-          echo "=== Startup Check ==="
-          echo "TODO: Echten Startup-Check hier einsetzen"
-          echo "Startup-Check erfolgreich (Platzhalter)"
+          bun install
+          bun run start &
+          sleep 10
+          curl --fail http://localhost:3000
 
   lint:
     name: Code Quality
@@ -57,13 +54,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # TODO: Echten Linter einsetzen sobald Tech-Stack feststeht
-      # Beispiele:
-      #   Java:   mvn checkstyle:check
-      #   Node:   npx eslint .
-      #   Python: flake8 . oder ruff check .
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Run linter
+        working-directory: frontend
         run: |
-          echo "=== Lint Step ==="
-          echo "TODO: Echten Linter hier einsetzen"
-          echo "Lint erfolgreich (Platzhalter)"
+          bun install
+          bunx oxlint .
