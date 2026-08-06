@@ -1,6 +1,6 @@
-import { Button } from "@/features/shared"
+import { Button } from "@/features/shared/components/ui/button"
 
-export function App() {
+export default function Page() {
   return (
     <div className="flex min-h-svh p-6">
       <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
