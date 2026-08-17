@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "import",
+    "nextjs",
+    "jsx-a11y"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "features/shared/components/ui/**"
+  ],
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "jsx-a11y/anchor-is-valid": "off",
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "^\\.\\.?/",
+            "message": "Use \"@/...\" path aliases instead of relative imports."
+          },
+          {
+            "group": ["@/features/*/**", "!@/features/shared/**"],
+            "message": "Import features through their public \"index.ts\". The shared feature may be imported directly."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["features/**/index.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}
