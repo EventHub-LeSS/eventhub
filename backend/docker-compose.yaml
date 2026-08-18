@@ -1,0 +1,106 @@
+services:
+
+  app-db:
+    image: postgres:17-alpine
+    container_name: myapp-db
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: myapp
+      POSTGRES_PASSWORD: myapp
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myapp -d myapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migration
+
+    environment:
+      DB_HOST: app-db
+      DB_PORT: 5432
+      DB_USER: myapp
+      DB_PASSWORD: myapp
+      DB_NAME: myapp
+      DB_SSLMODE: disable
+
+    depends_on:
+      app-db:
+        condition: service_healthy
+
+  keycloak-db:
+    image: postgres:17-alpine
+    container_name: keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.1
+    container_name: keycloak
+    command:
+      - start-dev
+      - --hostname=http://localhost:8080
+
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+
+    ports:
+      - "8080:8080"
+
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+
+    container_name: myapp-api
+
+    environment:
+      DB_HOST: app-db
+      DB_PORT: "5432"
+      DB_USER: myapp
+      DB_PASSWORD: myapp
+      DB_NAME: myapp
+
+      KEYCLOAK_ISSUER: "http://localhost:8080/realms/myrealm"
+
+      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/myrealm/protocol/openid-connect/certs"
+
+      KEYCLOAK_AUDIENCE: "my-api"
+
+    ports:
+      - "8081:8081"
+
+    depends_on:
+      app-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+    restart: on-failure
+
+volumes:
+  app-db-data:
+  keycloak-db-data:
