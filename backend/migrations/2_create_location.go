@@ -18,7 +18,7 @@ func init() {
 				street TEXT NOT NULL,
 				house_number TEXT,
 				created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-				updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 			)`)
 		return err
 	}, func(db migrations.DB) error {

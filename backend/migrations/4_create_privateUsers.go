@@ -13,7 +13,7 @@ func init() {
 			CREATE TABLE IF NOT EXISTS payments (
 				user_id UUID PRIMARY KEY,
 				first_name TEXT NOT NULL,
-				last_name TEXT NOT NULL,
+				last_name TEXT NOT NULL
 			)`)
 		return err
 	}, func(db migrations.DB) error {

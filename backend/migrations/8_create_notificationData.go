@@ -12,10 +12,10 @@ func init() {
 		_, err := db.Exec(`
 			CREATE TABLE IF NOT EXISTS notification_data (
 				notification_id UUID PRIMARY KEY,
-				user_id UUID NOT NULL,
+				user_id UUID REFERENCES users(user_Id) ON DELETE SET NULL,
 				subject TEXT NOT NULL,
 				content TEXT NOT NULL,
-				created_at TIMESTAMP NOT NULL DEFAULT NOW()
+				created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 				updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 			)`)
 

@@ -12,7 +12,7 @@ func init() {
 		_, err := db.Exec(`
 			CREATE TABLE IF NOT EXISTS ratings (
 				rating_id UUID PRIMARY KEY,
-				booking_id UUID NOT NULL,
+				booking_id UUID REFERENCES bookings(booking_id) ON DELETE SET NULL,
 				score INT NOT NULL CHECK (score >= 1 AND score <= 5),
 				text TEXT NOT NULL,
 				is_visible BOOLEAN NOT NULL DEFAULT FALSE,
