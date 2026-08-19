@@ -31,6 +31,9 @@ func (r *eventRepository) CreateEvent(event *model.EventModel) error {
 func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
 	event := &model.EventModel{}
 	err := r.db.Model(event).Where("event_id = ?", eventID).Select()
+	if err == pg.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
