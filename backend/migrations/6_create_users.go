@@ -15,8 +15,9 @@ func init() {
 			CREATE TABLE IF NOT EXISTS users (
 				user_id UUID PRIMARY KEY,
 				role user_role NOT NULL,
+				user_type user_type NOT NULL,
 				email TEXT NOT NULL UNIQUE,
-				name TEXT NOT NULL,
+				phone_number TEXT,
 				created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 				updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 			)`)

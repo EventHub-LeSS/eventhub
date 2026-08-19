@@ -8,17 +8,17 @@ import (
 
 func init() {
 	migrations.MustRegisterTx(func(db migrations.DB) error {
-		fmt.Println("Creating payments table...")
+		fmt.Println("Creating organization_users table...")
 		_, err := db.Exec(`
-			CREATE TABLE IF NOT EXISTS payments (
+			CREATE TABLE IF NOT EXISTS organization_users (
 				user_id UUID PRIMARY KEY,
-				organizaiton_name TEXT NOT NULL,
+				organization_name TEXT NOT NULL,
 				contact_person_name TEXT 
 			)`)
 		return err
 	}, func(db migrations.DB) error {
-		fmt.Println("Dropping payments table...")
-		_, err := db.Exec(`DROP TABLE IF EXISTS payments`)
+		fmt.Println("Dropping organization_users table...")
+		_, err := db.Exec(`DROP TABLE IF EXISTS organization_users`)
 		return err
 
 	})

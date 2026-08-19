@@ -9,7 +9,7 @@ import (
 func init() {
 	migrations.MustRegisterTx(func(db migrations.DB) error {
 		fmt.Println("Creating payment_status enum...")
-		_, err := db.Exec(`Create TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded')`)
+		_, err := db.Exec(`Create TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded')`)
 		if err != nil {
 			return err
 		}
