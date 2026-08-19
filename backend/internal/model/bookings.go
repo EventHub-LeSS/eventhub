@@ -16,12 +16,14 @@ const (
 )
 
 type BookingModel struct {
-	BookingID       uuid.UUID     `json:"bookingId" db:"booking_id"`
-	UserID          uuid.UUID     `json:"userId" db:"user_id"`
-	EventID         uuid.UUID     `json:"eventId" db:"event_id"`
-	PaymentID       *uuid.UUID    `json:"paymentId" db:"payment_id"`
-	NumberOfTickets int           `json:"numberOfTickets" db:"number_of_tickets"`
-	Status          BookingStatus `json:"status" db:"status"`
-	CreatedAt       time.Time     `json:"createdAt" db:"created_at"`
-	UpdatedAt       time.Time     `json:"updatedAt" db:"updated_at"`
+	tableName struct{} `pg:"bookings"`
+
+	BookingID       uuid.UUID     `json:"bookingId" pg:"booking_id,pk"`
+	UserID          uuid.UUID     `json:"userId" pg:"user_id"`
+	EventID         uuid.UUID     `json:"eventId" pg:"event_id"`
+	PaymentID       *uuid.UUID    `json:"paymentId" pg:"payment_id"`
+	NumberOfTickets int           `json:"numberOfTickets" pg:"number_of_tickets"`
+	Status          BookingStatus `json:"status" pg:"status"`
+	CreatedAt       time.Time     `json:"createdAt" pg:"created_at"`
+	UpdatedAt       time.Time     `json:"updatedAt" pg:"updated_at"`
 }

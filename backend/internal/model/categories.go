@@ -5,7 +5,9 @@ import (
 )
 
 type CategoryModel struct {
-	CategoryID  uuid.UUID `json:"categoryId" db:"category_id"`
-	Category    string    `json:"category" db:"category"`
-	Description *string   `json:"description" db:"description"`
+	tableName struct{} `pg:"categories"`
+
+	CategoryID  uuid.UUID `json:"categoryId" pg:"category_id,pk"`
+	Category    string    `json:"category" pg:"category"`
+	Description *string   `json:"description" pg:"description"`
 }

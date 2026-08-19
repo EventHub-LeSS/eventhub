@@ -5,7 +5,9 @@ import (
 )
 
 type PrivateUserModel struct {
-	UserID    uuid.UUID `json:"userId" db:"user_id"`
-	FirstName string    `json:"firstName" db:"first_name"`
-	LastName  string    `json:"lastName" db:"last_name"`
+	tableName struct{} `pg:"private_users"`
+
+	UserID    uuid.UUID `json:"userId" pg:"user_id,pk"`
+	FirstName string    `json:"firstName" pg:"first_name"`
+	LastName  string    `json:"lastName" pg:"last_name"`
 }

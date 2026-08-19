@@ -17,10 +17,12 @@ const (
 )
 
 type PaymentModel struct {
-	PaymentID    uuid.UUID       `json:"paymentId" db:"payment_id"`
-	Amount       decimal.Decimal `json:"amount" db:"amount"`
-	Status       PaymentStatus   `json:"status" db:"status"`
-	RefundAmount decimal.Decimal `json:"refundAmount" db:"refund_amount"`
-	CreatedAt    time.Time       `json:"createdAt" db:"created_at"`
-	UpdatedAt    time.Time       `json:"updatedAt" db:"updated_at"`
+	tableName struct{} `pg:"payments"`
+
+	PaymentID    uuid.UUID       `json:"paymentId" pg:"payment_id,pk"`
+	Amount       decimal.Decimal `json:"amount" pg:"amount"`
+	Status       PaymentStatus   `json:"status" pg:"status"`
+	RefundAmount decimal.Decimal `json:"refundAmount" pg:"refund_amount,use_zero"`
+	CreatedAt    time.Time       `json:"createdAt" pg:"created_at"`
+	UpdatedAt    time.Time       `json:"updatedAt" pg:"updated_at"`
 }

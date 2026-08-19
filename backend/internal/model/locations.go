@@ -7,12 +7,14 @@ import (
 )
 
 type LocationModel struct {
-	LocationID  uuid.UUID `json:"locationId" db:"location_id"`
-	Name        string    `json:"name" db:"name"`
-	City        string    `json:"city" db:"city"`
-	PostalCode  string    `json:"postalCode" db:"postal_code"`
-	Street      string    `json:"street" db:"street"`
-	HouseNumber *string   `json:"houseNumber" db:"house_number"`
-	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	tableName struct{} `pg:"locations"`
+
+	LocationID  uuid.UUID `json:"locationId" pg:"location_id,pk"`
+	Name        string    `json:"name" pg:"name"`
+	City        string    `json:"city" pg:"city"`
+	PostalCode  string    `json:"postalCode" pg:"postal_code"`
+	Street      string    `json:"street" pg:"street"`
+	HouseNumber *string   `json:"houseNumber" pg:"house_number"`
+	CreatedAt   time.Time `json:"createdAt" pg:"created_at"`
+	UpdatedAt   time.Time `json:"updatedAt" pg:"updated_at"`
 }

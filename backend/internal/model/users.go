@@ -22,11 +22,13 @@ const (
 )
 
 type UserModel struct {
-	UserID      uuid.UUID `json:"userId" db:"user_id"`
-	Role        UserRole  `json:"role" db:"role"`
-	UserType    UserType  `json:"userType" db:"user_type"`
-	Email       string    `json:"email" db:"email"`
-	PhoneNumber *string   `json:"phoneNumber" db:"phone_number"`
-	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	tableName struct{} `pg:"users"`
+
+	UserID      uuid.UUID `json:"userId" pg:"user_id,pk"`
+	Role        UserRole  `json:"role" pg:"role"`
+	UserType    UserType  `json:"userType" pg:"user_type"`
+	Email       string    `json:"email" pg:"email"`
+	PhoneNumber *string   `json:"phoneNumber" pg:"phone_number"`
+	CreatedAt   time.Time `json:"createdAt" pg:"created_at"`
+	UpdatedAt   time.Time `json:"updatedAt" pg:"updated_at"`
 }

@@ -16,17 +16,19 @@ const (
 )
 
 type EventModel struct {
-	EventID     uuid.UUID   `json:"eventId" db:"event_id"`
-	Title       string      `json:"title" db:"title"`
-	Description *string     `json:"description" db:"description"`
-	StartTime   time.Time   `json:"startTime" db:"start_time"`
-	EndTime     time.Time   `json:"endTime" db:"end_time"`
-	Capacity    int         `json:"capacity" db:"capacity"`
-	Status      EventStatus `json:"status" db:"status"`
-	Price       float64     `json:"price" db:"price"`
-	CategoryID  uuid.UUID   `json:"categoryId" db:"category_id"`
-	OrganizerID uuid.UUID   `json:"organizerId" db:"organizer_id"`
-	LocationID  uuid.UUID   `json:"locationId" db:"location_id"`
-	CreatedAt   time.Time   `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time   `json:"updatedAt" db:"updated_at"`
+	tableName struct{} `pg:"events"`
+
+	EventID     uuid.UUID   `json:"eventId" pg:"event_id,pk"`
+	Title       string      `json:"title" pg:"title"`
+	Description *string     `json:"description" pg:"description"`
+	StartTime   time.Time   `json:"startTime" pg:"start_time"`
+	EndTime     time.Time   `json:"endTime" pg:"end_time"`
+	Capacity    int         `json:"capacity" pg:"capacity"`
+	Status      EventStatus `json:"status" pg:"status"`
+	Price       float64     `json:"price" pg:"price"`
+	CategoryID  uuid.UUID   `json:"categoryId" pg:"category_id"`
+	OrganizerID uuid.UUID   `json:"organizerId" pg:"organizer_id"`
+	LocationID  uuid.UUID   `json:"locationId" pg:"location_id"`
+	CreatedAt   time.Time   `json:"createdAt" pg:"created_at"`
+	UpdatedAt   time.Time   `json:"updatedAt" pg:"updated_at"`
 }
