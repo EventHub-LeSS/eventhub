@@ -1,8 +1,9 @@
 package main
 
 import (
-	//"backend/internal/db"
+	"backend/internal/db"
 	"backend/internal/handler"
+
 	//"backend/internal/repository"
 	//"backend/internal/service"
 	"flag"
@@ -19,7 +20,13 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	//conn := db.Connect()
+	db, db_err := db.Connect()
+	if db_err != nil {
+		log.Fatal(db_err)
+	}
+
+	_ = db
+
 	//eventRepo := repository.NewEventRepository(conn)
 	//eventService := service.NewEventService(eventRepo)
 

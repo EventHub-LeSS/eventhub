@@ -23,6 +23,7 @@ type eventRepository struct {
 func NewEventRepository(db *gorm.DB) EventRepository {
 	return &eventRepository{db: db}
 }
+
 func (r *eventRepository) CreateEvent(event *model.EventModel) error {
 	return r.db.Create(event).Error
 }
@@ -51,6 +52,7 @@ func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
 	return r.db.Save(event).Error
 }
+
 func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
 	return r.db.Delete(&model.EventModel{}, "event_id = ?", eventID).Error
 }
