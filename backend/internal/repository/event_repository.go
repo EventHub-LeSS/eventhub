@@ -3,8 +3,8 @@ package repository
 import (
 	"backend/internal/model"
 
-	"github.com/go-pg/pg/v10"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type EventRepository interface {
@@ -17,21 +17,20 @@ type EventRepository interface {
 }
 
 type eventRepository struct {
-	db *pg.DB
+	db *gorm.DB
 }
 
-func NewEventRepository(db *pg.DB) EventRepository {
+func NewEventRepository(db *gorm.DB) EventRepository {
 	return &eventRepository{db: db}
 }
 func (r *eventRepository) CreateEvent(event *model.EventModel) error {
-	_, err := r.db.Model(event).Insert()
-	return err
+	return r.db.Create(event).Error
 }
 
 func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
 	event := &model.EventModel{}
-	err := r.db.Model(event).Where("event_id = ?", eventID).Select()
-	if err == pg.ErrNoRows {
+	err := r.db.First(event, "event_id = ?", eventID).Error
+	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
 	if err != nil {
@@ -42,7 +41,7 @@ func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, er
 
 func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 	var events []*model.EventModel
-	err := r.db.Model(&events).Select()
+	err := r.db.Find(&events).Error
 	if err != nil {
 		return nil, err
 	}
@@ -50,18 +49,15 @@ func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 }
 
 func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
-	_, err := r.db.Model(event).WherePK().Update()
-	return err
+	return r.db.Save(event).Error
 }
 func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
-	event := &model.EventModel{EventID: eventID}
-	_, err := r.db.Model(event).WherePK().Delete()
-	return err
+	return r.db.Delete(&model.EventModel{}, "event_id = ?", eventID).Error
 }
 
 func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
 	var events []*model.EventModel
-	err := r.db.Model(&events).Where("organizer_id = ?", organizationID).Select()
+	err := r.db.Where("organizer_id = ?", organizationID).Find(&events).Error
 	if err != nil {
 		return nil, err
 	}

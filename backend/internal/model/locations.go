@@ -7,14 +7,14 @@ import (
 )
 
 type LocationModel struct {
-	tableName struct{} `pg:"locations"`
-
-	LocationID  uuid.UUID `json:"locationId" pg:"location_id,pk"`
-	Name        string    `json:"name" pg:"name"`
-	City        string    `json:"city" pg:"city"`
-	PostalCode  string    `json:"postalCode" pg:"postal_code"`
-	Street      string    `json:"street" pg:"street"`
-	HouseNumber *string   `json:"houseNumber" pg:"house_number"`
-	CreatedAt   time.Time `json:"createdAt" pg:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" pg:"updated_at"`
+	LocationID  uuid.UUID `json:"locationId" gorm:"column:location_id;type:uuid;primaryKey"`
+	Name        string    `json:"name" gorm:"column:name"`
+	City        string    `json:"city" gorm:"column:city"`
+	PostalCode  string    `json:"postalCode" gorm:"column:postal_code"`
+	Street      string    `json:"street" gorm:"column:street"`
+	HouseNumber *string   `json:"houseNumber" gorm:"column:house_number"`
+	CreatedAt   time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (LocationModel) TableName() string { return "locations" }

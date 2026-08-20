@@ -5,9 +5,9 @@ import (
 )
 
 type CategoryModel struct {
-	tableName struct{} `pg:"categories"`
-
-	CategoryID  uuid.UUID `json:"categoryId" pg:"category_id,pk"`
-	Category    string    `json:"category" pg:"category"`
-	Description *string   `json:"description" pg:"description"`
+	CategoryID  uuid.UUID `json:"categoryId" gorm:"column:category_id;type:uuid;primaryKey"`
+	Category    string    `json:"category" gorm:"column:category"`
+	Description *string   `json:"description" gorm:"column:description"`
 }
+
+func (CategoryModel) TableName() string { return "categories" }

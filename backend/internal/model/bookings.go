@@ -16,14 +16,14 @@ const (
 )
 
 type BookingModel struct {
-	tableName struct{} `pg:"bookings"`
-
-	BookingID       uuid.UUID     `json:"bookingId" pg:"booking_id,pk"`
-	UserID          uuid.UUID     `json:"userId" pg:"user_id"`
-	EventID         uuid.UUID     `json:"eventId" pg:"event_id"`
-	PaymentID       *uuid.UUID    `json:"paymentId" pg:"payment_id"`
-	NumberOfTickets int           `json:"numberOfTickets" pg:"number_of_tickets"`
-	Status          BookingStatus `json:"status" pg:"status"`
-	CreatedAt       time.Time     `json:"createdAt" pg:"created_at"`
-	UpdatedAt       time.Time     `json:"updatedAt" pg:"updated_at"`
+	BookingID       uuid.UUID     `json:"bookingId" gorm:"column:booking_id;type:uuid;primaryKey"`
+	UserID          uuid.UUID     `json:"userId" gorm:"column:user_id;type:uuid"`
+	EventID         uuid.UUID     `json:"eventId" gorm:"column:event_id;type:uuid"`
+	PaymentID       *uuid.UUID    `json:"paymentId" gorm:"column:payment_id;type:uuid"`
+	NumberOfTickets int           `json:"numberOfTickets" gorm:"column:number_of_tickets"`
+	Status          BookingStatus `json:"status" gorm:"column:status"`
+	CreatedAt       time.Time     `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt       time.Time     `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (BookingModel) TableName() string { return "bookings" }

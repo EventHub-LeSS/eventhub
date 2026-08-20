@@ -5,9 +5,9 @@ import (
 )
 
 type PrivateUserModel struct {
-	tableName struct{} `pg:"private_users"`
-
-	UserID    uuid.UUID `json:"userId" pg:"user_id,pk"`
-	FirstName string    `json:"firstName" pg:"first_name"`
-	LastName  string    `json:"lastName" pg:"last_name"`
+	UserID    uuid.UUID `json:"userId" gorm:"column:user_id;type:uuid;primaryKey"`
+	FirstName string    `json:"firstName" gorm:"column:first_name"`
+	LastName  string    `json:"lastName" gorm:"column:last_name"`
 }
+
+func (PrivateUserModel) TableName() string { return "private_users" }

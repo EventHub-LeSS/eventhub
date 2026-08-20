@@ -17,12 +17,12 @@ const (
 )
 
 type PaymentModel struct {
-	tableName struct{} `pg:"payments"`
-
-	PaymentID    uuid.UUID       `json:"paymentId" pg:"payment_id,pk"`
-	Amount       decimal.Decimal `json:"amount" pg:"amount"`
-	Status       PaymentStatus   `json:"status" pg:"status"`
-	RefundAmount decimal.Decimal `json:"refundAmount" pg:"refund_amount,use_zero"`
-	CreatedAt    time.Time       `json:"createdAt" pg:"created_at"`
-	UpdatedAt    time.Time       `json:"updatedAt" pg:"updated_at"`
+	PaymentID    uuid.UUID       `json:"paymentId" gorm:"column:payment_id;type:uuid;primaryKey"`
+	Amount       decimal.Decimal `json:"amount" gorm:"column:amount;type:numeric(12,2)"`
+	Status       PaymentStatus   `json:"status" gorm:"column:status"`
+	RefundAmount decimal.Decimal `json:"refundAmount" gorm:"column:refund_amount;type:numeric(12,2);default:0"`
+	CreatedAt    time.Time       `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt    time.Time       `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (PaymentModel) TableName() string { return "payments" }

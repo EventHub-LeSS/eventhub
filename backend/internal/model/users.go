@@ -22,13 +22,13 @@ const (
 )
 
 type UserModel struct {
-	tableName struct{} `pg:"users"`
-
-	UserID      uuid.UUID `json:"userId" pg:"user_id,pk"`
-	Role        UserRole  `json:"role" pg:"role"`
-	UserType    UserType  `json:"userType" pg:"user_type"`
-	Email       string    `json:"email" pg:"email"`
-	PhoneNumber *string   `json:"phoneNumber" pg:"phone_number"`
-	CreatedAt   time.Time `json:"createdAt" pg:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" pg:"updated_at"`
+	UserID      uuid.UUID `json:"userId" gorm:"column:user_id;type:uuid;primaryKey"`
+	Role        UserRole  `json:"role" gorm:"column:role"`
+	UserType    UserType  `json:"userType" gorm:"column:user_type"`
+	Email       string    `json:"email" gorm:"column:email"`
+	PhoneNumber *string   `json:"phoneNumber" gorm:"column:phone_number"`
+	CreatedAt   time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (UserModel) TableName() string { return "users" }

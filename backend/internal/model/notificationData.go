@@ -7,12 +7,12 @@ import (
 )
 
 type NotificationData struct {
-	tableName struct{} `pg:"notification_data"`
-
-	NotificationID uuid.UUID `json:"notificationId" pg:"notification_id,pk"`
-	UserID         uuid.UUID `json:"userId" pg:"user_id"`
-	Subject        string    `json:"subject" pg:"subject"`
-	Content        string    `json:"content" pg:"content"`
-	CreatedAt      time.Time `json:"createdAt" pg:"created_at"`
-	UpdatedAt      time.Time `json:"updatedAt" pg:"updated_at"`
+	NotificationID uuid.UUID `json:"notificationId" gorm:"column:notification_id;type:uuid;primaryKey"`
+	UserID         uuid.UUID `json:"userId" gorm:"column:user_id;type:uuid"`
+	Subject        string    `json:"subject" gorm:"column:subject"`
+	Content        string    `json:"content" gorm:"column:content"`
+	CreatedAt      time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt      time.Time `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
+
+func (NotificationData) TableName() string { return "notification_data" }
