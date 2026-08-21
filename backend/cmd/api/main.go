@@ -4,12 +4,11 @@ import (
 	"backend/internal/db"
 	"backend/internal/handler"
 	"backend/internal/middleware"
-
-	//"backend/internal/repository"
-	//"backend/internal/service"
+	"backend/internal/service"
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -37,8 +36,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	//eventRepo := repository.NewEventRepository(conn)
-	//eventService := service.NewEventService(eventRepo)
+	// Initialize Keycloak Service
+	keycloakCfg := service.KeycloakClientConfig{
+		Host:         os.Getenv("KEYCLOAK_HOST"),
+		AdminRealm:   os.Getenv("KEYCLOAK_ADMIN_REALM"),
+		UserRealm:    os.Getenv("KEYCLOAK_USER_REALM"),
+		ClientID:     os.Getenv("KEYCLOAK_CLIENT_ID"),
+		ClientSecret: os.Getenv("KEYCLOAK_CLIENT_SECRET"),
+	}
+	keycloakService := service.NewKeycloakService(keycloakCfg)
+
+	// Initialize Handlers
+	orgHandler := handler.NewOrganizationHandler(keycloakService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -50,6 +59,10 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+	}
+	orgs := v1.Group("/organizations")
+	{
+		orgs.POST("/", orgHandler.CreateOrganization)
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))
