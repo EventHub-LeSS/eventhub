@@ -14,4 +14,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD test -f /root/api || exit 1
 # Run the application
-CMD ["./api", "-p", "${PORT}"]
+CMD ["./api"]
