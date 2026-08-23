@@ -30,6 +30,7 @@ func main() {
 	v1 := r.Group("/api/v1")
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
+
 	}
 
 	events := v1.Group("/events")
