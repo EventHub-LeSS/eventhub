@@ -46,7 +46,10 @@ func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEv
 	if err != nil {
 		return nil, err
 	}
-	if event == nil || event.OrganizerID == nil || *event.OrganizerID != userID {
+	if event == nil {
+		return nil, ErrEventNotFound
+	}
+	if event.OrganizerID == nil || *event.OrganizerID != userID {
 		return nil, ErrForbidden
 	}
 
