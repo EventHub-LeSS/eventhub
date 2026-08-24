@@ -70,6 +70,8 @@ func WithdrawEventHandler(c *gin.Context) {
 
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrEventNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrForbidden):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrIncomplete),

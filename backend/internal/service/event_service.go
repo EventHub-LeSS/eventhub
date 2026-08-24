@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrForbidden     = errors.New("forbidden")
+	ErrEventNotFound = errors.New("event not found")
 	ErrInvalidStatus = errors.New("invalid event status")
 	ErrIncomplete    = errors.New("event is incomplete")
 	ErrInvalidPrice  = errors.New("price must not be negative")
@@ -42,7 +43,10 @@ func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEv
 	if err != nil {
 		return nil, err
 	}
-	if event == nil || event.OrganizerID != userID {
+	if event == nil {
+		return nil, ErrEventNotFound
+	}
+	if event.OrganizerID != userID {
 		return nil, ErrForbidden
 	}
 
