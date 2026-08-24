@@ -30,7 +30,33 @@ func SaveEventAsDraftHandler(c *gin.Context) {
 }
 
 // EVENTHUB-78: Veranstaltung bearbeiten
-func UpdateEventHandler(c *gin.Context) {
+func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		return
+	}
+
+	// TODO: replace with Keycloak/auth middleware
+	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid user id"})
+		return
+	}
+
+	var req model.UpdateEventRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updated, err := h.eventService.UpdateEvent(eventID, userID, req)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
@@ -115,6 +141,8 @@ func writeEventActionError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrInvalidStatus):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrIncomplete):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrInvalidPrice), errors.Is(err, service.ErrStartInPast):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotDraft):
 		writeProblem(c, http.StatusBadRequest, err.Error())
