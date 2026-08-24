@@ -102,6 +102,11 @@ func main() {
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}
 
+	events := v1.Group("/events")
+	{
+		events.PUT("/:id", eventHandler.UpdateEventHandler)
+	}
+
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
