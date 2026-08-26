@@ -19,10 +19,17 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	conn := db.Connect()
-	eventRepo := repository.NewEventRepository(conn)
+	
+	db, db_err := db.Connect()
+	if db_err != nil {
+		log.Fatal(db_err)
+	}
+
+	_ = db
+
+	eventRepo := repository.NewEventRepository(db)
 	eventService := service.NewEventService(eventRepo)
-	eventHandler := handler.NewEventHandler(eventService)
+  eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
