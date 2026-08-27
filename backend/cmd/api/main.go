@@ -77,7 +77,7 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
 
 	v1 := r.Group("/api/v1")
-	{ // hier routen registrieren
+	{
 		v1.GET("/", handler.Healthcheck)
 
 		// DEBUG routes — disabled in production
@@ -90,12 +90,17 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
 		events := protected.Group("/events")
 		{
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
 	}
+
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
@@ -105,7 +110,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 
