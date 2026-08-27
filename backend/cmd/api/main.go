@@ -37,9 +37,9 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	db, db_err := db.Connect()
-	if db_err != nil {
-		log.Fatal(db_err)
+	db, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatal(dbErr)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -81,7 +81,7 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
 
 	v1 := r.Group("/api/v1")
-	{ // hier routen registrieren
+	{
 		v1.GET("/", handler.Healthcheck)
 
 		// DEBUG routes — disabled in production
@@ -101,11 +101,15 @@ func main() {
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
 
 		// bookings
 		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
 	}
+
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
@@ -124,7 +128,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 
