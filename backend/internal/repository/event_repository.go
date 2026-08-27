@@ -14,6 +14,7 @@ type EventRepository interface {
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
+	GetConfirmedTicketCount(eventID uuid.UUID) (int64, error)
 }
 
 type eventRepository struct {
@@ -62,4 +63,20 @@ func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model
 		return nil, err
 	}
 	return events, nil
+}
+
+func (r *eventRepository) GetConfirmedTicketCount(eventID uuid.UUID) (int64, error) {
+	var soldTickets int64
+
+	err := r.db.
+		Table("bookings").
+		Where("event_id = ? AND status = ?", eventID, model.BookingStatusConfirmed).
+		Select("COALESCE(SUM(number_of_tickets), 0)").
+		Scan(&soldTickets).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	return soldTickets, nil
 }
