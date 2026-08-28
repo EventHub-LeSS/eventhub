@@ -1,0 +1,15 @@
+DROP TABLE IF EXISTS ratings;
+DROP TABLE IF EXISTS bookings;
+DROP TYPE IF EXISTS booking_status;
+DROP TABLE IF EXISTS notification_data;
+DROP TABLE IF EXISTS events;
+DROP TYPE IF EXISTS event_status;
+DROP TABLE IF EXISTS organization_users;
+DROP TABLE IF EXISTS private_users;
+DROP TABLE IF EXISTS users;
+DROP TYPE IF EXISTS user_type;
+DROP TYPE IF EXISTS user_role;
+DROP TABLE IF EXISTS payments;
+DROP TYPE IF EXISTS payment_status;
+DROP TABLE IF EXISTS locations;
+DROP TABLE IF EXISTS categories;

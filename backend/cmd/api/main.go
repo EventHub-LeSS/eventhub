@@ -19,7 +19,10 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	conn := db.Connect()
+	conn, err := db.Connect()
+	if err != nil {
+		log.Fatal(err)
+	}
 	eventRepo := repository.NewEventRepository(conn)
 	eventService := service.NewEventService(eventRepo)
 	eventHandler := handler.NewEventHandler(eventService)
@@ -38,9 +41,8 @@ func main() {
 		events.PUT("/:id", eventHandler.UpdateEventHandler)
 	}
 
-	err := r.Run(fmt.Sprintf(":%d", *port))
+	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
