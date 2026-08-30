@@ -260,7 +260,7 @@ func (a *Authenticator) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		c.Set(principalContextKey, principal)
+		SetPrincipalForRequest(c, principal)
 		c.Next()
 	}
 }
@@ -272,6 +272,12 @@ func PrincipalFromContext(c *gin.Context) (*Principal, bool) {
 	}
 	principal, ok := value.(*Principal)
 	return principal, ok && principal != nil
+}
+
+// SetPrincipalForRequest attaches an already authenticated principal without
+// exposing the private context key to handlers or other trusted middleware.
+func SetPrincipalForRequest(c *gin.Context, principal *Principal) {
+	c.Set(principalContextKey, principal)
 }
 
 func bearerToken(headers []string) (string, error) {
