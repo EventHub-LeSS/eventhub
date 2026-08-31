@@ -2,6 +2,7 @@
   "realm": "eventhub",
   "enabled": true,
   "displayName": "EventHub",
+  "loginTheme": "eventhub",
   "organizationsEnabled": true,
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
