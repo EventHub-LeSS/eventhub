@@ -14,8 +14,15 @@ export default defineConfig({
       accountThemeImplementation: "none",
       // Read by @oussemasahbeni/keycloakify-login-shadcn at runtime, overridable per container.
       environmentVariables: [
-        { name: "SHADCN_THEME_LOGO_WHITE_URL", default: "" },
-        { name: "SHADCN_THEME_LOGO_DARK_URL", default: "" },
+        // "WHITE" is the light-mode slot, so it holds the dark-ink logo.
+        {
+          name: "SHADCN_THEME_LOGO_WHITE_URL",
+          default: "%BASE_URL%/eventhub-logo-light.svg",
+        },
+        {
+          name: "SHADCN_THEME_LOGO_DARK_URL",
+          default: "%BASE_URL%/eventhub-logo-dark.svg",
+        },
         { name: "SHADCN_THEME_APP_NAME", default: "EventHub" },
         { name: "SHADCN_THEME_LAYOUT", default: "two-column" },
         { name: "SHADCN_THEME_SIDE_IMAGE_URL", default: "" },
