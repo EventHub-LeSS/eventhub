@@ -1,0 +1,114 @@
+{
+  "realm": "eventhub",
+  "enabled": true,
+  "displayName": "EventHub",
+  "organizationsEnabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "organizations": [
+    {
+      "name": "Provadis Hochschule",
+      "alias": "provadis-hochschule",
+      "enabled": true,
+      "description": "Demo organization",
+      "domains": [
+        {
+          "name": "provadis-hochschule.de",
+          "verified": false
+        }
+      ],
+      "members": [
+        {
+          "username": "organizer@provadis-hochschule.de"
+        }
+      ]
+    },
+    {
+      "name": "Telekom",
+      "alias": "telekom",
+      "enabled": true,
+      "description": "Demo organization",
+      "members": [
+        {
+          "username": "organizer@telekom.de"
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "eventhub-frontend",
+      "name": "EventHub Frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "eventhub-frontend-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3000/api/auth/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "visitor@eventhub.de",
+      "email": "visitor@eventhub.de",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Merz",
+      "lastName": "Leck Eier1",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "organizer@provadis-hochschule.de",
+      "email": "organizer@provadis-hochschule.de",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Merz",
+      "lastName": "Leck Eier2",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "organizer@telekom.de",
+      "email": "organizer@telekom.de",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Merz",
+      "lastName": "Leck Eier3",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

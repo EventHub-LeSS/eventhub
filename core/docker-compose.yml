@@ -10,7 +10,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.0
+    image: quay.io/keycloak/keycloak:26.7
     container_name: keycloak_dev
     command: start-dev --import-realm
     environment:
@@ -21,6 +21,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:5433
       KC_LOG_LEVEL: INFO
     ports:
       - "5433:8080"
