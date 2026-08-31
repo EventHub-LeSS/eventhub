@@ -17,8 +17,8 @@ const (
 
 type BookingModel struct {
 	BookingID       uuid.UUID     `json:"bookingId" gorm:"column:booking_id;type:uuid;primaryKey"`
-	UserID          uuid.UUID     `json:"userId" gorm:"column:user_id;type:uuid"`
-	EventID         uuid.UUID     `json:"eventId" gorm:"column:event_id;type:uuid"`
+	UserID          *uuid.UUID    `json:"userId" gorm:"column:user_id;type:uuid"`
+	EventID         *uuid.UUID    `json:"eventId" gorm:"column:event_id;type:uuid"`
 	PaymentID       *uuid.UUID    `json:"paymentId" gorm:"column:payment_id;type:uuid"`
 	NumberOfTickets int           `json:"numberOfTickets" gorm:"column:number_of_tickets"`
 	Status          BookingStatus `json:"status" gorm:"column:status"`
