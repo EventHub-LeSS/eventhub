@@ -31,7 +31,7 @@ CREATE TYPE user_type AS ENUM ('private', 'organization');
 
 CREATE TABLE IF NOT EXISTS users (
     user_id UUID PRIMARY KEY,
-    keycloak_sub TEXT UNIQUE NOT NULL
+    keycloak_sub TEXT UNIQUE NOT NULL,
     --role user_role NOT NULL,  redundant wegen keycloak
     user_type user_type NOT NULL,
     email TEXT NOT NULL UNIQUE,
