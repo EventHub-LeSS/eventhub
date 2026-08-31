@@ -29,6 +29,9 @@
       "members": [
         {
           "username": "organizer@provadis-hochschule.de"
+        },
+        {
+          "username": "großmeister_finn"
         }
       ]
     },
@@ -40,6 +43,9 @@
       "members": [
         {
           "username": "organizer@telekom.de"
+        },
+        {
+          "username": "großmeister_finn"
         }
       ]
     }
@@ -102,6 +108,21 @@
       "enabled": true,
       "firstName": "Merz",
       "lastName": "Leck Eier3",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "großmeister_finn",
+      "email": "finn.betz@grossmeister.de",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Großmeister",
+      "lastName": "Finn",
       "credentials": [
         {
           "type": "password",
