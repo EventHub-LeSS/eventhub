@@ -14,7 +14,7 @@ const { I18nProvider, useI18n } = i18nBuilder
     .withCustomTranslations({
         en: {
             welcomeMessage:
-                "Welcome to Acme inc - Your gateway to seamless planning and organization.",
+                "Welcome to EventHub - Your gateway to seamless planning and organization.",
             loginAccountTitle: "Login to your account",
             registerTitle: "Register a new account",
             noAccount: "Don't have an account?",
@@ -31,7 +31,7 @@ const { I18nProvider, useI18n } = i18nBuilder
             confirmPasswordPlaceholder: "Confirm your password"
         },
         ar: {
-            welcomeMessage: "مرحبًا بك في Acme inc - بوابتك إلى التخطيط والتنظيم السلس.",
+            welcomeMessage: "مرحبًا بك في EventHub - بوابتك إلى التخطيط والتنظيم السلس.",
             loginAccountTitle: "تسجيل الدخول إلى حسابك",
             registerTitle: "تسجيل حساب جديد",
             doRegister: "إنشاء حساب",
@@ -49,7 +49,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         ca: {
             welcomeMessage:
-                "Benvingut a Acme inc: la vostra porta d'accés a una planificació i organització perfecta.",
+                "Benvingut a EventHub: la vostra porta d'accés a una planificació i organització perfecta.",
             loginAccountTitle: "Inicieu sessió al vostre compte",
             registerTitle: "Registrar un nou compte",
             noAccount: "No tens un compte?",
@@ -68,7 +68,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         cs: {
             welcomeMessage:
-                "Vítejte v Acme inc – vaší bráně k bezproblémovému plánování a organizaci.",
+                "Vítejte v EventHub – vaší bráně k bezproblémovému plánování a organizaci.",
             loginAccountTitle: "Přihlaste se ke svému účtu",
             registerTitle: "Zaregistrovat nový účet",
             noAccount: "Nemáte účet?",
@@ -86,7 +86,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         da: {
             welcomeMessage:
-                "Velkommen til Acme inc - din gateway til problemfri planlægning og organisering.",
+                "Velkommen til EventHub - din gateway til problemfri planlægning og organisering.",
             loginAccountTitle: "Log ind på din konto",
             registerTitle: "Registrer en ny konto",
             noAccount: "Har du ikke en konto?",
@@ -104,7 +104,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         de: {
             welcomeMessage:
-                "Willkommen bei Acme inc – Ihr Zugang zu nahtloser Planung und Organisation.",
+                "Willkommen bei EventHub – Ihr Zugang zu nahtloser Planung und Organisation.",
             loginAccountTitle: "In Ihrem Konto anmelden",
             registerTitle: "Neues Konto registrieren",
             noAccount: "Haben Sie noch kein Konto?",
@@ -123,7 +123,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         el: {
             welcomeMessage:
-                "Καλώς ήρθατε στην Acme inc - Η πύλη σας για απρόσκοπτο σχεδιασμό και οργάνωση.",
+                "Καλώς ήρθατε στην EventHub - Η πύλη σας για απρόσκοπτο σχεδιασμό και οργάνωση.",
             loginAccountTitle: "Σύνδεση στον λογαριασμό σας",
             registerTitle: "Εγγραφή νέου λογαριασμού",
             noAccount: "Δεν έχετε λογαριασμό;",
@@ -141,7 +141,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         es: {
             welcomeMessage:
-                "Bienvenido a Acme inc: su puerta de entrada a una planificación y organización perfectas.",
+                "Bienvenido a EventHub: su puerta de entrada a una planificación y organización perfectas.",
             loginAccountTitle: "Inicie sesión en su cuenta",
             registerTitle: "Registrar una cuenta nueva",
             noAccount: "¿No tienes una cuenta?",
@@ -160,7 +160,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         fa: {
             welcomeMessage:
-                "به Acme inc خوش آمدید - دروازه شما برای برنامه‌ریزی و سازماندهی بدون نقص.",
+                "به EventHub خوش آمدید - دروازه شما برای برنامه‌ریزی و سازماندهی بدون نقص.",
             loginAccountTitle: "وارد حساب کاربری خود شوید",
             registerTitle: "ثبت نام حساب جدید",
             noAccount: "حساب کاربری ندارید؟",
@@ -178,7 +178,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         fi: {
             welcomeMessage:
-                "Tervetuloa Acme inc:iin – porttisi saumattomaan suunnitteluun ja organisointiin.",
+                "Tervetuloa EventHub:iin – porttisi saumattomaan suunnitteluun ja organisointiin.",
             loginAccountTitle: "Kirjaudu tilillesi",
             registerTitle: "Rekisteröi uusi tili",
             noAccount: "Puuttuuko tili?",
@@ -197,7 +197,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         fr: {
             welcomeMessage:
-                "Bienvenue sur Acme inc - Votre passerelle vers une planification et une organisation sans faille.",
+                "Bienvenue sur EventHub - Votre passerelle vers une planification et une organisation sans faille.",
             loginAccountTitle: "Connectez-vous à votre compte",
             registerTitle: "Créer un nouveau compte",
             doRegister: "S'inscrire",
@@ -216,7 +216,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         hu: {
             welcomeMessage:
-                "Üdvözöljük az Acme inc-nél – Az Ön kapuja a zökkenőmentes tervezéshez és szervezéshez.",
+                "Üdvözöljük az EventHub-nél – Az Ön kapuja a zökkenőmentes tervezéshez és szervezéshez.",
             loginAccountTitle: "Jelentkezzen be fiókjába",
             registerTitle: "Új fiók regisztrálása",
             noAccount: "Nincs még fiókja?",
@@ -234,7 +234,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         it: {
             welcomeMessage:
-                "Benvenuti in Acme inc - Il vostro portale per una pianificazione e un'organizzazione senza interruzioni.",
+                "Benvenuti in EventHub - Il vostro portale per una pianificazione e un'organizzazione senza interruzioni.",
             loginAccountTitle: "Accedi al tuo account",
             registerTitle: "Registra un nuovo account",
             noAccount: "Non hai un account?",
@@ -252,7 +252,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         ja: {
             welcomeMessage:
-                "Acme inc へようこそ - シームレスな計画と組織化へのゲートウェイ。",
+                "EventHub へようこそ - シームレスな計画と組織化へのゲートウェイ。",
             loginAccountTitle: "アカウントにログイン",
             registerTitle: "新規アカウント登録",
             noAccount: "アカウントをお持ちでないですか？",
@@ -271,7 +271,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         ka: {
             welcomeMessage:
-                "მოგესალმებით Acme inc-ში - თქვენი კარიბჭე უწყვეტი დაგეგმვისა და ორგანიზებისთვის.",
+                "მოგესალმებით EventHub-ში - თქვენი კარიბჭე უწყვეტი დაგეგმვისა და ორგანიზებისთვის.",
             loginAccountTitle: "შედით თქვენს ანგარიშში",
             registerTitle: "ახალი ანგარიშის რეგისტრაცია",
             noAccount: "არ გაქვთ ანგარიში?",
@@ -289,7 +289,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         lt: {
             welcomeMessage:
-                "Sveiki atvykę į „Acme inc“ – jūsų vartai į sklandų planavimą ir organizavimą.",
+                "Sveiki atvykę į „EventHub“ – jūsų vartai į sklandų planavimą ir organizavimą.",
             loginAccountTitle: "Prisijunkite prie savo paskyros",
             registerTitle: "Registruoti naują paskyrą",
             noAccount: "Neturite paskyros?",
@@ -307,7 +307,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         lv: {
             welcomeMessage:
-                "Laipni lūdzam Acme inc — jūsu vārti uz nevainojamu plānošanu un organizēšanu.",
+                "Laipni lūdzam EventHub — jūsu vārti uz nevainojamu plānošanu un organizēšanu.",
             loginAccountTitle: "Pieteikties savā kontā",
             registerTitle: "Reģistrēt jaunu kontu",
             noAccount: "Nav konta?",
@@ -325,7 +325,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         nl: {
             welcomeMessage:
-                "Welkom bij Acme inc - Uw toegangspoort tot naadloze planning en organisatie.",
+                "Welkom bij EventHub - Uw toegangspoort tot naadloze planning en organisatie.",
             loginAccountTitle: "Inloggen op uw account",
             registerTitle: "Registreer een nieuw account",
             noAccount: "Heeft u nog geen account?",
@@ -343,7 +343,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         no: {
             welcomeMessage:
-                "Velkommen til Acme inc - din inngangsport til sømløs planlegging og organisering.",
+                "Velkommen til EventHub - din inngangsport til sømløs planlegging og organisering.",
             loginAccountTitle: "Logg inn på kontoen din",
             registerTitle: "Registrer en ny konto",
             noAccount: "Har du ikke konto?",
@@ -361,7 +361,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         pl: {
             welcomeMessage:
-                "Witamy w Acme inc — Twojej bramie do bezproblemowego planowania i organizacji.",
+                "Witamy w EventHub — Twojej bramie do bezproblemowego planowania i organizacji.",
             loginAccountTitle: "Zaloguj się do swojego konta",
             registerTitle: "Zarejestruj nowe konto",
             noAccount: "Nie masz konta?",
@@ -379,7 +379,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         pt: {
             welcomeMessage:
-                "Bem-vindo à Acme inc - Sua porta de entrada para planejamento e organização integrados.",
+                "Bem-vindo à EventHub - Sua porta de entrada para planejamento e organização integrados.",
             loginAccountTitle: "Faça login na sua conta",
             registerTitle: "Registar uma nova conta",
             noAccount: "Não tem uma conta?",
@@ -397,7 +397,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         "pt-BR": {
             welcomeMessage:
-                "Bem-vindo à Acme inc - Seu portal para planejamento e organização contínuos.",
+                "Bem-vindo à EventHub - Seu portal para planejamento e organização contínuos.",
             loginAccountTitle: "Entre na sua conta",
             registerTitle: "Cadastrar uma nova conta",
             noAccount: "Não tem uma conta?",
@@ -415,7 +415,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         ru: {
             welcomeMessage:
-                "Добро пожаловать в Acme inc — ваш путь к эффективному планированию и организации.",
+                "Добро пожаловать в EventHub — ваш путь к эффективному планированию и организации.",
             loginAccountTitle: "Войти в свой аккаунт",
             registerTitle: "Регистрация нового аккаунта",
             noAccount: "Нет аккаунта?",
@@ -433,7 +433,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         sk: {
             welcomeMessage:
-                "Vitajte v Acme inc – vašej bráne k bezproblémovému plánovaniu a organizácii.",
+                "Vitajte v EventHub – vašej bráne k bezproblémovému plánovaniu a organizácii.",
             loginAccountTitle: "Prihláste sa do svojho účtu",
             registerTitle: "Zaregistrovať nový účet",
             noAccount: "Nemáte účet?",
@@ -451,7 +451,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         sv: {
             welcomeMessage:
-                "Välkommen till Acme inc - din inkörsport till sömlös planering och organisering.",
+                "Välkommen till EventHub - din inkörsport till sömlös planering och organisering.",
             loginAccountTitle: "Logga in på ditt konto",
             registerTitle: "Registrera ett nytt konto",
             noAccount: "Har du inget konto?",
@@ -469,7 +469,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         th: {
             welcomeMessage:
-                "ยินดีต้อนรับสู่ Acme inc - ประตูสู่การวางแผนและจัดระเบียบที่ราบรื่น",
+                "ยินดีต้อนรับสู่ EventHub - ประตูสู่การวางแผนและจัดระเบียบที่ราบรื่น",
             loginAccountTitle: "เข้าสู่ระบบบัญชีของคุณ",
             registerTitle: "ลงทะเบียนบัญชีใหม่",
             noAccount: "ยังไม่มีบัญชีใช่ไหม?",
@@ -487,7 +487,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         tr: {
             welcomeMessage:
-                "Acme inc'e hoş geldiniz - Kusursuz planlama ve organizasyona giden kapınız.",
+                "EventHub'e hoş geldiniz - Kusursuz planlama ve organizasyona giden kapınız.",
             loginAccountTitle: "Hesabınıza giriş yapın",
             registerTitle: "Yeni bir hesap oluşturun",
             noAccount: "Hesabınız yok mu?",
@@ -505,7 +505,7 @@ const { I18nProvider, useI18n } = i18nBuilder
         },
         uk: {
             welcomeMessage:
-                "Ласкаво просимо до Acme inc — вашого шлюзу до безперебійного планування та організації.",
+                "Ласкаво просимо до EventHub — вашого шлюзу до безперебійного планування та організації.",
             loginAccountTitle: "Увійдіть у свій акаунт",
             registerTitle: "Зареєструвати новий акаунт",
             noAccount: "Немає акаунта?",
@@ -522,7 +522,7 @@ const { I18nProvider, useI18n } = i18nBuilder
             confirmPasswordPlaceholder: "Підтвердьте пароль"
         },
         "zh-CN": {
-            welcomeMessage: "欢迎来到 Acme inc - 开启无缝规划与组织的门户。",
+            welcomeMessage: "欢迎来到 EventHub - 开启无缝规划与组织的门户。",
             loginAccountTitle: "登录您的账号",
             registerTitle: "注册新账号",
             noAccount: "还没有账号？",
@@ -539,7 +539,7 @@ const { I18nProvider, useI18n } = i18nBuilder
             confirmPasswordPlaceholder: "请确认密码"
         },
         "zh-TW": {
-            welcomeMessage: "歡迎來到 Acme inc - 開啟無縫規劃與組織的門戶。",
+            welcomeMessage: "歡迎來到 EventHub - 開啟無縫規劃與組織的門戶。",
             loginAccountTitle: "登入您的帳號",
             registerTitle: "註冊新帳號",
             noAccount: "還沒有帳號？",
