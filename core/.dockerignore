@@ -2,4 +2,5 @@ keycloak-theme/node_modules
 keycloak-theme/dist
 keycloak-theme/dist_keycloak
 keycloak-theme/storybook-static
+keycloak-swagger/node_modules
 realms
