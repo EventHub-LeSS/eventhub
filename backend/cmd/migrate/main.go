@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"os"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -12,6 +13,14 @@ import (
 
 	"backend/internal/db"
 )
+
+func migrationsSource() string {
+	if src := os.Getenv("MIGRATIONS_SOURCE"); src != "" {
+		return src
+	}
+
+	return "file:///root/migrations"
+}
 
 func main() {
 	config := db.LoadConfig()
@@ -35,7 +44,7 @@ func main() {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		"file:///app/migrations",
+		migrationsSource(),
 		"postgres",
 		driver,
 	)

@@ -1,5 +1,75 @@
 services:
-  postgres:
+  api-migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["./migrate"]
+    environment:
+      DB_HOST: api-db
+      DB_PORT: "5432"
+      DB_USER: ${API_DB_USER:-eventhub}
+      DB_PASSWORD: ${API_DB_PASSWORD:-eventhub}
+      DB_NAME: ${API_DB_NAME:-eventhub}
+      DB_SSLMODE: disable
+    depends_on:
+      api-db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: api-db
+      DB_PORT: "5432"
+      DB_USER: ${API_DB_USER:-eventhub}
+      DB_PASSWORD: ${API_DB_PASSWORD:-eventhub}
+      DB_NAME: ${API_DB_NAME:-eventhub}
+      DB_SSLMODE: disable
+      KEYCLOAK_HOST: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:${KEYCLOAK_PORT:-8081}/realms/${KEYCLOAK_REALM:-eventhub}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventhub}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-backend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      KEYCLOAK_AUDIENCE: eventhub-backend
+      KEYCLOAK_ALLOWED_AZP: ${KEYCLOAK_ALLOWED_AZP:-frontend}
+      KEYCLOAK_ALLOW_INSECURE_HTTP: "true"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      api-db:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  api-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${API_DB_USER:-eventhub}
+      POSTGRES_PASSWORD: ${API_DB_PASSWORD:-eventhub}
+      POSTGRES_DB: ${API_DB_NAME:-eventhub}
+    ports:
+      - "${API_DB_PORT:-5432}:5432"
+    volumes:
+      - api-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak-postgres:
     image: postgres:16-alpine
     container_name: keycloak_db
     environment:
@@ -7,7 +77,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak_dev_password
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - keycloak_postgres_data:/var/lib/postgresql/data
 
   keycloak:
     build:
@@ -17,20 +87,21 @@ services:
     command: start-dev --import-realm
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:${KEYCLOAK_DB_PORT:-5432}/${KEYCLOAK_DB_NAME:-keycloak}
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak_dev_password
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME: http://localhost:5433
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8081}
       KC_LOG_LEVEL: INFO
     ports:
-      - "5433:8080"
+      - "${KEYCLOAK_PORT:-8081}:8080"
     volumes:
       - ./realms:/opt/keycloak/data/import
     depends_on:
-      - postgres
+      - keycloak-postgres
 
 volumes:
-  postgres_data:
+  keycloak_postgres_data:
+  api-db-data:
