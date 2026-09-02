@@ -1,7 +1,7 @@
 import "server-only"
 import * as client from "openid-client"
 
-import { authConfig, callbackUrl, authScope } from "@/features/auth/lib/config"
+import { authConfig, getCallbackUrl, authScope } from "@/features/auth/lib/config"
 
 let discovered: Promise<client.Configuration> | undefined
 
@@ -49,7 +49,7 @@ export async function createAuthorizationRequest(
   const nonce = client.randomNonce()
 
   const url = client.buildAuthorizationUrl(config, {
-    redirect_uri: callbackUrl,
+    redirect_uri: getCallbackUrl(),
     scope: authScope,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",

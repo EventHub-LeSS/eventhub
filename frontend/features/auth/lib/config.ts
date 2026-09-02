@@ -1,24 +1,28 @@
 import "server-only"
 
-function required(name: string): string {
-  const value = process.env[name]
-
-  if (!value) {
-    throw new Error(`Missing environment variable ${name}. See .env.example.`)
-  }
-
-  return value
-}
+import { envConfig } from "@/features/shared/lib/env"
 
 export const authConfig = {
-  issuer: required("KEYCLOAK_ISSUER"),
-  clientId: required("KEYCLOAK_CLIENT_ID"),
-  clientSecret: required("KEYCLOAK_CLIENT_SECRET"),
-  appBaseUrl: required("APP_BASE_URL"),
-  sessionSecret: required("SESSION_SECRET"),
+  get issuer() {
+    return envConfig.keycloakIssuer
+  },
+  get clientId() {
+    return envConfig.keycloakClientId
+  },
+  get clientSecret() {
+    return envConfig.keycloakClientSecret
+  },
+  get appBaseUrl() {
+    return envConfig.appBaseUrl
+  },
+  get sessionSecret() {
+    return envConfig.sessionSecret
+  },
 }
 
-export const callbackUrl = `${authConfig.appBaseUrl}/api/auth/callback`
+export function getCallbackUrl(): string {
+  return `${authConfig.appBaseUrl}/api/auth/callback`
+}
 
 /**
  * "organization:*" returns every organization the user belongs to. The plain
