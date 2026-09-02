@@ -15,7 +15,7 @@ async function loadSpec() {
 
 loadSpec()
   .then((spec) => {
-    app.use("/", swaggerUi.serve, swaggerUi.setup(spec));
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(spec));
 
     app.listen(PORT, () => {
       console.log(`Keycloak Swagger UI running on port ${PORT}`);
