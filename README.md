@@ -1,7 +1,5 @@
 # eventhub
 
-![CI Build](https://github.com/EventHub-LeSS/eventhub/actions/workflows/ci.yml/badge.svg)
-
 ## Projekt klonen und starten
 
 1. Repository klonen:
@@ -59,13 +57,13 @@ Aussehen (Farbe, Font, Layout, App-Name) wird über die `environmentVariables` i
 
 Testbenutzer:
 
-| Benutzer                     | Passwort    | Organisationen                     |
-| ---------------------------- | ----------- | ---------------------------------- |
-| `visitor@eventhub.test`      | `visitor`   | –                                  |
-| `organizer@acme-events.test` | `organizer` | ACME Events, Stadthalle Bremen     |
+| Benutzer                     | Passwort    | Organisationen                 |
+| ---------------------------- | ----------- | ------------------------------ |
+| `visitor@eventhub.test`      | `visitor`   | –                              |
+| `organizer@acme-events.test` | `organizer` | ACME Events, Stadthalle Bremen |
 
 Die Organisationsmitgliedschaft entscheidet, ob ein Benutzer Events anlegen und verwalten darf.
-Mitgliedschaften werden aktuell in der Admin-Konsole unter *Organizations → … → Members* vergeben.
+Mitgliedschaften werden aktuell in der Admin-Konsole unter _Organizations → … → Members_ vergeben.
 Der Organizer ist in zwei Organisationen, damit sich der Organisationswechsel im Benutzermenü
 testen lässt.
 
