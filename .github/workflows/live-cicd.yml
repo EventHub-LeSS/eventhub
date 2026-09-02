@@ -74,7 +74,7 @@ jobs:
       - name: Build and push Keycloak Swagger Docs
         uses: docker/build-push-action@v5
         with:
-          context: ./core
+          context: ./core/keycloak-swagger
           file: ./core/keycloak-swagger/Dockerfile
           push: true
           tags: |
