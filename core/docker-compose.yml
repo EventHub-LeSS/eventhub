@@ -32,5 +32,13 @@ services:
     depends_on:
       - postgres
 
+  keycloak-swagger:
+    build:
+      context: ./keycloak-swagger
+      dockerfile: Dockerfile
+    container_name: keycloak_swagger
+    ports:
+      - "8080:8080"
+
 volumes:
   postgres_data:
