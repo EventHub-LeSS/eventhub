@@ -37,7 +37,9 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ steps.owner.outputs.owner }}/frontend:${{ github.ref_name }}
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.owner }}/frontend:${{ github.ref_name }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -48,7 +50,10 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ steps.owner.outputs.owner }}/backend:${{ github.ref_name }}
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.owner }}/backend:${{ github.ref_name }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/backend:latest
+
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
