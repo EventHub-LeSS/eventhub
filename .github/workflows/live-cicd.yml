@@ -1,9 +1,9 @@
-name: Build, Push, and Deploy Docker Images For Development Usage
+name: Build, Push, and Deploy Docker Images For Releases
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*.*.*"
 
 jobs:
   build-and-push:
@@ -37,7 +37,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ steps.owner.outputs.owner }}/frontend:dev
+          tags: ghcr.io/${{ steps.owner.outputs.owner }}/frontend:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -48,7 +48,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ghcr.io/${{ steps.owner.outputs.owner }}/backend:dev
+          tags: ghcr.io/${{ steps.owner.outputs.owner }}/backend:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -64,10 +64,10 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            curl -X POST "http://localhost:${{ secrets.DOCKHAND_PORT }}/api/stacks/frontend-ref/deploy?env=3" \
+            curl -X POST "http://localhost:${{ secrets.DOCKHAND_PORT }}/api/stacks/frontend-live/deploy?env=3" \
               -H "Content-Type: application/json" \
               -d '{"pull":true,"build":false,"forceRecreate":true}'
 
-            curl -X POST "http://localhost:${{ secrets.DOCKHAND_PORT }}/api/stacks/backend-ref/deploy?env=3" \
+            curl -X POST "http://localhost:${{ secrets.DOCKHAND_PORT }}/api/stacks/backend-live/deploy?env=3" \
               -H "Content-Type: application/json" \
               -d '{"pull":true,"build":false,"forceRecreate":true}'
