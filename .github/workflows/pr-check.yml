@@ -116,7 +116,7 @@ jobs:
         if: steps.filter.outputs.keycloak-swagger == 'true'
         uses: docker/build-push-action@v5
         with:
-          context: ./core
+          context: ./core/keycloak-swagger
           file: ./core/keycloak-swagger/Dockerfile
           push: false # Only test the build, do not push
           cache-from: type=gha
