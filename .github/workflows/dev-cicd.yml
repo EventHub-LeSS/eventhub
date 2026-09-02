@@ -55,8 +55,8 @@ jobs:
       - name: Build and push Keycloak Theme
         uses: docker/build-push-action@v5
         with:
-          context: ./keycloak
-          file: ./keycloak/Dockerfile.keycloak
+          context: ./core
+          file: ./core/Dockerfile.keycloak
           push: true
           tags: ghcr.io/${{ steps.owner.outputs.owner }}/keycloak:dev
 

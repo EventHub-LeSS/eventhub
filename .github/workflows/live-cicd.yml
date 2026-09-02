@@ -61,8 +61,8 @@ jobs:
       - name: Build and push Keycloak
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
+          context: ./core
+          file: ./core/Dockerfile.keycloak
           push: true
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner }}/keycloak:${{ github.ref_name }}
