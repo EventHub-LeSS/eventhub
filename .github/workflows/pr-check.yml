@@ -1,0 +1,65 @@
+name: Pull Request Build Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # --- Frontend Build Check ---
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for frontend changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.frontend == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Frontend (Test)
+        if: steps.filter.outputs.frontend == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: false # Only test the build, do not push
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --- Backend Build Check ---
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for backend changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.backend == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend (Test)
+        if: steps.filter.outputs.backend == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false # Only test the build, do not push
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
