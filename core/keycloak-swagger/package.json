@@ -1,0 +1,13 @@
+{
+  "name": "keycloak-swagger",
+  "version": "1.0.0",
+  "description": "Swagger UI for Keycloak REST API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "swagger-ui-express": "^5.0.1"
+  }
+}
