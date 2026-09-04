@@ -3,9 +3,8 @@ package main
 import (
 	"backend/internal/db"
 	"backend/internal/handler"
-
-	//"backend/internal/repository"
-	//"backend/internal/service"
+	"backend/internal/repository"
+	"backend/internal/service"
 	"flag"
 	"fmt"
 	"log"
@@ -20,6 +19,7 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
+	
 	db, db_err := db.Connect()
 	if db_err != nil {
 		log.Fatal(db_err)
@@ -27,8 +27,9 @@ func main() {
 
 	_ = db
 
-	//eventRepo := repository.NewEventRepository(conn)
-	//eventService := service.NewEventService(eventRepo)
+	eventRepo := repository.NewEventRepository(db)
+	eventService := service.NewEventService(eventRepo)
+  eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -37,6 +38,12 @@ func main() {
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
 
+	}
+
+	events := v1.Group("/events")
+	{
+		events.POST("/:id/publish", eventHandler.PublishEventHandler)
+		events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 	}
 
 	err := r.Run(fmt.Sprintf(":%d", *port))

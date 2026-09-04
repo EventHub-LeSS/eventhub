@@ -8,6 +8,12 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	ErrForbidden     = errors.New("forbidden")
+	ErrInvalidStatus = errors.New("invalid event status")
+	ErrIncomplete    = errors.New("event is incomplete")
+)
+
 type EventService struct {
 	eventRepo repository.EventRepository
 }
@@ -46,4 +52,56 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 
 func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
 	return s.eventRepo.ListByOrganization(organizationID)
+}
+
+func isEventComplete(event *model.EventModel) bool {
+	if event.Title == "" {
+		return false
+	}
+	if event.StartTime.IsZero() || event.EndTime.IsZero() {
+		return false
+	}
+	if !event.EndTime.After(event.StartTime) {
+		return false
+	}
+	if event.Capacity <= 0 {
+		return false
+	}
+	if event.CategoryID == uuid.Nil || event.LocationID == uuid.Nil {
+		return false
+	}
+	return true
+}
+
+func (s *EventService) PublishEvent(eventID, userID uuid.UUID) error {
+	event, err := s.eventRepo.GetEventByID(eventID)
+	if err != nil {
+		return err
+	}
+	if event == nil || event.OrganizerID != userID {
+		return ErrForbidden
+	}
+	if event.Status != model.EventStatusDraft {
+		return ErrInvalidStatus
+	}
+	if !isEventComplete(event) {
+		return ErrIncomplete
+	}
+	event.Status = model.EventStatusPublished
+	return s.eventRepo.UpdateEvent(event)
+}
+
+func (s *EventService) WithdrawEvent(eventID, userID uuid.UUID) error {
+	event, err := s.eventRepo.GetEventByID(eventID)
+	if err != nil {
+		return err
+	}
+	if event == nil || event.OrganizerID != userID {
+		return ErrForbidden
+	}
+	if event.Status != model.EventStatusPublished {
+		return ErrInvalidStatus
+	}
+	event.Status = model.EventStatusCancelled
+	return s.eventRepo.UpdateEvent(event)
 }
