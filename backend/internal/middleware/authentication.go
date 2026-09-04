@@ -31,6 +31,7 @@ var (
 
 type AuthenticationConfig struct {
 	Host             string
+	Issuer           string
 	Realm            string
 	ClientID         string
 	ClientSecret     string
@@ -52,6 +53,7 @@ func LoadAuthenticationConfig() (AuthenticationConfig, error) {
 
 	config := AuthenticationConfig{
 		Host:             strings.TrimRight(os.Getenv("KEYCLOAK_HOST"), "/"),
+		Issuer:           strings.TrimRight(os.Getenv("KEYCLOAK_ISSUER"), "/"),
 		Realm:            os.Getenv("KEYCLOAK_REALM"),
 		ClientID:         os.Getenv("KEYCLOAK_CLIENT_ID"),
 		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
@@ -86,7 +88,8 @@ func (config AuthenticationConfig) validate() error {
 	if err != nil || parsedHost.Host == "" || (parsedHost.Scheme != "http" && parsedHost.Scheme != "https") {
 		return fmt.Errorf("KEYCLOAK_HOST must be an absolute HTTP(S) URL")
 	}
-	if parsedHost.Scheme != "https" && parsedHost.Hostname() != "localhost" && parsedHost.Hostname() != "127.0.0.1" {
+	hostname := parsedHost.Hostname()
+	if parsedHost.Scheme != "https" && hostname != "localhost" && hostname != "127.0.0.1" && strings.Contains(hostname, ".") {
 		return fmt.Errorf("KEYCLOAK_HOST must use HTTPS outside local development")
 	}
 	if config.SigningAlgorithm != jwt.SigningMethodRS256.Alg() {
@@ -196,6 +199,9 @@ func (a *Authenticator) Authenticate(ctx context.Context, rawToken string) (*Pri
 }
 
 func (a *Authenticator) issuer() string {
+	if a.config.Issuer != "" {
+		return a.config.Issuer
+	}
 	return a.config.Host + "/realms/" + a.config.Realm
 }
 
@@ -218,21 +224,25 @@ func (a *Authenticator) principalFromClaims(claims *accessClaims) (*Principal, e
 		return nil, errors.New("multiple active organizations")
 	}
 	for alias, organization := range claims.Organizations {
-		if alias == "" || organization.ID == "" {
+		if alias == "" {
 			return nil, errors.New("invalid organization claim")
 		}
+		orgID := organization.ID
+		if orgID == "" {
+			orgID = alias
+		}
 		access := &OrganizationAccess{
-			ID:    organization.ID,
+			ID:    orgID,
 			Alias: alias,
 			Roles: make(map[OrganizationRole]struct{}),
 		}
 		for _, group := range organization.Groups {
 			switch group {
-			case "/roles/org_admin":
+			case "/org_admin", "/roles/org_admin":
 				access.Roles[RoleOrganizationAdmin] = struct{}{}
-			case "/roles/event_manager":
+			case "/event_manager", "/roles/event_manager":
 				access.Roles[RoleEventManager] = struct{}{}
-			case "/roles/finance_viewer":
+			case "/finance_viewer", "/roles/finance_viewer":
 				access.Roles[RoleFinanceViewer] = struct{}{}
 			}
 		}

@@ -70,13 +70,13 @@
         "http://localhost:3000"
       ],
       "defaultClientScopes": [
+        "basic",
         "profile",
         "roles",
-        "backend-audience"
-      ],
-      "optionalClientScopes": [
+        "backend-audience",
         "organization"
       ],
+      "optionalClientScopes": [],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
@@ -164,6 +164,27 @@
   
   "clientScopes": [
     {
+      "name": "basic",
+      "description": "Basic OIDC claims",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "profile",
       "description": "EventHub user profile claims",
       "protocol": "openid-connect",
@@ -244,6 +265,7 @@
           "protocolMapper": "oidc-organization-group-membership-mapper",
           "consentRequired": false,
           "config": {
+            "claim.name": "organization",
             "id.token.claim": "false",
             "access.token.claim": "true",
             "userinfo.token.claim": "false",
