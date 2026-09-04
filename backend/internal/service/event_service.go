@@ -46,7 +46,7 @@ func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEv
 	if event == nil {
 		return nil, ErrEventNotFound
 	}
-	if event.OrganizerID != userID {
+	if event.OrganizerID == nil || *event.OrganizerID != userID {
 		return nil, ErrForbidden
 	}
 
@@ -62,8 +62,8 @@ func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEv
 	event.EndTime = req.EndTime
 	event.Capacity = req.Capacity
 	event.Price = req.Price
-	event.CategoryID = req.CategoryID
-	event.LocationID = req.LocationID
+	event.CategoryID = &req.CategoryID
+	event.LocationID = &req.LocationID
 
 	if !isEventComplete(event) {
 		return nil, ErrIncomplete
@@ -102,7 +102,10 @@ func isEventComplete(event *model.EventModel) bool {
 	if event.Capacity <= 0 {
 		return false
 	}
-	if event.CategoryID == uuid.Nil || event.LocationID == uuid.Nil {
+	if event.CategoryID == nil || *event.CategoryID == uuid.Nil {
+		return false
+	}
+	if event.LocationID == nil || *event.LocationID == uuid.Nil {
 		return false
 	}
 	return true
