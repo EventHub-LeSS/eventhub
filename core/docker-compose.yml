@@ -26,7 +26,7 @@ services:
       KC_HOSTNAME: http://localhost:5433
       KC_LOG_LEVEL: INFO
     ports:
-      - "127.0.0.1:5433:8080"
+      - "5433:8080"
     volumes:
       - ./realms:/opt/keycloak/data/import
     depends_on:
