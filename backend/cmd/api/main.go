@@ -3,6 +3,7 @@ package main
 import (
 	"backend/internal/db"
 	"backend/internal/handler"
+	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/service"
 	"flag"
@@ -23,6 +24,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	authConfig, err := middleware.LoadAuthenticationConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	authenticator, err := middleware.NewAuthenticator(authConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	eventRepo := repository.NewEventRepository(conn)
 	eventService := service.NewEventService(eventRepo)
 	eventHandler := handler.NewEventHandler(eventService)
@@ -34,6 +45,9 @@ func main() {
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
 
+		protected := v1.Group("")
+		protected.Use(authenticator.Middleware())
+		protected.GET("/users/me", handler.CurrentUser)
 	}
 
 	events := v1.Group("/events")
