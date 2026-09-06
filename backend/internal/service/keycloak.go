@@ -45,6 +45,69 @@ func (k *KeycloakService) LoginUser(ctx context.Context, username, password stri
 	return token, nil
 }
 
+func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
+	maxResults := 100
+	page := 0
+	var allUsers []*gocloak.User
+	for {
+		users, err := k.client.GetUsers(ctx, accessToken, k.cfg.UserRealm, gocloak.GetUsersParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get users: %w", err)
+		}
+		allUsers = append(allUsers, users...)
+		if len(users) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+	return allUsers, nil
+}
+
+func (k *KeycloakService) GetAllOrganizations(ctx context.Context, accessToken string) ([]*gocloak.OrganizationRepresentation, error) {
+	maxResults := 100
+	page := 0
+	var allOrgs []*gocloak.OrganizationRepresentation
+	for {
+		orgs, err := k.client.GetOrganizations(ctx, accessToken, k.cfg.UserRealm, gocloak.GetOrganizationsParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get organizations: %w", err)
+		}
+		allOrgs = append(allOrgs, orgs...)
+		if len(orgs) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+	return allOrgs, nil
+}
+
+func (k *KeycloakService) GetOrganizationMembers(ctx context.Context, accessToken, organizationID string) ([]*gocloak.MemberRepresentation, error) {
+	maxResults := 100
+	page := 0
+	var allMembers []*gocloak.MemberRepresentation
+	for {
+		members, err := k.client.GetOrganizationMembers(ctx, accessToken, k.cfg.UserRealm, organizationID, gocloak.GetMembersParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get organization members: %w", err)
+		}
+		allMembers = append(allMembers, members...)
+		if len(members) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+	return allMembers, nil
+}
+
 func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken string, org gocloak.OrganizationRepresentation, orgAdmin string) (string, string, error) {
 	//check if org exists
 	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, *org.Name)
