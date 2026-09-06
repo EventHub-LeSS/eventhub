@@ -24,7 +24,10 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, model.ErrorResponse{
-			Error: "Invalid request: " + err.Error(),
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusBadRequest),
+			Status: http.StatusBadRequest,
+			Detail: err.Error(),
 		})
 		return
 	}
@@ -36,8 +39,11 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 
 	orgID, err := h.keycloakService.CreateOrganization(org)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, model.ErrorResponse{
-			Error: err.Error(),
+		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusInternalServerError),
+			Status: http.StatusInternalServerError,
+			Detail: err.Error(),
 		})
 		return
 	}
