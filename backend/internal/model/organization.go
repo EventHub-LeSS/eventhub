@@ -13,5 +13,8 @@ type CreateOrganizationResponse struct {
 }
 
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Status int    `json:"status"`
+	Detail string `json:"detail,omitempty"`
 }
