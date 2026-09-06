@@ -36,6 +36,8 @@ services:
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-backend}
       KEYCLOAK_ALLOWED_AZP: ${KEYCLOAK_ALLOWED_AZP:-frontend}
       KEYCLOAK_ALLOW_INSECURE_HTTP: "true"
+      KEYCLOAK_ADMIN_REALM: ${KEYCLOAK_ADMIN_REALM:-eventhub}
+      KEYCLOAK_USER_REALM: ${KEYCLOAK_USER_REALM:-eventhub}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
