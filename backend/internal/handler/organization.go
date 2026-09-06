@@ -100,9 +100,16 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 
 	orgUUID := uuid.New()
 	err = h.orgRepo.CreateOrganization(&model.OrganizationModel{
-		OrganizationID: orgUUID,
-		KeycloakOrgID:  keycloakOrgID,
-		Name:           req.InternalName,
+		OrganizationID:     orgUUID,
+		KeycloakOrgID:      keycloakOrgID,
+		Name:               req.InternalName,
+		ContactEmail:       req.ContactEmail,
+		ContactPhoneNumber: req.ContactPhoneNumber,
+		Street:             req.Street,
+		HouseNumber:        req.HouseNumber,
+		PostalCode:         req.PostalCode,
+		City:               req.City,
+		CountryCode:        req.CountryCode,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{

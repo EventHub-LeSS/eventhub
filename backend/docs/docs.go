@@ -302,10 +302,31 @@ const docTemplate = `{
                 "alias": {
                     "type": "string"
                 },
+                "city": {
+                    "type": "string"
+                },
+                "contactEmail": {
+                    "type": "string"
+                },
+                "contactPhoneNumber": {
+                    "type": "string"
+                },
+                "countryCode": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
                 "orgAdmin": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "street": {
                     "type": "string"
                 }
             }
