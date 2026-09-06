@@ -37,6 +37,14 @@ func (k *KeycloakService) login(ctx context.Context) (*gocloak.JWT, error) {
 	return token, nil
 }
 
+func (k *KeycloakService) LoginUser(ctx context.Context, username, password string) (*gocloak.JWT, error) {
+	token, err := k.client.Login(ctx, k.cfg.FrontendClientID, "", k.cfg.UserRealm, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("keycloak user login failed: %w", err)
+	}
+	return token, nil
+}
+
 func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken string, org gocloak.OrganizationRepresentation, orgAdmin string) (string, string, error) {
 	//check if org exists
 	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, *org.Name)
