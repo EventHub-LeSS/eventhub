@@ -3,6 +3,7 @@ package model
 type CreateOrganizationRequest struct {
 	InternalName string `json:"name" binding:"required"`
 	DisplayName  string `json:"alias" binding:"required"`
+	OrgAdmin     string `json:"orgAdmin" binding:"required"`
 }
 
 type CreateOrganizationResponse struct {

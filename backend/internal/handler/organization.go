@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/service"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/henning-kln/gocloak"
@@ -31,13 +33,22 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 		})
 		return
 	}
+	req.OrgAdmin = strings.TrimSpace(req.OrgAdmin)
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"error": gin.H{"code": "UNAUTHENTICATED", "message": "Authentication is required"},
+		})
+		return
+	}
 
 	org := gocloak.OrganizationRepresentation{
 		Name:  &req.InternalName,
 		Alias: &req.DisplayName,
 	}
 
-	orgID, err := h.keycloakService.CreateOrganization(org)
+	orgID, _, err := h.keycloakService.CreateOrganization(c.Request.Context(), principal.AccessToken, org, req.OrgAdmin)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",

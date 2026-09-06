@@ -9,11 +9,12 @@ import (
 )
 
 type KeycloakClientConfig struct {
-	Host         string
-	AdminRealm   string // Only for admin operations, e.g. creating users, creating orgs etc.
-	UserRealm    string // Only for eventhub users
-	ClientID     string
-	ClientSecret string
+	Host             string
+	AdminRealm       string // Only for admin operations, e.g. creating users, creating orgs etc.
+	UserRealm        string // Only for eventhub users
+	ClientID         string
+	ClientSecret     string
+	FrontendClientID string // Public client used for password-grant login (sync script)
 }
 
 type KeycloakService struct {
@@ -36,35 +37,61 @@ func (k *KeycloakService) login(ctx context.Context) (*gocloak.JWT, error) {
 	return token, nil
 }
 
-func (k *KeycloakService) CreateOrganization(org gocloak.OrganizationRepresentation) (string, error) {
-	ctx := context.Background()
-	token, err := k.login(ctx)
-	if err != nil {
-		return "", err
-	}
+func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken string, org gocloak.OrganizationRepresentation, orgAdmin string) (string, string, error) {
 	//check if org exists
-	oid, err := k.GetOrganizationIDBySlug(*org.Name)
+	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, *org.Name)
 	if err == nil {
-		return oid, fmt.Errorf("organization already exists")
+		return oid, "", fmt.Errorf("organization already exists")
 	}
 
-	oId, err := k.client.CreateOrganization(ctx, token.AccessToken, k.cfg.UserRealm, org)
+	oId, err := k.client.CreateOrganization(ctx, accessToken, k.cfg.UserRealm, org)
 	if err != nil {
-		return "", fmt.Errorf("failed to create organization: %w", err)
+		return "", "", fmt.Errorf("failed to create organization: %w", err)
 	}
-	return oId, nil
+
+	var orgAdminGroupID string
+	for _, groupName := range []string{"org_admin", "event_manager", "finance_viewer"} {
+		name := groupName
+		gId, err := k.client.CreateOrganizationGroup(ctx, accessToken, k.cfg.UserRealm, oId, gocloak.Group{Name: &name})
+		if err != nil {
+			k.rollbackOrganization(ctx, accessToken, oId)
+			return "", "", fmt.Errorf("failed to create organization group %q: %w", groupName, err)
+		}
+		if groupName == "org_admin" {
+			orgAdminGroupID = gId
+		}
+	}
+
+	userID, err := k.resolveUserID(ctx, accessToken, orgAdmin)
+	if err != nil {
+		k.rollbackOrganization(ctx, accessToken, oId)
+		return "", "", err
+	}
+
+	if err := k.client.AddUserToOrganization(ctx, accessToken, k.cfg.UserRealm, oId, userID); err != nil {
+		k.rollbackOrganization(ctx, accessToken, oId)
+		return "", "", fmt.Errorf("failed to add user to organization: %w", err)
+	}
+
+	if err := k.client.AddUserToOrganizationGroup(ctx, accessToken, k.cfg.UserRealm, userID, oId, orgAdminGroupID); err != nil {
+		k.rollbackOrganization(ctx, accessToken, oId)
+		return "", "", fmt.Errorf("failed to assign user to org_admin group: %w", err)
+	}
+
+	return oId, userID, nil
 }
 
-func (k *KeycloakService) GetOrganizationIDBySlug(slug string) (string, error) {
-	ctx := context.Background()
-	token, err := k.login(ctx)
-	if err != nil {
-		return "", err
+func (k *KeycloakService) rollbackOrganization(ctx context.Context, accessToken, orgID string) {
+	if err := k.client.DeleteOrganization(ctx, accessToken, k.cfg.UserRealm, orgID); err != nil {
+		fmt.Printf("WARNING: failed to rollback organization %s: %v\n", orgID, err)
 	}
+}
+
+func (k *KeycloakService) GetOrganizationIDBySlug(ctx context.Context, accessToken, slug string) (string, error) {
 	pageSize := 50
 	page := 0
 	for {
-		orgs, err := k.client.GetOrganizations(ctx, token.AccessToken, k.cfg.UserRealm,
+		orgs, err := k.client.GetOrganizations(ctx, accessToken, k.cfg.UserRealm,
 			gocloak.GetOrganizationsParams{
 				First: new(page * pageSize),
 				Max:   &pageSize,
@@ -107,4 +134,24 @@ func (k *KeycloakService) AddUserToOrganization(orgID, userID string) error {
 		return err
 	}
 	return k.client.AddUserToOrganization(ctx, token.AccessToken, k.cfg.UserRealm, orgID, userID)
+}
+
+func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrID string) (string, error) {
+	exact := true
+	maxResults := 2
+	users, err := k.client.GetUsers(ctx, accessToken, k.cfg.UserRealm, gocloak.GetUsersParams{
+		Username: &usernameOrID,
+		Exact:    &exact,
+		Max:      &maxResults,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to look up user %q: %w", usernameOrID, err)
+	}
+	if len(users) == 1 && users[0].ID != nil {
+		return *users[0].ID, nil
+	}
+	if len(users) == 0 {
+		return "", fmt.Errorf("user %q not found", usernameOrID)
+	}
+	return "", fmt.Errorf("ambiguous user %q: found %d matches", usernameOrID, len(users))
 }
