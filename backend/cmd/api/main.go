@@ -61,6 +61,7 @@ func main() {
 		protected.GET("/users/me", handler.CurrentUser)
 	}
 	orgs := v1.Group("/organizations")
+	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}
