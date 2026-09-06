@@ -92,6 +92,7 @@ func main() {
 		protected.GET("/users/me", handler.CurrentUser)
 		events := protected.Group("/events")
 		{
+			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 		}
@@ -100,11 +101,6 @@ func main() {
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
-	}
-
-	events := v1.Group("/events")
-	{
-		events.PUT("/:id", eventHandler.UpdateEventHandler)
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))
