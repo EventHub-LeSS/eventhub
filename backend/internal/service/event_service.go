@@ -41,7 +41,7 @@ func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 	return s.eventRepo.GetAllEvents()
 }
 
-func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEventRequest) (*model.EventModel, error) {
+func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgID string, req model.UpdateEventRequest) (*model.EventModel, error) {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,14 @@ func (s *EventService) UpdateEvent(eventID, userID uuid.UUID, req model.UpdateEv
 	if event == nil {
 		return nil, ErrEventNotFound
 	}
-	if event.OrganizerID == nil || *event.OrganizerID != userID {
+	if event.OrganizerID == nil {
+		return nil, ErrForbidden
+	}
+	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil || org.OrganizationID != *event.OrganizerID {
 		return nil, ErrForbidden
 	}
 
