@@ -35,7 +35,8 @@ func main() {
 	}
 
 	eventRepo := repository.NewEventRepository(conn)
-	eventService := service.NewEventService(eventRepo)
+	orgRepo := repository.NewOrganizationRepository(conn)
+	eventService := service.NewEventService(eventRepo, orgRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
@@ -48,11 +49,11 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
-	}
 
-	events := v1.Group("/events")
-	{
-		events.PUT("/:id", eventHandler.UpdateEventHandler)
+		events := protected.Group("/events")
+		{
+			events.PUT("/:id", eventHandler.UpdateEventHandler)
+		}
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))

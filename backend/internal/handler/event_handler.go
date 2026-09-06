@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/service"
 	"errors"
@@ -32,24 +33,32 @@ func SaveEventAsDraftHandler(c *gin.Context) {
 func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
 		return
 	}
 
-	// TODO: replace with Keycloak/auth middleware
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid user id"})
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+	if principal.ActiveOrganization == nil {
+		writeProblem(c, http.StatusForbidden, "no active organization")
+		return
+	}
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) &&
+		!principal.HasOrganizationRole(middleware.RoleOrganizationAdmin) {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
 	var req model.UpdateEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeProblem(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	updated, err := h.eventService.UpdateEvent(eventID, userID, req)
+	updated, err := h.eventService.UpdateEvent(eventID, principal.ActiveOrganization.ID, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -68,17 +77,26 @@ func WithdrawEventHandler(c *gin.Context) {
 
 }
 
+func writeProblem(c *gin.Context, status int, detail string) {
+	c.JSON(status, model.ErrorResponse{
+		Type:   "about:blank",
+		Title:  http.StatusText(status),
+		Status: status,
+		Detail: detail,
+	})
+}
+
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrEventNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrForbidden):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		writeProblem(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrIncomplete),
 		errors.Is(err, service.ErrInvalidPrice), errors.Is(err, service.ErrStartInPast):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }
 
