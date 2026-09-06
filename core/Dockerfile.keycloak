@@ -1,0 +1,23 @@
+# Keycloakify needs Java and Maven to package the theme, so the build happens here
+# instead of on every developer machine.
+FROM oven/bun:1-alpine AS theme
+
+# nodejs/npm are needed too: keycloakify's postinstall shells out to `npx`.
+RUN apk add --no-cache openjdk17 maven git nodejs npm
+
+WORKDIR /theme
+COPY keycloak-theme/ ./
+
+# sync-extensions (postinstall) diffs against git to know which files were ejected.
+RUN git init -q . \
+    && git add -A \
+    && git -c user.email=build@eventhub.test -c user.name=build commit -qm "build" \
+    && bun install --frozen-lockfile
+
+RUN bun run build-keycloak-theme
+
+FROM quay.io/keycloak/keycloak:26.7
+
+COPY --from=theme \
+    /theme/dist_keycloak/keycloak-theme-for-kc-all-other-versions.jar \
+    /opt/keycloak/providers/eventhub-theme.jar

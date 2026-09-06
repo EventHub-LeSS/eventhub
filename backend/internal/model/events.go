@@ -25,9 +25,9 @@ type EventModel struct {
 	Capacity    int             `json:"capacity" gorm:"column:capacity"`
 	Status      EventStatus     `json:"status" gorm:"column:status"`
 	Price       decimal.Decimal `json:"price" gorm:"column:price;type:numeric(12,2)"`
-	CategoryID  uuid.UUID       `json:"categoryId" gorm:"column:category_id;type:uuid"`
-	OrganizerID uuid.UUID       `json:"organizerId" gorm:"column:organizer_id;type:uuid"`
-	LocationID  uuid.UUID       `json:"locationId" gorm:"column:location_id;type:uuid"`
+	CategoryID  *uuid.UUID      `json:"categoryId" gorm:"column:category_id;type:uuid"`
+	OrganizerID *uuid.UUID      `json:"organizerId" gorm:"column:organizer_id;type:uuid"`
+	LocationID  *uuid.UUID      `json:"locationId" gorm:"column:location_id;type:uuid"`
 	CreatedAt   time.Time       `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time       `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }

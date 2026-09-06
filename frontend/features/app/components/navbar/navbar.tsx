@@ -2,20 +2,20 @@
 
 import {
   CalendarDaysIcon,
-  CirclePlusIcon,
   CompassIcon,
   HeartIcon,
   LayoutDashboardIcon,
   MenuIcon,
   TagsIcon,
   TicketIcon,
-  TicketsIcon,
   type LucideIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
+import { Brand } from "@/features/app/components/navbar/brand"
+import { UserMenu } from "@/features/app/components/navbar/user-menu"
+import type { SessionUser, UserRole } from "@/features/auth"
 import { Button } from "@/features/shared/components/ui/button"
 import { Separator } from "@/features/shared/components/ui/separator"
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/features/shared/components/ui/sheet"
 import { cn } from "@/features/shared/lib/utils"
 
-export type UserRole = "guest" | "visitor" | "organizer"
+export type { UserRole }
 
 export interface NavLink {
   label: string
@@ -34,54 +34,55 @@ export interface NavLink {
 }
 
 interface NavbarProps {
-  role?: UserRole
+  user: SessionUser | null
 }
+
+const visitorLinks: NavLink[] = [
+  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "My Tickets", href: "/tickets", icon: TicketIcon },
+  { label: "Favorites", href: "/favorites", icon: HeartIcon },
+  { label: "Calendar", href: "/calendar", icon: CalendarDaysIcon },
+]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
   guest: [
     { label: "Discover", href: "/", icon: CompassIcon },
     { label: "Categories", href: "/categories", icon: TagsIcon },
   ],
-  visitor: [
-    { label: "Discover", href: "/", icon: CompassIcon },
-    { label: "My Tickets", href: "/tickets", icon: TicketIcon },
-    { label: "Favorites", href: "/favorites", icon: HeartIcon },
-    { label: "Calendar", href: "/calendar", icon: CalendarDaysIcon },
-  ],
+  visitor: visitorLinks,
+  // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [
-    { label: "Dashboard", href: "/organizer", icon: LayoutDashboardIcon },
-    { label: "My Events", href: "/organizer/events", icon: TicketsIcon },
-    {
-      label: "Create Event",
-      href: "/organizer/events/new",
-      icon: CirclePlusIcon,
-    },
+    ...visitorLinks,
+    { label: "Organizer", href: "/organizer", icon: LayoutDashboardIcon },
   ],
 }
 
-function isActiveLink(pathname: string, href: string) {
-  if (href === "/" || href === "/organizer") {
-    return pathname === href
+/** Returns the most specific matching href, so /organizer/events/new does not also light up /organizer/events. */
+function activeHref(pathname: string, links: NavLink[]) {
+  let active: string | undefined
+
+  for (const link of links) {
+    const matches =
+      pathname === link.href || pathname.startsWith(`${link.href}/`)
+
+    if (matches && (!active || link.href.length > active.length)) {
+      active = link.href
+    }
   }
 
-  return pathname === href || pathname.startsWith(`${href}/`)
+  return active
 }
 
-export function Navbar({ role = "visitor" }: NavbarProps) {
+export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
+  const role = user?.role ?? "guest"
   const links = navigationByRole[role]
-  const isAuthenticated = role !== "guest"
+  const active = activeHref(pathname, links)
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="mx-auto flex h-14 max-w-screen-xl items-center gap-4 px-4">
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 font-semibold"
-        >
-          <TicketsIcon className="size-5" />
-          <span>EventHub</span>
-        </Link>
+        <Brand user={user} />
         <nav className="hidden flex-1 items-center justify-center gap-2 md:flex lg:gap-4">
           {links.map((link) => {
             const Icon = link.icon
@@ -93,7 +94,7 @@ export function Navbar({ role = "visitor" }: NavbarProps) {
                 nativeButton={false}
                 variant="ghost"
                 className={
-                  isActiveLink(pathname, link.href)
+                  link.href === active
                     ? "font-semibold text-foreground"
                     : "text-muted-foreground"
                 }
@@ -104,23 +105,19 @@ export function Navbar({ role = "visitor" }: NavbarProps) {
             )
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-1">
-          {isAuthenticated ? (
-            <Avatar>
-              <AvatarFallback>U</AvatarFallback>
-            </Avatar>
+        <div className="ml-auto flex items-center gap-2">
+          {user ? (
+            <UserMenu user={user} />
           ) : (
             <div className="hidden items-center gap-1 md:flex">
-              <Button
-                render={<Link href="/login" />}
-                nativeButton={false}
-                variant="outline"
-              >
-                Log in
-              </Button>
-              <Button render={<Link href="/register" />} nativeButton={false}>
-                Register
-              </Button>
+              <form method="get" action="/api/auth/login">
+                <Button type="submit" variant="outline">
+                  Log in
+                </Button>
+              </form>
+              <form method="get" action="/api/auth/register">
+                <Button type="submit">Register</Button>
+              </form>
             </div>
           )}
           <Sheet>
@@ -135,24 +132,29 @@ export function Navbar({ role = "visitor" }: NavbarProps) {
             <SheetContent side="right" className="px-6 pt-10">
               <nav className="flex flex-col gap-1">
                 {links.map((link) => (
-                  <MobileLink key={link.href} link={link} pathname={pathname} />
+                  <MobileLink
+                    key={link.href}
+                    link={link}
+                    isActive={link.href === active}
+                  />
                 ))}
-                {!isAuthenticated && (
+                {!user && (
                   <div className="mt-3 flex flex-col gap-2">
                     <Separator />
-                    <Button
-                      render={<Link href="/login" />}
-                      nativeButton={false}
-                      variant="outline"
-                    >
-                      Log in
-                    </Button>
-                    <Button
-                      render={<Link href="/register" />}
-                      nativeButton={false}
-                    >
-                      Register
-                    </Button>
+                    <form method="get" action="/api/auth/login">
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        className="w-full"
+                      >
+                        Log in
+                      </Button>
+                    </form>
+                    <form method="get" action="/api/auth/register">
+                      <Button type="submit" className="w-full">
+                        Register
+                      </Button>
+                    </form>
                   </div>
                 )}
               </nav>
@@ -164,7 +166,7 @@ export function Navbar({ role = "visitor" }: NavbarProps) {
   )
 }
 
-function MobileLink({ link, pathname }: { link: NavLink; pathname: string }) {
+function MobileLink({ link, isActive }: { link: NavLink; isActive: boolean }) {
   const Icon = link.icon
 
   return (
@@ -174,9 +176,7 @@ function MobileLink({ link, pathname }: { link: NavLink; pathname: string }) {
       variant="ghost"
       className={cn(
         "w-full justify-start",
-        isActiveLink(pathname, link.href)
-          ? "font-semibold text-foreground"
-          : "text-muted-foreground"
+        isActive ? "font-semibold text-foreground" : "text-muted-foreground"
       )}
     >
       <Icon />

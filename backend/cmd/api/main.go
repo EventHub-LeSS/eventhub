@@ -3,8 +3,10 @@ package main
 import (
 	"backend/internal/db"
 	"backend/internal/handler"
-	"backend/internal/repository"
-	"backend/internal/service"
+	"backend/internal/middleware"
+
+	//"backend/internal/repository"
+	//"backend/internal/service"
 	"flag"
 	"fmt"
 	"log"
@@ -27,9 +29,18 @@ func main() {
 
 	_ = db
 
+	authConfig, err := middleware.LoadAuthenticationConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	authenticator, err := middleware.NewAuthenticator(authConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	eventRepo := repository.NewEventRepository(db)
 	eventService := service.NewEventService(eventRepo)
-  eventHandler := handler.NewEventHandler(eventService)
+  	eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -38,15 +49,18 @@ func main() {
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
 
+		protected := v1.Group("")
+		protected.Use(authenticator.Middleware())
+		protected.GET("/users/me", handler.CurrentUser)
 	}
 
-	events := v1.Group("/events")
+	events := protected.Group("/events")
 	{
 		events.POST("/:id/publish", eventHandler.PublishEventHandler)
 		events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 	}
 
-	err := r.Run(fmt.Sprintf(":%d", *port))
+	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
 		return

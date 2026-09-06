@@ -1,6 +1,8 @@
 import { Geist, Geist_Mono } from "next/font/google"
 
 import "@/app/globals.css"
+import { Navbar } from "@/features/app"
+import { getCurrentUser } from "@/features/auth"
 import { ThemeProvider } from "@/features/shared/components/theme-provider"
 import { cn } from "@/features/shared/lib/utils"
 
@@ -11,11 +13,12 @@ const fontMono = Geist_Mono({
   variable: "--font-mono",
 })
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const user = await getCurrentUser()
   return (
     <html
       lang="en"
@@ -28,7 +31,12 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <div className="flex min-h-svh flex-col">
+            <Navbar user={user} />
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   )
