@@ -38,6 +38,7 @@ services:
       KEYCLOAK_ALLOW_INSECURE_HTTP: "true"
       KEYCLOAK_ADMIN_REALM: ${KEYCLOAK_ADMIN_REALM:-eventhub}
       KEYCLOAK_USER_REALM: ${KEYCLOAK_USER_REALM:-eventhub}
+      DEBUG_ENABLED: ${DEBUG_ENABLED:-true}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

@@ -11,10 +11,22 @@ import (
 	"log"
 	"os"
 
+	_ "backend/docs"
+
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swagFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title           EventHub API
+// @version         1.0
+// @description     REST API for the EventHub platform
+// @BasePath        /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter "Bearer {token}" where {token} is a Keycloak access token
 func main() {
 	godotenv.Load()
 
@@ -57,10 +69,18 @@ func main() {
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swagFiles.Handler))
 
 	v1 := r.Group("/api/v1")
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
+
+		// DEBUG routes — disabled in production
+		if os.Getenv("DEBUG_ENABLED") == "true" {
+			debugHandler := handler.NewDebugHandler(keycloakService)
+			v1.POST("/debug/token", debugHandler.GetToken)
+			log.Println("WARNING: debug routes enabled (DEBUG_ENABLED=true) — do not use in production")
+		}
 
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
