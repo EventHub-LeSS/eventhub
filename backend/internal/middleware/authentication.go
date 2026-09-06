@@ -195,6 +195,7 @@ func (a *Authenticator) Authenticate(ctx context.Context, rawToken string) (*Pri
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
+	principal.AccessToken = rawToken
 	return principal, nil
 }
 
