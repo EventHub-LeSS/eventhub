@@ -150,8 +150,6 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrIncomplete):
 		writeProblem(c, http.StatusBadRequest, err.Error())
-	case errors.Is(err, service.ErrInvalidPrice), errors.Is(err, service.ErrStartInPast):
-		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotDraft):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotPublished):
