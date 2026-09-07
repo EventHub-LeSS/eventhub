@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import "@/app/globals.css"
 import { Navbar } from "@/features/app"
 import { getCurrentUser } from "@/features/auth"
+import { QueryProvider } from "@/features/shared/components/query-provider"
 import { ThemeProvider } from "@/features/shared/components/theme-provider"
 import { cn } from "@/features/shared/lib/utils"
 
@@ -31,12 +32,14 @@ export default async function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>
-          <div className="flex min-h-svh flex-col">
-            <Navbar user={user} />
-            {children}
-          </div>
-        </ThemeProvider>
+        <QueryProvider>
+          <ThemeProvider>
+            <div className="flex min-h-svh flex-col">
+              <Navbar user={user} />
+              {children}
+            </div>
+          </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   )
