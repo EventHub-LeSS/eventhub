@@ -92,8 +92,7 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(c, http.StatusForbidden, err.Error())
-	case errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrIncomplete),
-		errors.Is(err, service.ErrInvalidPrice), errors.Is(err, service.ErrStartInPast):
+	case errors.Is(err, service.ErrInvalidStatus):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")

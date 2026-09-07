@@ -20,9 +20,9 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	conn, err := db.Connect()
-	if err != nil {
-		log.Fatal(err)
+	db, db_err := db.Connect()
+	if db_err != nil {
+		log.Fatal(db_err)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -34,8 +34,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	eventRepo := repository.NewEventRepository(conn)
-	orgRepo := repository.NewOrganizationRepository(conn)
+	eventRepo := repository.NewEventRepository(db)
+	orgRepo := repository.NewOrganizationRepository(db)
 	eventService := service.NewEventService(eventRepo, orgRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 
@@ -59,5 +59,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 }
