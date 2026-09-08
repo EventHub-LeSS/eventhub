@@ -14,12 +14,14 @@ function getOidcConfig() {
         ? { execute: [client.allowInsecureRequests] }
         : undefined
 
+    const clientSecret = authConfig.clientSecret || undefined
+
     discovered = client
       .discovery(
         issuer,
         authConfig.clientId,
-        authConfig.clientSecret,
-        undefined,
+        clientSecret,
+        clientSecret ? undefined : client.None(),
         options
       )
       .catch((error) => {
