@@ -8,18 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type debugTokenRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-type debugTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	RefreshToken string `json:"refresh_token"`
-}
-
 type DebugHandler struct {
 	keycloakService *service.KeycloakService
 }
@@ -33,13 +21,13 @@ func NewDebugHandler(keycloakService *service.KeycloakService) *DebugHandler {
 // @Tags         debug
 // @Accept       json
 // @Produce      json
-// @Param        request body debugTokenRequest true "Credentials"
-// @Success      200 {object} debugTokenResponse
+// @Param        request body model.DebugTokenRequest true "Credentials"
+// @Success      200 {object} model.DebugTokenResponse
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /debug/token [post]
 func (h *DebugHandler) GetToken(c *gin.Context) {
-	var req debugTokenRequest
+	var req model.DebugTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, model.ErrorResponse{
 			Type:   "about:blank",
@@ -61,7 +49,7 @@ func (h *DebugHandler) GetToken(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, debugTokenResponse{
+	c.JSON(http.StatusOK, model.DebugTokenResponse{
 		AccessToken:  jwt.AccessToken,
 		TokenType:    jwt.TokenType,
 		ExpiresIn:    jwt.ExpiresIn,
