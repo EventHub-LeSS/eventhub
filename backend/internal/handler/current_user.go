@@ -8,19 +8,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type currentUserResponse struct {
+type CurrentUserResponse struct {
 	Subject      string                       `json:"subject"`
 	Username     string                       `json:"username"`
 	GlobalRoles  []middleware.GlobalRole      `json:"globalRoles"`
-	Organization *currentOrganizationResponse `json:"organization,omitempty"`
+	Organization *CurrentOrganizationResponse `json:"organization,omitempty"`
 }
 
-type currentOrganizationResponse struct {
+type CurrentOrganizationResponse struct {
 	ID    string                        `json:"id"`
 	Alias string                        `json:"alias"`
 	Roles []middleware.OrganizationRole `json:"roles"`
 }
 
+// @Summary      Get current user
+// @Description  Returns the authenticated user's profile, global roles, and active organization
+// @Tags         users
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {object} CurrentUserResponse
+// @Failure      401 {object} model.APIError
+// @Router       /users/me [get]
 func CurrentUser(c *gin.Context) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
@@ -30,7 +38,7 @@ func CurrentUser(c *gin.Context) {
 		return
 	}
 
-	response := currentUserResponse{
+	response := CurrentUserResponse{
 		Subject:     principal.Subject,
 		Username:    principal.Username,
 		GlobalRoles: make([]middleware.GlobalRole, 0, len(principal.GlobalRoles)),
@@ -46,7 +54,7 @@ func CurrentUser(c *gin.Context) {
 	}
 
 	if principal.ActiveOrganization != nil {
-		organization := currentOrganizationResponse{
+		organization := CurrentOrganizationResponse{
 			ID:    principal.ActiveOrganization.ID,
 			Alias: principal.ActiveOrganization.Alias,
 			Roles: make([]middleware.OrganizationRole, 0, len(principal.ActiveOrganization.Roles)),

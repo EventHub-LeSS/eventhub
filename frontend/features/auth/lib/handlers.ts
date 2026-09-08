@@ -34,8 +34,14 @@ export async function startAuthorization(
   return NextResponse.redirect(url)
 }
 
-function failed(request: NextRequest, reason: string) {
-  const url = new URL("/", request.nextUrl.origin)
+// The app runs behind a proxy, so request.nextUrl.origin is the internal
+// container address. Redirects must use the externally reachable base URL.
+function appUrl(path: string) {
+  return new URL(path, authConfig.appBaseUrl)
+}
+
+function failed(reason: string) {
+  const url = appUrl("/")
   url.searchParams.set("authError", reason)
 
   return NextResponse.redirect(url)
@@ -45,25 +51,25 @@ export async function handleCallback(request: NextRequest) {
   const transaction = await consumeTransactionCookie()
 
   if (request.nextUrl.searchParams.has("error")) {
-    return failed(
-      request,
-      request.nextUrl.searchParams.get("error") ?? "unknown"
-    )
+    return failed(request.nextUrl.searchParams.get("error") ?? "unknown")
   }
 
   if (!transaction) {
-    return failed(request, "expired")
+    return failed("expired")
   }
+
+  const callbackUrl = appUrl("/api/auth/callback")
+  callbackUrl.search = request.nextUrl.search
 
   let claims
   try {
-    claims = await exchangeCode(new URL(request.url), transaction)
+    claims = await exchangeCode(callbackUrl, transaction)
   } catch {
-    return failed(request, "exchange_failed")
+    return failed("exchange_failed")
   }
 
   if (!claims) {
-    return failed(request, "no_id_token")
+    return failed("no_id_token")
   }
 
   const email = typeof claims.email === "string" ? claims.email : ""
@@ -76,9 +82,7 @@ export async function handleCallback(request: NextRequest) {
     expiresAt: Date.now() + sessionMaxAgeSeconds * 1000,
   })
 
-  return NextResponse.redirect(
-    new URL(safeReturnTo(transaction.returnTo), request.nextUrl.origin)
-  )
+  return NextResponse.redirect(appUrl(safeReturnTo(transaction.returnTo)))
 }
 
 export async function handleLogout() {
@@ -106,5 +110,5 @@ export async function handleOrganizationSwitch(request: NextRequest) {
 
   const returnTo = safeReturnTo(form.get("returnTo")?.toString())
 
-  return NextResponse.redirect(new URL(returnTo, request.nextUrl.origin), 303)
+  return NextResponse.redirect(appUrl(returnTo), 303)
 }
