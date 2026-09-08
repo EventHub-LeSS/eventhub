@@ -33,7 +33,6 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	
 	db, db_err := db.Connect()
 	if db_err != nil {
 		log.Fatal(db_err)
@@ -67,7 +66,7 @@ func main() {
 	eventRepo := repository.NewEventRepository(db)
 
 	// Initialize Services
-	eventService := service.NewEventService(eventRepo)
+	eventService := service.NewEventService(eventRepo, orgRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -95,14 +94,13 @@ func main() {
 		{
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
-		}	
+		}
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}
-
 
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {

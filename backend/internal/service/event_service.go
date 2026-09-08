@@ -10,16 +10,20 @@ import (
 
 var (
 	ErrForbidden     = errors.New("forbidden")
+	ErrEventNotFound = errors.New("event not found")
 	ErrInvalidStatus = errors.New("invalid event status")
 	ErrIncomplete    = errors.New("event is incomplete")
+	ErrNotDraft      = errors.New("only draft events can be published")
+	ErrNotPublished  = errors.New("only published events can be withdrawn")
 )
 
 type EventService struct {
 	eventRepo repository.EventRepository
+	orgRepo   repository.OrganizationRepository
 }
 
-func NewEventService(eventRepo repository.EventRepository) *EventService {
-	return &EventService{eventRepo: eventRepo}
+func NewEventService(eventRepo repository.EventRepository, orgRepo repository.OrganizationRepository) *EventService {
+	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo}
 }
 
 func (s *EventService) CreateEvent(event *model.EventModel) error {
@@ -67,22 +71,33 @@ func isEventComplete(event *model.EventModel) bool {
 	if event.Capacity <= 0 {
 		return false
 	}
-	if event.CategoryID == uuid.Nil || event.LocationID == uuid.Nil {
+	if event.CategoryID == nil || *event.CategoryID == uuid.Nil ||
+		event.LocationID == nil || *event.LocationID == uuid.Nil {
 		return false
 	}
 	return true
 }
 
-func (s *EventService) PublishEvent(eventID, userID uuid.UUID) error {
+func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgID string) error {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return err
 	}
-	if event == nil || event.OrganizerID != userID {
+	if event == nil {
+		return ErrEventNotFound
+	}
+	if event.OrganizerID == nil {
+		return ErrForbidden
+	}
+	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	if err != nil {
+		return err
+	}
+	if org == nil || org.OrganizationID != *event.OrganizerID {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusDraft {
-		return ErrInvalidStatus
+		return ErrNotDraft
 	}
 	if !isEventComplete(event) {
 		return ErrIncomplete
@@ -91,16 +106,26 @@ func (s *EventService) PublishEvent(eventID, userID uuid.UUID) error {
 	return s.eventRepo.UpdateEvent(event)
 }
 
-func (s *EventService) WithdrawEvent(eventID, userID uuid.UUID) error {
+func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgID string) error {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return err
 	}
-	if event == nil || event.OrganizerID != userID {
+	if event == nil {
+		return ErrEventNotFound
+	}
+	if event.OrganizerID == nil {
+		return ErrForbidden
+	}
+	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	if err != nil {
+		return err
+	}
+	if org == nil || org.OrganizationID != *event.OrganizerID {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusPublished {
-		return ErrInvalidStatus
+		return ErrNotPublished
 	}
 	event.Status = model.EventStatusCancelled
 	return s.eventRepo.UpdateEvent(event)

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"backend/internal/middleware"
+	"backend/internal/model"
 	"backend/internal/service"
 	"errors"
 	"net/http"
@@ -39,14 +41,23 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	// TODO: replace with Keycloak/auth middleware
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		writeProblem(c, http.StatusForbidden, "authentication is required")
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
 
-	if err := h.eventService.PublishEvent(eventID, userID); err != nil {
+	if principal.ActiveOrganization == nil {
+		writeProblem(c, http.StatusForbidden, "no active organization")
+		return
+	}
+
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	if err := h.eventService.PublishEvent(eventID, principal.ActiveOrganization.ID); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -62,14 +73,23 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	// TODO: replace with Keycloak/auth middleware
-	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
-	if err != nil {
-		writeProblem(c, http.StatusForbidden, "authentication is required")
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
 
-	if err := h.eventService.WithdrawEvent(eventID, userID); err != nil {
+	if principal.ActiveOrganization == nil {
+		writeProblem(c, http.StatusForbidden, "no active organization")
+		return
+	}
+
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	if err := h.eventService.WithdrawEvent(eventID, principal.ActiveOrganization.ID); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -88,12 +108,20 @@ func writeProblem(c *gin.Context, status int, detail string) {
 
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrEventNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrForbidden):
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrIncomplete):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeProblem(c, http.StatusForbidden, err.Error())
+	case errors.Is(err, service.ErrInvalidStatus):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrIncomplete):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrNotDraft):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrNotPublished):
+		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }
 
