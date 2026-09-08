@@ -28,6 +28,7 @@ type Principal struct {
 	Subject            string
 	Username           string
 	AuthorizedParty    string
+	AccessToken        string
 	GlobalRoles        map[GlobalRole]struct{}
 	ActiveOrganization *OrganizationAccess
 	ExpiresAt          time.Time
