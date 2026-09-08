@@ -38,8 +38,6 @@ func main() {
 		log.Fatal(db_err)
 	}
 
-	_ = db
-
 	authConfig, err := middleware.LoadAuthenticationConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -63,6 +61,11 @@ func main() {
 	// Initialize Repositories
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
+	eventRepo := repository.NewEventRepository(db)
+	bookingRepo := repository.NewBookingRepository(db)
+
+	// Initialize Services
+	bookingService := service.NewBookingService(bookingRepo, eventRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -85,6 +88,9 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
+		// bookings
+		protected.POST("/bookings", handler.CreateBookingHandler(bookingService))
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
