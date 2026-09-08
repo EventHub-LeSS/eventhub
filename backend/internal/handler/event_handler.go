@@ -35,14 +35,14 @@ func UpdateEventHandler(c *gin.Context) {
 func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		writeProblem(c, http.StatusBadRequest, "invaild event id")
 		return
 	}
 
 	// TODO: replace with Keycloak/auth middleware
 	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid user id"})
+		writeProblem(c, http.StatusForbidden, "authentication is required")
 		return
 	}
 
@@ -58,14 +58,14 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		writeProblem(c, http.StatusBadRequest, "invaild event id")
 		return
 	}
 
 	// TODO: replace with Keycloak/auth middleware
 	userID, err := uuid.Parse(c.GetHeader("X-User-ID"))
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid user id"})
+		writeProblem(c, http.StatusForbidden, "authentication is required")
 		return
 	}
 
@@ -75,6 +75,15 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "event withdrawn"})
+}
+
+func writeProblem(c *gin.Context, status int, detail string) {
+	c.JSON(status, model.ErrorResponse{
+		Type:   "about:blank",
+		Title:  http.StatusText(status),
+		Status: status,
+		Detail: detail,
+	})
 }
 
 func writeEventActionError(c *gin.Context, err error) {
