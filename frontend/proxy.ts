@@ -3,6 +3,21 @@ import { NextResponse, type NextRequest } from "next/server"
 const SESSION_COOKIE = "eh_session"
 
 /**
+ * Behind a reverse proxy nextUrl.origin can be the internal container address
+ * (0.0.0.0:3000), so the forwarded headers win when they are present.
+ */
+function externalOrigin(request: NextRequest) {
+  const host = request.headers.get("x-forwarded-host")
+  if (!host) {
+    return request.nextUrl.origin
+  }
+
+  const proto = request.headers.get("x-forwarded-proto") ?? "https"
+
+  return `${proto}://${host}`
+}
+
+/**
  * Optimistic check only. It just avoids rendering a protected page for someone who
  * clearly is not logged in; the real check happens in the Data Access Layer.
  */
@@ -11,7 +26,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const loginUrl = new URL("/api/auth/login", request.nextUrl.origin)
+  const loginUrl = new URL("/api/auth/login", externalOrigin(request))
   loginUrl.searchParams.set(
     "returnTo",
     `${request.nextUrl.pathname}${request.nextUrl.search}`

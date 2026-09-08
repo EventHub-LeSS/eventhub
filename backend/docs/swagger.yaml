@@ -1,0 +1,253 @@
+basePath: /api/v1
+definitions:
+  handler.CurrentOrganizationResponse:
+    properties:
+      alias:
+        type: string
+      id:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/middleware.OrganizationRole'
+        type: array
+    type: object
+  handler.CurrentUserResponse:
+    properties:
+      globalRoles:
+        items:
+          $ref: '#/definitions/middleware.GlobalRole'
+        type: array
+      organization:
+        $ref: '#/definitions/handler.CurrentOrganizationResponse'
+      subject:
+        type: string
+      username:
+        type: string
+    type: object
+  handler.debugTokenRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handler.debugTokenResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
+  middleware.GlobalRole:
+    enum:
+    - admin
+    - moderator
+    - visitor
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleModerator
+    - RoleVisitor
+  middleware.OrganizationRole:
+    enum:
+    - org_admin
+    - event_manager
+    - finance_viewer
+    type: string
+    x-enum-varnames:
+    - RoleOrganizationAdmin
+    - RoleEventManager
+    - RoleFinanceViewer
+  model.APIError:
+    properties:
+      error:
+        $ref: '#/definitions/model.APIErrorDetail'
+    type: object
+  model.APIErrorDetail:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  model.CreateOrganizationRequest:
+    properties:
+      alias:
+        type: string
+      city:
+        type: string
+      contactEmail:
+        type: string
+      contactPhoneNumber:
+        type: string
+      countryCode:
+        type: string
+      houseNumber:
+        type: string
+      name:
+        type: string
+      orgAdmin:
+        type: string
+      postalCode:
+        type: string
+      street:
+        type: string
+    required:
+    - alias
+    - name
+    - orgAdmin
+    type: object
+  model.CreateOrganizationResponse:
+    properties:
+      alias:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      name:
+        type: string
+    type: object
+  model.ErrorResponse:
+    properties:
+      detail:
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  model.HealthcheckModel:
+    properties:
+      message:
+        type: string
+      time:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: REST API for the EventHub platform
+  title: EventHub API
+  version: "1.0"
+paths:
+  /:
+    get:
+      description: Returns service health status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.HealthcheckModel'
+      summary: Health check
+      tags:
+      - system
+  /debug/token:
+    post:
+      consumes:
+      - application/json
+      description: TEST ONLY — accepts username/password and returns a Keycloak access
+        token. Disabled in production (requires DEBUG_ENABLED=true).
+      parameters:
+      - description: Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.debugTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.debugTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: '[DEBUG] Get access token'
+      tags:
+      - debug
+  /organizations/:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new organization in Keycloak and the API database. Requires
+        the admin role on the backend client.
+      parameters:
+      - description: Organization to create
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.CreateOrganizationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create organization
+      tags:
+      - organizations
+  /users/me:
+    get:
+      description: Returns the authenticated user's profile, global roles, and active
+        organization
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.CurrentUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    description: Enter "Bearer {token}" where {token} is a Keycloak access token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
