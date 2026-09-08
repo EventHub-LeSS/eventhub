@@ -84,6 +84,15 @@ export function UserMenu({ user }: { user: SessionUser }) {
             </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
+        {hasOrganizations(user) && (
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Organization</DropdownMenuLabel>
+            <DropdownMenuItem render={<Link href="/organization" />}>
+              Your Organization
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        )}
+        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Appearance</DropdownMenuLabel>
           <DropdownMenuRadioGroup
