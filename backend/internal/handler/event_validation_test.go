@@ -34,7 +34,9 @@ func TestUpdateEventRequestValidation(t *testing.T) {
 		{name: "start in the past", mutate: func(r *model.UpdateEventRequest) { r.StartTime = time.Now().Add(-time.Hour) }, wantErr: true},
 		{name: "end before start", mutate: func(r *model.UpdateEventRequest) { r.EndTime = r.StartTime.Add(-time.Hour) }, wantErr: true},
 		{name: "zero capacity", mutate: func(r *model.UpdateEventRequest) { r.Capacity = 0 }, wantErr: true},
+		{name: "capacity above limit", mutate: func(r *model.UpdateEventRequest) { r.Capacity = 100001 }, wantErr: true},
 		{name: "negative price", mutate: func(r *model.UpdateEventRequest) { r.Price = decimal.NewFromInt(-1) }, wantErr: true},
+		{name: "price above limit", mutate: func(r *model.UpdateEventRequest) { r.Price = decimal.NewFromInt(10001) }, wantErr: true},
 		{name: "missing category", mutate: func(r *model.UpdateEventRequest) { r.CategoryID = uuid.Nil }, wantErr: true},
 		{name: "missing location", mutate: func(r *model.UpdateEventRequest) { r.LocationID = uuid.Nil }, wantErr: true},
 	}

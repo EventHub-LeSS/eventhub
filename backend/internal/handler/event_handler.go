@@ -46,8 +46,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		writeProblem(c, http.StatusForbidden, "no active organization")
 		return
 	}
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) &&
-		!principal.HasOrganizationRole(middleware.RoleOrganizationAdmin) {
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
