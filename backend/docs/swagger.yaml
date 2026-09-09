@@ -19,30 +19,13 @@ definitions:
         type: array
       organization:
         $ref: '#/definitions/handler.CurrentOrganizationResponse'
+      organizations:
+        items:
+          $ref: '#/definitions/handler.CurrentOrganizationResponse'
+        type: array
       subject:
         type: string
       username:
-        type: string
-    type: object
-  handler.debugTokenRequest:
-    properties:
-      password:
-        type: string
-      username:
-        type: string
-    required:
-    - password
-    - username
-    type: object
-  handler.debugTokenResponse:
-    properties:
-      access_token:
-        type: string
-      expires_in:
-        type: integer
-      refresh_token:
-        type: string
-      token_type:
         type: string
     type: object
   middleware.GlobalRole:
@@ -115,6 +98,27 @@ definitions:
       name:
         type: string
     type: object
+  model.DebugTokenRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  model.DebugTokenResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
   model.ErrorResponse:
     properties:
       detail:
@@ -164,14 +168,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handler.debugTokenRequest'
+          $ref: '#/definitions/model.DebugTokenRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handler.debugTokenResponse'
+            $ref: '#/definitions/model.DebugTokenResponse'
         "400":
           description: Bad Request
           schema:
@@ -226,8 +230,8 @@ paths:
       - organizations
   /users/me:
     get:
-      description: Returns the authenticated user's profile, global roles, and active
-        organization
+      description: Returns the authenticated user's profile, global roles, active
+        organization, and organization memberships
       produces:
       - application/json
       responses:
