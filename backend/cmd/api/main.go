@@ -88,10 +88,11 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
-
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
+			events.POST("/:id/publish", eventHandler.PublishEventHandler)
+			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 		}
 	}
 	orgs := v1.Group("/organizations")

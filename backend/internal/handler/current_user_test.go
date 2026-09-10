@@ -22,6 +22,18 @@ func TestCurrentUserReturnsTrustedPrincipal(t *testing.T) {
 			Alias: "acme",
 			Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleEventManager: {}},
 		},
+		Organizations: []*middleware.OrganizationAccess{
+			{
+				ID:    "org-123",
+				Alias: "acme",
+				Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleEventManager: {}},
+			},
+			{
+				ID:    "org-456",
+				Alias: "beta",
+				Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleOrganizationAdmin: {}},
+			},
+		},
 	}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -48,6 +60,17 @@ func TestCurrentUserReturnsTrustedPrincipal(t *testing.T) {
 	}
 	if body.Organization.Alias != "acme" || len(body.Organization.Roles) != 1 || body.Organization.Roles[0] != middleware.RoleEventManager {
 		t.Fatalf("unexpected organization roles: %#v", body.Organization)
+	}
+	if len(body.Organizations) != 2 {
+		t.Fatalf("len(organizations) = %d, want 2", len(body.Organizations))
+	}
+	if body.Organizations[0].ID != "org-123" || body.Organizations[0].Alias != "acme" ||
+		len(body.Organizations[0].Roles) != 1 || body.Organizations[0].Roles[0] != middleware.RoleEventManager {
+		t.Fatalf("unexpected organizations[0]: %#v", body.Organizations[0])
+	}
+	if body.Organizations[1].ID != "org-456" || body.Organizations[1].Alias != "beta" ||
+		len(body.Organizations[1].Roles) != 1 || body.Organizations[1].Roles[0] != middleware.RoleOrganizationAdmin {
+		t.Fatalf("unexpected organizations[1]: %#v", body.Organizations[1])
 	}
 }
 
