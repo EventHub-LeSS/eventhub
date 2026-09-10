@@ -78,10 +78,6 @@ export function UserMenu({ user }: { user: SessionUser }) {
               <DoorOpenIcon />
               Join an organization
             </DropdownMenuItem>
-            <DropdownMenuItem render={<Link href="/organizations/create" />}>
-              <Building2Icon />
-              Create an organization
-            </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
         {hasOrganizations(user) && (
@@ -89,6 +85,14 @@ export function UserMenu({ user }: { user: SessionUser }) {
             <DropdownMenuLabel>Organization</DropdownMenuLabel>
             <DropdownMenuItem render={<Link href="/organization" />}>
               Your Organization
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        )}
+        {user.isAdmin && (
+          <DropdownMenuGroup>
+            <DropdownMenuItem render={<Link href="/organizations/create" />}>
+              <Building2Icon />
+              Create an organization
             </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
