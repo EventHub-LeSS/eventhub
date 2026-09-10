@@ -4,6 +4,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"errors"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -38,7 +39,8 @@ func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 	return s.eventRepo.GetAllEvents()
 }
 
-func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgID string, req model.UpdateEventRequest) (*model.EventModel, error) {
+// keycloakOrgIDs are the organizations in which the caller may manage events.
+func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgIDs []string, req model.UpdateEventRequest) (*model.EventModel, error) {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return nil, err
@@ -49,11 +51,11 @@ func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgID string, req 
 	if event.OrganizerID == nil {
 		return nil, ErrForbidden
 	}
-	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return nil, err
 	}
-	if org == nil || org.OrganizationID != *event.OrganizerID {
+	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
 		return nil, ErrForbidden
 	}
 
