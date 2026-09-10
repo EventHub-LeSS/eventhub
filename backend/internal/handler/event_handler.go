@@ -42,11 +42,8 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
-	if principal.ActiveOrganization == nil {
-		writeProblem(c, http.StatusForbidden, "no active organization")
-		return
-	}
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+	managedOrgIDs := organizationIDsWithRole(principal, middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
@@ -57,13 +54,25 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.eventService.UpdateEvent(eventID, principal.ActiveOrganization.ID, req)
+	updated, err := h.eventService.UpdateEvent(eventID, managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, updated)
+}
+
+// organizationIDsWithRole returns the Keycloak IDs of all organizations in which
+// the principal holds the given role.
+func organizationIDsWithRole(principal *middleware.Principal, role middleware.OrganizationRole) []string {
+	ids := make([]string, 0, len(principal.Organizations))
+	for _, org := range principal.Organizations {
+		if _, ok := org.Roles[role]; ok {
+			ids = append(ids, org.ID)
+		}
+	}
+	return ids
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
