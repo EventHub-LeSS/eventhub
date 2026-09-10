@@ -4,7 +4,11 @@ import { cache } from "react"
 
 import { readActiveOrganization } from "@/features/auth/lib/active-organization"
 import { readSession, type Session } from "@/features/auth/lib/session"
-import { roleFor, type SessionUser } from "@/features/auth/lib/user"
+import {
+  isAdminFromAccessToken,
+  roleFor,
+  type SessionUser,
+} from "@/features/auth/lib/user"
 
 /** Cached per request so several components can ask for the session without re-decrypting it. */
 export const getSession = cache(async (): Promise<Session | null> => {
@@ -24,6 +28,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     organizations: session.organizations,
     activeOrganization: await readActiveOrganization(session.organizations),
     role: roleFor(session.organizations),
+    isAdmin: isAdminFromAccessToken(session.accessToken),
   }
 }
 
@@ -41,6 +46,16 @@ export async function requireOrganizer(): Promise<SessionUser> {
   const user = await requireSession()
 
   if (user.role !== "organizer") {
+    redirect("/")
+  }
+
+  return user
+}
+
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireSession()
+
+  if (!user.isAdmin) {
     redirect("/")
   }
 

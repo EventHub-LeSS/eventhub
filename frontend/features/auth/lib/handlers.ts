@@ -61,14 +61,14 @@ export async function handleCallback(request: NextRequest) {
   const callbackUrl = appUrl("/api/auth/callback")
   callbackUrl.search = request.nextUrl.search
 
-  let claims
+  let claims, accessToken
   try {
-    claims = await exchangeCode(callbackUrl, transaction)
+    ;({ claims, accessToken } = await exchangeCode(callbackUrl, transaction))
   } catch {
     return failed("exchange_failed")
   }
 
-  if (!claims) {
+  if (!claims || !accessToken) {
     return failed("no_id_token")
   }
 
@@ -79,6 +79,7 @@ export async function handleCallback(request: NextRequest) {
     email,
     name: typeof claims.name === "string" ? claims.name : email,
     organizations: organizationsFromClaims(claims.organization),
+    accessToken,
     expiresAt: Date.now() + sessionMaxAgeSeconds * 1000,
   })
 

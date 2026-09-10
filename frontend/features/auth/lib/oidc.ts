@@ -76,7 +76,7 @@ export async function exchangeCode(
     expectedNonce: checks.nonce,
   })
 
-  return tokens.claims()
+  return { claims: tokens.claims(), accessToken: tokens.access_token }
 }
 
 /**

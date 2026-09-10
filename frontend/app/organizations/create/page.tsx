@@ -1,8 +1,8 @@
-import { requireSession } from "@/features/auth";
+import { requireAdmin } from "@/features/auth";
 import { CreateOrganizationForm } from "@/features/organizations";
 
 export default async function CreateOrganizationPage() {
-  await requireSession();
+  const user = await requireAdmin();
 
   return (
     <div className="flex flex-1 justify-center p-6">
@@ -13,7 +13,7 @@ export default async function CreateOrganizationPage() {
             Go do and create great things
           </p>
         </div>
-        <CreateOrganizationForm />
+        <CreateOrganizationForm defaultOrgAdmin={user.email} />
       </div>
     </div>
   );

@@ -16,6 +16,8 @@ export interface Session {
   name: string
   /** Aliases of the Keycloak organizations the user belongs to. */
   organizations: string[]
+  /** Keycloak access token, forwarded as a Bearer token to the backend API. */
+  accessToken: string
   expiresAt: number
 }
 
