@@ -41,6 +41,9 @@ var mockUsers = []mockUser{
 	{Username: "visitor@eventhub.de", Email: "visitor@eventhub.de", FirstName: "Merz", LastName: "Leck Eier1", Phone: "+49 221 11111111"},
 	{Username: "visitor2@eventhub.de", Email: "visitor2@eventhub.de", FirstName: "Anna", LastName: "Besuch", Phone: "+49 221 22222222"},
 	{Username: "visitor3@eventhub.de", Email: "visitor3@eventhub.de", FirstName: "Lukas", LastName: "Gast", Phone: "+49 221 33333333"},
+	{Username: "visitor4@eventhub.de", Email: "visitor4@eventhub.de", FirstName: "Sophie", LastName: "Kuhn", Phone: "+49 89 44444444"},
+	{Username: "visitor5@eventhub.de", Email: "visitor5@eventhub.de", FirstName: "Jonas", LastName: "Walter", Phone: "+49 611 55555555"},
+	{Username: "visitor6@eventhub.de", Email: "visitor6@eventhub.de", FirstName: "Mia", LastName: "Schmidt", Phone: "+49 351 66666666"},
 }
 
 var mockOrgs = []mockOrg{
