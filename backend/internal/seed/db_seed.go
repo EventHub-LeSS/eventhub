@@ -191,6 +191,20 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 		{"evt-10", "Street Food Festival Bremen", "A weekend of street food, live cooking and local craft beer.", 28, 29, 3000, model.EventStatusCancelled, "8.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen"},
 		{"evt-11", "Jazz & Blues Night", "An evening of smooth jazz and blues in a relaxed atmosphere.", 40, 40, 800, model.EventStatusPublished, "32.00", "Music", "Telekom", "Olympiahalle München"},
 		{"evt-12", "Comedy Gala Hamburg", "A night of laughter with five top comedians.", 55, 55, 500, model.EventStatusPublished, "28.00", "Comedy", "Provadis Hochschule", "Musikhalle Hamburg"},
+		{"evt-13", "München Marathon Expo", "Expo and registration event ahead of the city marathon.", 18, 19, 10000, model.EventStatusPublished, "25.00", "Sports", "Telekom", "Olympiahalle München"},
+		{"evt-14", "Berlin Beer Festival", "A weekend of craft beer, local breweries and live music.", 25, 27, 6000, model.EventStatusPublished, "14.00", "Food & Drink", "ACME Events", "Treptower Park Berlin"},
+		{"evt-15", "Classical Nights München", "An elegant evening of Mozart and Beethoven with a full orchestra.", 38, 38, 1200, model.EventStatusPublished, "55.00", "Music", "Telekom", "Olympiahalle München"},
+		{"evt-16", "Football Fan Fest Frankfurt", "Live screening of the finals with food trucks and fan zones.", 33, 33, 20000, model.EventStatusPublished, "0.00", "Sports", "Telekom", "Frankfurt Festplatz"},
+		{"evt-17", "Digital Art Expo Bremen", "Interactive digital art installations from emerging creators.", 12, 26, 350, model.EventStatusPublished, "10.00", "Exhibition", "Provadis Hochschule", "Stadthalle Bremen"},
+		{"evt-18", "Outdoor Cinema Hamburg", "Open-air screenings of cult classics by the river.", 48, 48, 800, model.EventStatusDraft, "12.50", "Film", "ACME Events", "Musikhalle Hamburg"},
+		{"evt-19", "Stand-up Showcase Berlin", "A showcase of the funniest new stand-up talent in Germany.", 22, 22, 500, model.EventStatusPublished, "20.00", "Comedy", "ACME Events", "Treptower Park Berlin"},
+		{"evt-20", "Oktoberfest Preview München", "A two-day taste of Oktoberfest with traditional food and beer.", 42, 44, 15000, model.EventStatusPublished, "35.00", "Food & Drink", "Telekom", "Olympiahalle München"},
+		{"evt-21", "Indie Film Marathon Hamburg", "Back-to-back indie film screenings with director Q&As.", 52, 52, 300, model.EventStatusPublished, "9.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg"},
+		{"evt-22", "Frankfurt Wine Tasting", "Sample wines from the Rheingau paired with regional specialties.", 16, 16, 250, model.EventStatusPublished, "45.00", "Food & Drink", "Provadis Hochschule", "Frankfurt Festplatz"},
+		{"evt-23", "Esports Championship Berlin", "Two-day esports tournament with international teams and a big prize pool.", 70, 72, 5000, model.EventStatusPublished, "30.00", "Sports", "ACME Events", "Treptower Park Berlin"},
+		{"evt-24", "New Year's Eve Gala Hamburg", "Ring in the new year with a gala dinner, live band and fireworks.", 112, 113, 800, model.EventStatusPublished, "75.00", "Music", "Stadthalle Bremen", "Musikhalle Hamburg"},
+		{"evt-25", "Spring Awakening Concert", "A fresh season opener with orchestral and choral pieces.", 120, 120, 1000, model.EventStatusDraft, "22.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
+		{"evt-26", "Vintage Car Exhibition Bremen", "A weekend exhibition of classic cars and restoration workshops.", 8, 9, 600, model.EventStatusCancelled, "18.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
 	}
 	for _, e := range events {
 		id := seedUUID(e.tag)
@@ -247,6 +261,26 @@ func (s *DBSeeder) seedPayments(_ context.Context) error {
 		{"pay-8", "65.00", model.PaymentStatusRefunded, "65.00"},
 		{"pay-9", "64.00", model.PaymentStatusPaid, "0.00"},
 		{"pay-10", "28.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-11", "50.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-12", "42.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-13", "55.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-14", "0.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-15", "20.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-16", "20.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-17", "105.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-18", "18.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-19", "45.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-20", "60.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-21", "150.00", model.PaymentStatusPending, "0.00"},
+		{"pay-22", "32.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-23", "99.80", model.PaymentStatusPaid, "0.00"},
+		{"pay-24", "56.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-25", "12.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-26", "89.00", model.PaymentStatusPending, "0.00"},
+		{"pay-27", "49.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-28", "18.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-29", "36.00", model.PaymentStatusFailed, "0.00"},
+		{"pay-30", "65.00", model.PaymentStatusRefunded, "65.00"},
 	}
 	for _, p := range payments {
 		id := seedUUID(p.tag)
@@ -290,6 +324,26 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 		{"bkg-8", "visitor@eventhub.de", "evt-9", "pay-8", 1, model.BookingStatusCancelled},
 		{"bkg-9", "visitor2@eventhub.de", "evt-11", "pay-9", 2, model.BookingStatusConfirmed},
 		{"bkg-10", "visitor3@eventhub.de", "evt-12", "pay-10", 1, model.BookingStatusConfirmed},
+		{"bkg-11", "visitor@eventhub.de", "evt-13", "pay-11", 2, model.BookingStatusConfirmed},
+		{"bkg-12", "visitor2@eventhub.de", "evt-14", "pay-12", 3, model.BookingStatusConfirmed},
+		{"bkg-13", "visitor3@eventhub.de", "evt-15", "pay-13", 1, model.BookingStatusConfirmed},
+		{"bkg-14", "visitor4@eventhub.de", "evt-16", "pay-14", 4, model.BookingStatusConfirmed},
+		{"bkg-15", "visitor5@eventhub.de", "evt-17", "pay-15", 2, model.BookingStatusConfirmed},
+		{"bkg-16", "visitor6@eventhub.de", "evt-19", "pay-16", 1, model.BookingStatusConfirmed},
+		{"bkg-17", "visitor@eventhub.de", "evt-20", "pay-17", 3, model.BookingStatusConfirmed},
+		{"bkg-18", "visitor2@eventhub.de", "evt-21", "pay-18", 2, model.BookingStatusConfirmed},
+		{"bkg-19", "visitor3@eventhub.de", "evt-22", "pay-19", 1, model.BookingStatusConfirmed},
+		{"bkg-20", "visitor4@eventhub.de", "evt-23", "pay-20", 2, model.BookingStatusConfirmed},
+		{"bkg-21", "visitor5@eventhub.de", "evt-24", "pay-21", 2, model.BookingStatusReserved},
+		{"bkg-22", "visitor6@eventhub.de", "evt-11", "pay-22", 1, model.BookingStatusConfirmed},
+		{"bkg-23", "max.multi@eventhub.de", "evt-1", "pay-23", 2, model.BookingStatusConfirmed},
+		{"bkg-24", "eva.manager@provadis-hochschule.de", "evt-12", "pay-24", 2, model.BookingStatusConfirmed},
+		{"bkg-25", "tom.finance@provadis-hochschule.de", "evt-5", "pay-25", 1, model.BookingStatusConfirmed},
+		{"bkg-26", "lena.admin@telekom.de", "evt-2", "pay-26", 1, model.BookingStatusReserved},
+		{"bkg-27", "visitor@eventhub.de", "evt-3", "pay-27", 2, model.BookingStatusConfirmed},
+		{"bkg-28", "visitor2@eventhub.de", "evt-7", "pay-28", 1, model.BookingStatusConfirmed},
+		{"bkg-29", "visitor3@eventhub.de", "evt-26", "pay-29", 2, model.BookingStatusFailed},
+		{"bkg-30", "visitor4@eventhub.de", "evt-9", "pay-30", 1, model.BookingStatusCancelled},
 	}
 	for _, b := range bookings {
 		id := seedUUID(b.tag)
@@ -332,6 +386,12 @@ func (s *DBSeeder) seedRatings(_ context.Context) error {
 		{"rat-2", "bkg-2", 5, "Epic night of rock music, worth every cent.", true},
 		{"rat-3", "bkg-3", 4, "Hilarious show, laughed all night.", true},
 		{"rat-4", "bkg-9", 4, "Smooth jazz and great atmosphere.", false},
+		{"rat-5", "bkg-13", 5, "World-class classical performance, stunning venue.", true},
+		{"rat-6", "bkg-17", 4, "Great Oktoberfest vibe, plenty of beer and food.", true},
+		{"rat-7", "bkg-20", 5, "Insane esports atmosphere, would go again!", true},
+		{"rat-8", "bkg-27", 4, "Comedy night was a blast, highly recommend.", false},
+		{"rat-9", "bkg-23", 3, "Good festival but a bit overcrowded.", true},
+		{"rat-10", "bkg-11", 5, "Well-organized marathon expo, lots of stalls.", true},
 	}
 	for _, r := range ratings {
 		id := seedUUID(r.tag)
@@ -368,6 +428,11 @@ func (s *DBSeeder) seedNotifications(_ context.Context) error {
 		{"not-3", "visitor2@eventhub.de", "Booking confirmed", "Your booking for Bremen Comedy Night is confirmed."},
 		{"not-4", "visitor3@eventhub.de", "Payment failed", "Your payment for Street Food Festival Bremen failed. Please try again."},
 		{"not-5", "organizer@telekom.de", "New booking on your event", "A visitor just booked 2 tickets for Jazz & Blues Night."},
+		{"not-6", "visitor4@eventhub.de", "Booking confirmed", "Your booking for Football Fan Fest Frankfurt is confirmed. 4 tickets."},
+		{"not-7", "visitor5@eventhub.de", "Payment pending", "Your payment for New Year's Eve Gala Hamburg is still pending. Please complete it soon."},
+		{"not-8", "visitor2@eventhub.de", "Event reminder", "Berlin Beer Festival starts tomorrow at Treptower Park Berlin."},
+		{"not-9", "organizer@telekom.de", "New booking on your event", "A visitor just booked 3 tickets for Oktoberfest Preview München."},
+		{"not-10", "visitor3@eventhub.de", "Refund processed", "Your refund for Winter Gala Concert has been processed."},
 	}
 	for _, n := range notifs {
 		id := seedUUID(n.tag)
