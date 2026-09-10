@@ -94,6 +94,8 @@ func main() {
 		{
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
 	}
 	orgs := v1.Group("/organizations")
@@ -105,7 +107,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 

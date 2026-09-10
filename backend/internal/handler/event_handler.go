@@ -37,7 +37,7 @@ func UpdateEventHandler(c *gin.Context) {
 func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		writeProblem(c, http.StatusBadRequest, "invaild event id")
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
 		return
 	}
 
@@ -131,10 +131,62 @@ func ListOwnEventsHandler(c *gin.Context) {
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
-func GetSoldTicketsHandler(c *gin.Context) {
+func (h *EventHandler) GetSoldTicketsHandler(c *gin.Context) {
+	statistics, ok := h.getEventStatistics(c)
+	if !ok {
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"eventId":     statistics.EventID,
+		"soldTickets": statistics.SoldTickets,
+	})
 }
 
 // EVENTHUB-81: Freie Plätze pro Veranstaltung anzeigen
-func GetAvailableSeatsHandler(c *gin.Context) {
+func (h *EventHandler) GetAvailableSeatsHandler(c *gin.Context) {
+	statistics, ok := h.getEventStatistics(c)
+	if !ok {
+		return
+	}
 
+	c.JSON(http.StatusOK, gin.H{
+		"eventId":        statistics.EventID,
+		"availableSeats": statistics.AvailableSeats,
+	})
+}
+
+func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistics, bool) {
+	eventID, err := uuid.Parse(c.Param("eventId"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		return nil, false
+	}
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return nil, false
+	}
+
+	if principal.ActiveOrganization == nil {
+		writeProblem(c, http.StatusForbidden, "no active organization")
+		return nil, false
+	}
+
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return nil, false
+	}
+
+	statistics, err := h.eventService.GetEventStatistics(
+		eventID,
+		principal.ActiveOrganization.ID,
+	)
+	if err != nil {
+		writeEventActionError(c, err)
+		return nil, false
+	}
+
+	return statistics, true
 }
