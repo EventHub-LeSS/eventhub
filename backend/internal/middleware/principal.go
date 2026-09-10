@@ -31,6 +31,7 @@ type Principal struct {
 	AccessToken        string
 	GlobalRoles        map[GlobalRole]struct{}
 	ActiveOrganization *OrganizationAccess
+	Organizations      []*OrganizationAccess
 	ExpiresAt          time.Time
 }
 

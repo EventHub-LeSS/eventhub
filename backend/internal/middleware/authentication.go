@@ -221,9 +221,6 @@ func (a *Authenticator) principalFromClaims(claims *accessClaims) (*Principal, e
 		}
 	}
 
-	if len(claims.Organizations) > 1 {
-		return nil, errors.New("multiple active organizations")
-	}
 	for alias, organization := range claims.Organizations {
 		if alias == "" {
 			return nil, errors.New("invalid organization claim")
@@ -247,7 +244,13 @@ func (a *Authenticator) principalFromClaims(claims *accessClaims) (*Principal, e
 				access.Roles[RoleFinanceViewer] = struct{}{}
 			}
 		}
-		principal.ActiveOrganization = access
+		principal.Organizations = append(principal.Organizations, access)
+	}
+	// A token carries no notion of an "active" organization; that is purely a
+	// frontend UI preference. The backend keeps a single-org convenience only
+	// for the common single-membership case.
+	if len(principal.Organizations) == 1 {
+		principal.ActiveOrganization = principal.Organizations[0]
 	}
 
 	return principal, nil

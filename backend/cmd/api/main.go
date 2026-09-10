@@ -63,9 +63,14 @@ func main() {
 	// Initialize Repositories
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
+	eventRepo := repository.NewEventRepository(db)
+
+	// Initialize Services
+	eventService := service.NewEventService(eventRepo, orgRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -85,6 +90,11 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+		events := protected.Group("/events")
+		{
+			events.POST("/:id/publish", eventHandler.PublishEventHandler)
+			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+		}
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
