@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { DomainInput } from "@/features/organizations/components/domain-input";
 import { useCreateOrganization } from "@/features/organizations/lib/api";
 import {
   type DraftErrors,
@@ -16,7 +15,6 @@ import slugify from "slugify";
 import { Button } from "@/features/shared/components/ui/button";
 import {
   Field,
-  FieldContent,
   FieldDescription,
   FieldError,
   FieldLabel,
@@ -24,12 +22,19 @@ import {
   FieldSet,
 } from "@/features/shared/components/ui/field";
 import { Input } from "@/features/shared/components/ui/input";
-import { Switch } from "@/features/shared/components/ui/switch";
-import { Textarea } from "@/features/shared/components/ui/textarea";
 
-export function CreateOrganizationForm() {
+interface CreateOrganizationFormProps {
+  defaultOrgAdmin?: string;
+}
+
+export function CreateOrganizationForm({
+  defaultOrgAdmin = "",
+}: CreateOrganizationFormProps) {
   const router = useRouter();
-  const [draft, setDraft] = useState<OrganizationDraft>(emptyDraft);
+  const [draft, setDraft] = useState<OrganizationDraft>(() => ({
+    ...emptyDraft,
+    orgAdmin: defaultOrgAdmin,
+  }));
   const [errors, setErrors] = useState<DraftErrors>({});
   const [aliasEdited, setAliasEdited] = useState(false);
   const createOrganization = useCreateOrganization();
@@ -74,7 +79,7 @@ export function CreateOrganizationForm() {
             update("name", value);
 
             if (!aliasEdited) {
-              update("alias", slugify(value));
+              update("alias", slugify(value, { lower: true }));
             }
           }}
         />
@@ -101,58 +106,26 @@ export function CreateOrganizationForm() {
         <FieldError>{errors.alias}</FieldError>
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="organization-description">Description</FieldLabel>
-        <Textarea
-          id="organization-description"
-          value={draft.description}
-          placeholder="What this organization does and who runs it."
-          onChange={(event) => update("description", event.target.value)}
-        />
-      </Field>
-
-      <DomainInput
-        domains={draft.domains}
-        onChange={(domains) => update("domains", domains)}
-      />
-
-      <Field data-invalid={Boolean(errors.redirectUrl)}>
-        <FieldLabel htmlFor="organization-redirect-url">
-          Redirect URL
-        </FieldLabel>
+      <Field data-invalid={Boolean(errors.orgAdmin)}>
+        <FieldLabel htmlFor="organization-admin">Organization admin</FieldLabel>
         <Input
-          id="organization-redirect-url"
-          type="url"
-          value={draft.redirectUrl}
-          placeholder="https://eventhub.example/organizations"
-          aria-invalid={Boolean(errors.redirectUrl)}
-          onChange={(event) => update("redirectUrl", event.target.value)}
+          id="organization-admin"
+          value={draft.orgAdmin}
+          placeholder="admin@fs-inf.uni-example.de"
+          autoComplete="off"
+          aria-invalid={Boolean(errors.orgAdmin)}
+          onChange={(event) => update("orgAdmin", event.target.value)}
         />
         <FieldDescription>
-          Where invited members land after accepting the invitation. Optional.
+          Username or email of the person who will manage this organization.
+          They must already have an EventHub account.
         </FieldDescription>
-        <FieldError>{errors.redirectUrl}</FieldError>
+        <FieldError>{errors.orgAdmin}</FieldError>
       </Field>
 
       <FieldSet className="rounded-xl border border-border p-4">
-        <FieldLegend variant="label">EventHub details</FieldLegend>
-        <FieldDescription>
-          Keycloak has no fields for these, so they are stored as organization
-          attributes.
-        </FieldDescription>
-
-        <Field data-invalid={Boolean(errors.logoUrl)}>
-          <FieldLabel htmlFor="organization-logo-url">Logo URL</FieldLabel>
-          <Input
-            id="organization-logo-url"
-            type="url"
-            value={draft.logoUrl}
-            placeholder="https://example.org/logo.png"
-            aria-invalid={Boolean(errors.logoUrl)}
-            onChange={(event) => update("logoUrl", event.target.value)}
-          />
-          <FieldError>{errors.logoUrl}</FieldError>
-        </Field>
+        <FieldLegend variant="label">Contact details</FieldLegend>
+        <FieldDescription>Optional, shown to members and visitors.</FieldDescription>
 
         <Field data-invalid={Boolean(errors.contactEmail)}>
           <FieldLabel htmlFor="organization-contact-email">
@@ -168,27 +141,87 @@ export function CreateOrganizationForm() {
           />
           <FieldError>{errors.contactEmail}</FieldError>
         </Field>
+
+        <Field>
+          <FieldLabel htmlFor="organization-contact-phone">
+            Contact phone number
+          </FieldLabel>
+          <Input
+            id="organization-contact-phone"
+            type="tel"
+            value={draft.contactPhoneNumber}
+            placeholder="+49 30 123456"
+            onChange={(event) =>
+              update("contactPhoneNumber", event.target.value)
+            }
+          />
+        </Field>
       </FieldSet>
 
-      <Field orientation="horizontal">
-        <FieldContent>
-          <FieldLabel
-            id="organization-enabled-label"
-            htmlFor="organization-enabled"
-          >
-            Enabled
-          </FieldLabel>
-          <FieldDescription>
-            Disabled organizations cannot be used to publish events.
-          </FieldDescription>
-        </FieldContent>
-        <Switch
-          id="organization-enabled"
-          aria-labelledby="organization-enabled-label"
-          checked={draft.enabled}
-          onCheckedChange={(checked) => update("enabled", checked)}
-        />
-      </Field>
+      <FieldSet className="rounded-xl border border-border p-4">
+        <FieldLegend variant="label">Address</FieldLegend>
+        <FieldDescription>Optional.</FieldDescription>
+
+        <div className="flex gap-3">
+          <Field className="flex-1">
+            <FieldLabel htmlFor="organization-street">Street</FieldLabel>
+            <Input
+              id="organization-street"
+              value={draft.street}
+              placeholder="Hauptstraße"
+              onChange={(event) => update("street", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="organization-house-number">
+              House no.
+            </FieldLabel>
+            <Input
+              id="organization-house-number"
+              value={draft.houseNumber}
+              placeholder="1a"
+              className="w-24"
+              onChange={(event) => update("houseNumber", event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="flex gap-3">
+          <Field>
+            <FieldLabel htmlFor="organization-postal-code">
+              Postal code
+            </FieldLabel>
+            <Input
+              id="organization-postal-code"
+              value={draft.postalCode}
+              placeholder="10115"
+              className="w-32"
+              onChange={(event) => update("postalCode", event.target.value)}
+            />
+          </Field>
+          <Field className="flex-1">
+            <FieldLabel htmlFor="organization-city">City</FieldLabel>
+            <Input
+              id="organization-city"
+              value={draft.city}
+              placeholder="Berlin"
+              onChange={(event) => update("city", event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="organization-country-code">
+              Country
+            </FieldLabel>
+            <Input
+              id="organization-country-code"
+              value={draft.countryCode}
+              placeholder="DE"
+              className="w-20"
+              onChange={(event) => update("countryCode", event.target.value)}
+            />
+          </Field>
+        </div>
+      </FieldSet>
 
       {createOrganization.isError ? (
         <p className="text-sm font-medium text-destructive">
@@ -206,7 +239,7 @@ export function CreateOrganizationForm() {
           type="button"
           variant="ghost"
           onClick={() => {
-            setDraft(emptyDraft);
+            setDraft({ ...emptyDraft, orgAdmin: defaultOrgAdmin });
             setErrors({});
             setAliasEdited(false);
             createOrganization.reset();
