@@ -30,6 +30,35 @@ func (s *EventService) CreateEvent(event *model.EventModel) error {
 	return s.eventRepo.CreateEvent(event)
 }
 
+func (s *EventService) CreateDraft(keycloakOrgID string, req model.CreateDraftRequest) (*model.EventModel, error) {
+	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil {
+		return nil, ErrForbidden
+	}
+
+	event := &model.EventModel{
+		EventID:     uuid.New(),
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Capacity:    req.Capacity,
+		Status:      model.EventStatusDraft,
+		Price:       req.Price,
+		CategoryID:  &req.CategoryID,
+		OrganizerID: &org.OrganizationID,
+		LocationID:  &req.LocationID,
+	}
+
+	if err := s.eventRepo.CreateEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
 func (s *EventService) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
 	return s.eventRepo.GetEventByID(eventID)
 }
@@ -37,6 +66,17 @@ func (s *EventService) GetEventByID(eventID uuid.UUID) (*model.EventModel, error
 func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 	return s.eventRepo.GetAllEvents()
 }
+func (s *EventService) ListOwnEventsByStatus(keycloakOrgID string, status model.EventStatus) ([]*model.EventModel, error) {
+	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil {
+		return nil, ErrForbidden
+	}
+	return s.eventRepo.ListByOrganizerAndStatus(org.OrganizationID, status)
+}
+
 func (s *EventService) UpdateEvent(event *model.EventModel) error {
 	existing, err := s.eventRepo.GetEventByID(event.EventID)
 	if err != nil {

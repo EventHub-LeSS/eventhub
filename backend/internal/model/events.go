@@ -33,3 +33,14 @@ type EventModel struct {
 }
 
 func (EventModel) TableName() string { return "events" }
+
+type CreateDraftRequest struct {
+	Title       string          `json:"title" binding:"required,min=3,max=200"`
+	Description *string         `json:"description" binding:"omitempty,max=5000"`
+	StartTime   time.Time       `json:"startTime" binding:"required,gt"`
+	EndTime     time.Time       `json:"endTime" binding:"required,gtfield=StartTime"`
+	Capacity    int             `json:"capacity" binding:"required,min=1,max=100000"`
+	Price       decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
+	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
+	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+}
