@@ -14,6 +14,8 @@ type EventRepository interface {
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
+	ListByStatus(status model.EventStatus) ([]*model.EventModel, error)
+	ListByOrganizerAndStatus(organizationID uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
 }
 
 type eventRepository struct {
@@ -60,6 +62,25 @@ func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
 func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
 	var events []*model.EventModel
 	err := r.db.Where("organizer_id = ?", organizationID).Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *eventRepository) ListByStatus(status model.EventStatus) ([]*model.EventModel, error) {
+	var events []*model.EventModel
+	err := r.db.Where("status = ?", status).Order("start_time ASC").Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *eventRepository) ListByOrganizerAndStatus(organizationID uuid.UUID, status model.EventStatus) ([]*model.EventModel, error) {
+	var events []*model.EventModel
+	err := r.db.Where("organizer_id = ? AND status = ?", organizationID, status).
+		Order("start_time ASC").Find(&events).Error
 	if err != nil {
 		return nil, err
 	}
