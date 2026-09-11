@@ -25,6 +25,10 @@ func (s *BookingService) CreateBooking(booking *model.BookingModel) (*model.Book
 		return nil, errors.New("event_id is required")
 	}
 
+	if booking.NumberOfTickets <= 0 {
+		return nil, errors.New("number of tickets must be at least 1")
+	}
+
 	event, err := s.eventRepo.GetEventByID(*booking.EventID)
 	if err != nil {
 		return nil, err
@@ -45,6 +49,7 @@ func (s *BookingService) CreateBooking(booking *model.BookingModel) (*model.Book
 	if available < int64(booking.NumberOfTickets) {
 		return nil, errors.New("no available seats left")
 	}
+
 	booking.BookingID = uuid.New()
 	booking.Status = model.BookingStatusReserved
 
