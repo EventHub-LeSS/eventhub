@@ -46,12 +46,12 @@ func RequireOrganizationRole(organizationParam string, roles ...OrganizationRole
 		}
 
 		organizationID := c.Param(organizationParam)
-		if organizationID == "" || principal.ActiveOrganization == nil || principal.ActiveOrganization.ID != organizationID {
+		if organizationID == "" {
 			abortForbidden(c)
 			return
 		}
 		for role := range allowed {
-			if principal.HasOrganizationRole(role) {
+			if principal.HasOrganizationRoleIn(organizationID, role) {
 				c.Next()
 				return
 			}

@@ -130,12 +130,86 @@ definitions:
       type:
         type: string
     type: object
+  model.EventModel:
+    properties:
+      capacity:
+        type: integer
+      categoryId:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      endTime:
+        type: string
+      eventId:
+        type: string
+      locationId:
+        type: string
+      organizerId:
+        type: string
+      price:
+        type: number
+      startTime:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+      title:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  model.EventStatus:
+    enum:
+    - draft
+    - published
+    - cancelled
+    - completed
+    type: string
+    x-enum-varnames:
+    - EventStatusDraft
+    - EventStatusPublished
+    - EventStatusCancelled
+    - EventStatusCompleted
   model.HealthcheckModel:
     properties:
       message:
         type: string
       time:
         type: string
+    type: object
+  model.UpdateEventRequest:
+    properties:
+      capacity:
+        maximum: 100000
+        minimum: 1
+        type: integer
+      categoryId:
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      endTime:
+        type: string
+      locationId:
+        type: string
+      price:
+        maximum: 10000
+        minimum: 0
+        type: number
+      startTime:
+        type: string
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - capacity
+    - categoryId
+    - endTime
+    - locationId
+    - startTime
+    - title
     type: object
 info:
   contact: {}
@@ -187,6 +261,57 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Updates title, description, time span, location, category, price
+        and capacity of an event. Requires the event_manager role in the organization
+        that owns the event. Only events in status draft or published can be edited.
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.UpdateEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update event
+      tags:
+      - events
   /organizations/:
     post:
       consumes:
