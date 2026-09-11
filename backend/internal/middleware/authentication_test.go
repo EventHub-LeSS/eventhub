@@ -133,6 +133,22 @@ func TestAuthenticateAllowsNoOrganizationForGlobalAccess(t *testing.T) {
 	}
 }
 
+func TestAuthenticateAcceptsMultipleOrganizations(t *testing.T) {
+	claims := validClaims()
+	claims.Organizations["beta"] = organizationClaim{ID: "org-456", Groups: []string{"/roles/org_admin"}}
+	client := &fakeKeycloakClient{active: true, claims: claims}
+	principal, err := newAuthenticator(testConfig(), client).Authenticate(context.Background(), "token")
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if len(principal.Organizations) != 2 {
+		t.Fatalf("len(Organizations) = %d, want 2", len(principal.Organizations))
+	}
+	if principal.ActiveOrganization != nil {
+		t.Fatalf("ActiveOrganization = %#v, want nil for multi-org token", principal.ActiveOrganization)
+	}
+}
+
 func TestAuthenticateAllowsRequiredAudienceAmongMultipleAudiences(t *testing.T) {
 	claims := validClaims()
 	claims.Audience = jwt.ClaimStrings{"account", "backend"}
@@ -150,9 +166,6 @@ func TestAuthenticateRejectsInvalidClaims(t *testing.T) {
 		"missing subject":        func(claims *accessClaims) { claims.Subject = "" },
 		"missing expiration":     func(claims *accessClaims) { claims.ExpiresAt = nil },
 		"expired":                func(claims *accessClaims) { claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Minute)) },
-		"multiple organizations": func(claims *accessClaims) {
-			claims.Organizations["other"] = organizationClaim{ID: "org-456"}
-		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {

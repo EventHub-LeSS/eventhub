@@ -9,10 +9,11 @@ import (
 )
 
 type CurrentUserResponse struct {
-	Subject      string                       `json:"subject"`
-	Username     string                       `json:"username"`
-	GlobalRoles  []middleware.GlobalRole      `json:"globalRoles"`
-	Organization *CurrentOrganizationResponse `json:"organization,omitempty"`
+	Subject       string                       `json:"subject"`
+	Username      string                       `json:"username"`
+	GlobalRoles   []middleware.GlobalRole      `json:"globalRoles"`
+	Organization  *CurrentOrganizationResponse `json:"organization,omitempty"`
+	Organizations []CurrentOrganizationResponse `json:"organizations"`
 }
 
 type CurrentOrganizationResponse struct {
@@ -22,7 +23,7 @@ type CurrentOrganizationResponse struct {
 }
 
 // @Summary      Get current user
-// @Description  Returns the authenticated user's profile, global roles, and active organization
+// @Description  Returns the authenticated user's profile, global roles, active organization, and organization memberships
 // @Tags         users
 // @Security     BearerAuth
 // @Produce      json
@@ -39,9 +40,10 @@ func CurrentUser(c *gin.Context) {
 	}
 
 	response := CurrentUserResponse{
-		Subject:     principal.Subject,
-		Username:    principal.Username,
-		GlobalRoles: make([]middleware.GlobalRole, 0, len(principal.GlobalRoles)),
+		Subject:       principal.Subject,
+		Username:      principal.Username,
+		GlobalRoles:   make([]middleware.GlobalRole, 0, len(principal.GlobalRoles)),
+		Organizations: make([]CurrentOrganizationResponse, 0, len(principal.Organizations)),
 	}
 	for _, role := range []middleware.GlobalRole{
 		middleware.RoleAdmin,
@@ -53,23 +55,35 @@ func CurrentUser(c *gin.Context) {
 		}
 	}
 
+	for _, org := range principal.Organizations {
+		response.Organizations = append(response.Organizations, CurrentOrganizationResponse{
+			ID:    org.ID,
+			Alias: org.Alias,
+			Roles: orderedOrganizationRoles(org.Roles),
+		})
+	}
+
 	if principal.ActiveOrganization != nil {
-		organization := CurrentOrganizationResponse{
+		response.Organization = &CurrentOrganizationResponse{
 			ID:    principal.ActiveOrganization.ID,
 			Alias: principal.ActiveOrganization.Alias,
-			Roles: make([]middleware.OrganizationRole, 0, len(principal.ActiveOrganization.Roles)),
+			Roles: orderedOrganizationRoles(principal.ActiveOrganization.Roles),
 		}
-		for _, role := range []middleware.OrganizationRole{
-			middleware.RoleOrganizationAdmin,
-			middleware.RoleEventManager,
-			middleware.RoleFinanceViewer,
-		} {
-			if principal.HasOrganizationRole(role) {
-				organization.Roles = append(organization.Roles, role)
-			}
-		}
-		response.Organization = &organization
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func orderedOrganizationRoles(roles map[middleware.OrganizationRole]struct{}) []middleware.OrganizationRole {
+	ordered := make([]middleware.OrganizationRole, 0, len(roles))
+	for _, role := range []middleware.OrganizationRole{
+		middleware.RoleOrganizationAdmin,
+		middleware.RoleEventManager,
+		middleware.RoleFinanceViewer,
+	} {
+		if _, ok := roles[role]; ok {
+			ordered = append(ordered, role)
+		}
+	}
+	return ordered
 }

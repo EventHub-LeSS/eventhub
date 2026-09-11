@@ -55,7 +55,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.debugTokenRequest"
+                            "$ref": "#/definitions/model.DebugTokenRequest"
                         }
                     }
                 ],
@@ -63,7 +63,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.debugTokenResponse"
+                            "$ref": "#/definitions/model.DebugTokenResponse"
                         }
                     },
                     "400": {
@@ -151,7 +151,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the authenticated user's profile, global roles, and active organization",
+                "description": "Returns the authenticated user's profile, global roles, active organization, and organization memberships",
                 "produces": [
                     "application/json"
                 ],
@@ -206,42 +206,16 @@ const docTemplate = `{
                 "organization": {
                     "$ref": "#/definitions/handler.CurrentOrganizationResponse"
                 },
+                "organizations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handler.CurrentOrganizationResponse"
+                    }
+                },
                 "subject": {
                     "type": "string"
                 },
                 "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.debugTokenRequest": {
-            "type": "object",
-            "required": [
-                "password",
-                "username"
-            ],
-            "properties": {
-                "password": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.debugTokenResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string"
-                },
-                "expires_in": {
-                    "type": "integer"
-                },
-                "refresh_token": {
-                    "type": "string"
-                },
-                "token_type": {
                     "type": "string"
                 }
             }
@@ -344,6 +318,38 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DebugTokenRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.DebugTokenResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "expires_in": {
+                    "type": "integer"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "token_type": {
                     "type": "string"
                 }
             }

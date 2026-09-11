@@ -67,6 +67,57 @@ Mitgliedschaften werden aktuell in der Admin-Konsole unter _Organizations → �
 Der Organizer ist in zwei Organisationen, damit sich der Organisationswechsel im Benutzermenü
 testen lässt.
 
+### Mock-Daten seeding (EVENTHUB-190)
+
+Das `api-seed` Kommando erzeugt konsistente Mockdaten für das überarbeitete Datenmodell
+in Keycloak (Nutzer, Organisationen, graduated-permission Gruppen) und in der API-Datenbank
+(Kategorien, Locations, Veranstaltungen, Zahlungen, Buchungen, Bewertungen, Benachrichtigungen).
+
+```bash
+cd core
+docker compose up -d          # startet Keycloak + API-DB + Migration
+docker compose up api-seed    # erzeugt Mockdaten (idempotent, sicher wiederholbar)
+```
+
+Alternativ gegen einen laufenden Stack ohne Docker:
+
+```bash
+cd backend
+go run ./cmd/seed
+```
+
+Das Seeding ist idempotent: existierende Nutzer/Organisationen/Gruppen/Datensätze
+werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden kann.
+
+#### Mock-Benutzer
+
+Alle Passwörter: `password`
+
+| Benutzer                                  | Globale Rolle | Organisation & Berechtigung                          |
+| ----------------------------------------- | ------------- | ---------------------------------------------------- |
+| `großmeister_finn`                        | admin         | Provadis `org_admin`, Telekom `org_admin`, ACME `org_admin`, Stadthalle `org_admin` |
+| `organizer@provadis-hochschule.de`        | visitor       | Provadis `event_manager`                             |
+| `organizer@telekom.de`                    | visitor       | Telekom `event_manager`                              |
+| `eva.manager@provadis-hochschule.de`      | visitor       | Provadis `event_manager`, ACME `event_manager`       |
+| `tom.finance@provadis-hochschule.de`      | visitor       | Provadis `finance_viewer`                            |
+| `lena.admin@telekom.de`                   | visitor       | Telekom `org_admin`, Stadthalle `event_manager`      |
+| `max.multi@eventhub.de`                   | visitor       | Provadis `org_admin`, **Telekom `event_manager`**   |
+| `visitor@eventhub.de`                     | visitor       | –                                                    |
+| `visitor2@eventhub.de`                    | visitor       | –                                                    |
+| `visitor3@eventhub.de`                    | visitor       | –                                                    |
+
+`max.multi@eventhub.de` hat bewusst **unterschiedliche Rollen** in verschiedenen
+Organisationen, um die abgestuften Berechtigungen (EVENTHUB-188) zu demonstrieren.
+
+#### Mock-Organisationen
+
+Provadis Hochschule, Telekom, ACME Events, Stadthalle Bremen
+
+#### Mock-Geschäftsdaten
+
+6 Kategorien, 5 Locations, 12 Veranstaltungen (alle Status: draft/published/cancelled/completed),
+10 Zahlungen, 10 Buchungen, 4 Bewertungen, 5 Benachrichtigungen — alle referenziell konsistent.
+
 ### Frontend starten
 
 ```bash

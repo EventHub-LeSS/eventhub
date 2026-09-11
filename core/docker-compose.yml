@@ -55,6 +55,33 @@ services:
       retries: 5
       start_period: 10s
 
+  api-seed:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["./seed"]
+    environment:
+      DB_HOST: api-db
+      DB_PORT: "5432"
+      DB_USER: ${API_DB_USER:-eventhub}
+      DB_PASSWORD: ${API_DB_PASSWORD:-eventhub}
+      DB_NAME: ${API_DB_NAME:-eventhub}
+      DB_SSLMODE: disable
+      KEYCLOAK_HOST: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventhub}
+      KEYCLOAK_USER_REALM: ${KEYCLOAK_USER_REALM:-eventhub}
+      KEYCLOAK_FRONTEND_CLIENT_ID: frontend
+      SEED_USERNAME: ${SEED_USERNAME:-großmeister_finn}
+      SEED_PASSWORD: ${SEED_PASSWORD:-password}
+    depends_on:
+      api-db:
+        condition: service_healthy
+      api-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+
   api-db:
     image: postgres:17-alpine
     restart: unless-stopped
