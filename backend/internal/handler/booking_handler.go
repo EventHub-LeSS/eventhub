@@ -33,6 +33,7 @@ func CreateBookingHandler(bookingService *service.BookingService) gin.HandlerFun
 
 var bookingBusinessErrors = []string{
 	"event_id is required",
+	"number of tickets must be at least 1",
 	"event not found",
 	"event is not available for booking",
 	"no available seats left",
