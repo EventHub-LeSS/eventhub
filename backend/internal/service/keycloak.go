@@ -208,21 +208,74 @@ func (k *KeycloakService) AddUserToOrganization(orgID, userID string) error {
 }
 
 func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrID string) (string, error) {
+	user, err := k.GetUserByUsername(ctx, accessToken, k.cfg.UserRealm, usernameOrID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil || user.ID == nil {
+		return "", fmt.Errorf("user %q not found", usernameOrID)
+	}
+	return *user.ID, nil
+}
+
+func (k *KeycloakService) GetUserByUsername(ctx context.Context, accessToken, realm, username string) (*gocloak.User, error) {
 	exact := true
 	maxResults := 2
-	users, err := k.client.GetUsers(ctx, accessToken, k.cfg.UserRealm, gocloak.GetUsersParams{
-		Username: &usernameOrID,
+	users, err := k.client.GetUsers(ctx, accessToken, realm, gocloak.GetUsersParams{
+		Username: &username,
 		Exact:    &exact,
 		Max:      &maxResults,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to look up user %q: %w", usernameOrID, err)
-	}
-	if len(users) == 1 && users[0].ID != nil {
-		return *users[0].ID, nil
+		return nil, fmt.Errorf("failed to look up user %q: %w", username, err)
 	}
 	if len(users) == 0 {
-		return "", fmt.Errorf("user %q not found", usernameOrID)
+		return nil, nil
 	}
-	return "", fmt.Errorf("ambiguous user %q: found %d matches", usernameOrID, len(users))
+	if len(users) == 1 {
+		return users[0], nil
+	}
+	return nil, fmt.Errorf("ambiguous user %q: found %d matches", username, len(users))
+}
+
+func (k *KeycloakService) CreateUserWithToken(ctx context.Context, accessToken, realm string, user gocloak.User) (string, error) {
+	return k.client.CreateUser(ctx, accessToken, realm, user)
+}
+
+func (k *KeycloakService) AddUserToOrganizationWithToken(ctx context.Context, accessToken, orgID, userID string) error {
+	return k.client.AddUserToOrganization(ctx, accessToken, k.cfg.UserRealm, orgID, userID)
+}
+
+func (k *KeycloakService) GetOrganizationGroups(ctx context.Context, accessToken, realm, orgID string) ([]*gocloak.Group, error) {
+	maxResults := 100
+	groups, err := k.client.GetOrganizationGroups(ctx, accessToken, realm, orgID, gocloak.GetGroupsParams{
+		Max: &maxResults,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get org groups: %w", err)
+	}
+	return groups, nil
+}
+
+func (k *KeycloakService) CreateOrganizationGroupWithToken(ctx context.Context, accessToken, realm, orgID string, group gocloak.Group) (string, error) {
+	return k.client.CreateOrganizationGroup(ctx, accessToken, realm, orgID, group)
+}
+
+func (k *KeycloakService) AssignUserToOrgGroup(ctx context.Context, accessToken, userID, orgID, groupID string) error {
+	return k.client.AddUserToOrganizationGroup(ctx, accessToken, k.cfg.UserRealm, userID, orgID, groupID)
+}
+
+func (k *KeycloakService) GetOrganizationGroupIDByName(ctx context.Context, accessToken, orgID, name string) (string, error) {
+	groups, err := k.GetOrganizationGroups(ctx, accessToken, k.cfg.UserRealm, orgID)
+	if err != nil {
+		return "", err
+	}
+	for _, g := range groups {
+		if g.Name != nil && *g.Name == name {
+			if g.ID != nil {
+				return *g.ID, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("organization group %q not found", name)
 }
