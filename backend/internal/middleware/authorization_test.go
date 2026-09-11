@@ -79,10 +79,12 @@ func principalWithRoles(global []GlobalRole, organization []OrganizationRole) *P
 		principal.GlobalRoles[role] = struct{}{}
 	}
 	if organization != nil {
-		principal.ActiveOrganization = &OrganizationAccess{ID: "org-123", Roles: make(map[OrganizationRole]struct{})}
+		access := &OrganizationAccess{ID: "org-123", Roles: make(map[OrganizationRole]struct{})}
 		for _, role := range organization {
-			principal.ActiveOrganization.Roles[role] = struct{}{}
+			access.Roles[role] = struct{}{}
 		}
+		principal.Organizations = []*OrganizationAccess{access}
+		principal.ActiveOrganization = access
 	}
 	return principal
 }
