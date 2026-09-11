@@ -94,6 +94,8 @@ func main() {
 		{
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.POST("/draft", eventHandler.SaveEventAsDraftHandler)
+			events.GET("/drafts", eventHandler.ListOwnDraftsHandler)
 		}
 	}
 	orgs := v1.Group("/organizations")

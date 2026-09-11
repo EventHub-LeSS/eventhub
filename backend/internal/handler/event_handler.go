@@ -19,14 +19,70 @@ func NewEventHandler(eventService *service.EventService) *EventHandler {
 	return &EventHandler{eventService: eventService}
 }
 
+func organizationFromContext(c *gin.Context) (string, bool) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return "", false
+	}
+	if principal.ActiveOrganization == nil {
+		writeProblem(c, http.StatusForbidden, "no active organization")
+		return "", false
+	}
+	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return "", false
+	}
+	return principal.ActiveOrganization.ID, true
+}
+
+func eventsOrEmpty(events []*model.EventModel) []*model.EventModel {
+	if events == nil {
+		return []*model.EventModel{}
+	}
+	return events
+}
+
 // EVENTHUB-75: Veranstaltung anlegen
 func CreateEventHandler(c *gin.Context) {
 
 }
 
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
-func SaveEventAsDraftHandler(c *gin.Context) {
+func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
+	keycloakOrgID, ok := organizationFromContext(c)
+	if !ok {
+		return
+	}
 
+	var req model.CreateDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	created, err := h.eventService.CreateDraft(keycloakOrgID, req)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, created)
+}
+
+func (h *EventHandler) ListOwnDraftsHandler(c *gin.Context) {
+	keycloakOrgID, ok := organizationFromContext(c)
+	if !ok {
+		return
+	}
+
+	drafts, err := h.eventService.ListOwnEventsByStatus(keycloakOrgID, model.EventStatusDraft)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, eventsOrEmpty(drafts))
 }
 
 // EVENTHUB-78: Veranstaltung bearbeiten
