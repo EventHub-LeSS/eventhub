@@ -38,7 +38,15 @@ func (k *KeycloakService) login(ctx context.Context) (*gocloak.JWT, error) {
 }
 
 func (k *KeycloakService) LoginUser(ctx context.Context, username, password string) (*gocloak.JWT, error) {
-	token, err := k.client.Login(ctx, k.cfg.FrontendClientID, "", k.cfg.UserRealm, username, password)
+	// organization:* puts all organization memberships (incl. group roles) into the token;
+	// without it Keycloak omits the claim for users in more than one organization.
+	token, err := k.client.GetToken(ctx, k.cfg.UserRealm, gocloak.TokenOptions{
+		ClientID:  gocloak.StringP(k.cfg.FrontendClientID),
+		GrantType: gocloak.StringP("password"),
+		Username:  gocloak.StringP(username),
+		Password:  gocloak.StringP(password),
+		Scope:     gocloak.StringP("openid organization:*"),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("keycloak user login failed: %w", err)
 	}
