@@ -255,6 +255,7 @@
           "protocolMapper": "oidc-organization-membership-mapper",
           "consentRequired": false,
           "config": {
+            "claim.name": "organization",
             "addOrganizationId": "true",
             "addOrganizationAttributes": "false",
             "id.token.claim": "true",
