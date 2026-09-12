@@ -181,7 +181,6 @@ definitions:
   model.UpdateEventRequest:
     properties:
       capacity:
-        maximum: 100000
         minimum: 1
         type: integer
       categoryId:
@@ -194,7 +193,6 @@ definitions:
       locationId:
         type: string
       price:
-        maximum: 10000
         minimum: 0
         type: number
       startTime:
