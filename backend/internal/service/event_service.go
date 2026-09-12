@@ -4,6 +4,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"errors"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -37,19 +38,48 @@ func (s *EventService) GetEventByID(eventID uuid.UUID) (*model.EventModel, error
 func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 	return s.eventRepo.GetAllEvents()
 }
-func (s *EventService) UpdateEvent(event *model.EventModel) error {
-	existing, err := s.eventRepo.GetEventByID(event.EventID)
+
+// keycloakOrgIDs are the organizations in which the caller may manage events.
+func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgIDs []string, req model.UpdateEventRequest) (*model.EventModel, error) {
+	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if existing == nil {
-		return errors.New("event not found")
+	if event == nil {
+		return nil, ErrEventNotFound
 	}
-	if existing.Status != model.EventStatusDraft {
-		return errors.New("only draft events can be updated")
+	if event.OrganizerID == nil {
+		return nil, ErrForbidden
 	}
-	return s.eventRepo.UpdateEvent(event)
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
+		return nil, ErrForbidden
+	}
+
+	switch event.Status {
+	case model.EventStatusDraft, model.EventStatusPublished:
+	default:
+		return nil, ErrInvalidStatus
+	}
+
+	event.Title = req.Title
+	event.Description = req.Description
+	event.StartTime = req.StartTime
+	event.EndTime = req.EndTime
+	event.Capacity = req.Capacity
+	event.Price = req.Price
+	event.CategoryID = &req.CategoryID
+	event.LocationID = &req.LocationID
+
+	if err := s.eventRepo.UpdateEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
 }
+
 func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
@@ -78,7 +108,7 @@ func isEventComplete(event *model.EventModel) bool {
 	return true
 }
 
-func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgID string) error {
+func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return err
@@ -89,11 +119,11 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgID string) err
 	if event.OrganizerID == nil {
 		return ErrForbidden
 	}
-	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return err
 	}
-	if org == nil || org.OrganizationID != *event.OrganizerID {
+	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusDraft {
@@ -106,7 +136,7 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgID string) err
 	return s.eventRepo.UpdateEvent(event)
 }
 
-func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgID string) error {
+func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return err
@@ -117,11 +147,11 @@ func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgID string) er
 	if event.OrganizerID == nil {
 		return ErrForbidden
 	}
-	org, err := s.orgRepo.GetByKeycloakOrgID(keycloakOrgID)
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return err
 	}
-	if org == nil || org.OrganizationID != *event.OrganizerID {
+	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusPublished {

@@ -3,11 +3,13 @@ package repository
 import (
 	"backend/internal/model"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type OrganizationRepository interface {
 	CreateOrganization(org *model.OrganizationModel) error
+	GetByID(organizationID uuid.UUID) (*model.OrganizationModel, error)
 	GetByKeycloakOrgID(keycloakOrgID string) (*model.OrganizationModel, error)
 	AddMembership(membership *model.OrganizationMembershipModel) error
 }
@@ -22,6 +24,18 @@ func NewOrganizationRepository(db *gorm.DB) OrganizationRepository {
 
 func (r *organizationRepository) CreateOrganization(org *model.OrganizationModel) error {
 	return r.db.Create(org).Error
+}
+
+func (r *organizationRepository) GetByID(organizationID uuid.UUID) (*model.OrganizationModel, error) {
+	org := &model.OrganizationModel{}
+	err := r.db.First(org, "organization_id = ?", organizationID).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return org, nil
 }
 
 func (r *organizationRepository) GetByKeycloakOrgID(keycloakOrgID string) (*model.OrganizationModel, error) {

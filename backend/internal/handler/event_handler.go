@@ -30,14 +30,59 @@ func SaveEventAsDraftHandler(c *gin.Context) {
 }
 
 // EVENTHUB-78: Veranstaltung bearbeiten
-func UpdateEventHandler(c *gin.Context) {
+// @Summary      Update event
+// @Description  Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited.
+// @Tags         events
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        id      path   string                   true  "Event ID"
+// @Param        request body   model.UpdateEventRequest true  "Updated event data"
+// @Success      200 {object} model.EventModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{id} [put]
+func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
+		return
+	}
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	var req model.UpdateEventRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updated, err := h.eventService.UpdateEvent(eventID, managedOrgIDs, req)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, updated)
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
 func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		writeProblem(c, http.StatusBadRequest, "invaild event id")
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
 		return
 	}
 
@@ -47,17 +92,13 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	if principal.ActiveOrganization == nil {
-		writeProblem(c, http.StatusForbidden, "no active organization")
-		return
-	}
-
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
-	if err := h.eventService.PublishEvent(eventID, principal.ActiveOrganization.ID); err != nil {
+	if err := h.eventService.PublishEvent(eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -69,7 +110,7 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		writeProblem(c, http.StatusBadRequest, "invaild event id")
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
 		return
 	}
 
@@ -79,17 +120,13 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	if principal.ActiveOrganization == nil {
-		writeProblem(c, http.StatusForbidden, "no active organization")
-		return
-	}
-
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
-	if err := h.eventService.WithdrawEvent(eventID, principal.ActiveOrganization.ID); err != nil {
+	if err := h.eventService.WithdrawEvent(eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}

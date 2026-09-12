@@ -38,8 +38,6 @@ func main() {
 		log.Fatal(db_err)
 	}
 
-	_ = db
-
 	authConfig, err := middleware.LoadAuthenticationConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -92,6 +90,7 @@ func main() {
 		protected.GET("/users/me", handler.CurrentUser)
 		events := protected.Group("/events")
 		{
+			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 		}
