@@ -530,7 +530,6 @@ const docTemplate = `{
             "properties": {
                 "capacity": {
                     "type": "integer",
-                    "maximum": 100000,
                     "minimum": 1
                 },
                 "categoryId": {
@@ -548,7 +547,6 @@ const docTemplate = `{
                 },
                 "price": {
                     "type": "number",
-                    "maximum": 10000,
                     "minimum": 0
                 },
                 "startTime": {
