@@ -175,7 +175,62 @@ func writeEventActionError(c *gin.Context, err error) {
 }
 
 // EVENTHUB-79: Eigene Veranstaltungen anzeigen
-func ListOwnEventsHandler(c *gin.Context) {
+
+// ListOwnEventsHandler
+// @Summary      Get users organization events
+// @Description  Returns the events posted by the users active organization
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {object} []model.EventModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/self [get]
+func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
+	principal, rsp := checkPreconditions(c, middleware.RoleEventManager)
+	if rsp != nil {
+		c.AbortWithStatusJSON(rsp.Status, rsp)
+		return
+	}
+
+	events, err := h.eventService.ListByOrganization(*principal.ActiveOrganization)
+	if err != nil {
+		writeEventActionError(c, err)
+	}
+
+	c.JSON(http.StatusOK, events)
+}
+
+func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		return nil, &model.ErrorResponse{
+			Status: 401,
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusUnauthorized),
+			Detail: "Authentication is required!",
+		}
+	}
+	if principal.ActiveOrganization == nil {
+		return principal, &model.ErrorResponse{
+			Status: 401,
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusUnauthorized),
+			Detail: "No active organization found!",
+		}
+	}
+
+	if !principal.HasOrganizationRole(role) {
+		return principal, &model.ErrorResponse{
+			Status: 403,
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusForbidden),
+			Detail: "Insufficient organization role",
+		}
+	}
+	return principal, nil
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
