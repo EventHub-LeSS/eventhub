@@ -92,6 +92,7 @@ func main() {
 		protected.GET("/users/me", handler.CurrentUser)
 		events := protected.Group("/events")
 		{
+			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 		}

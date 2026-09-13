@@ -1,6 +1,7 @@
 package service
 
 import (
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
 	"errors"
@@ -54,8 +55,12 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
 
-func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
-	return s.eventRepo.ListByOrganization(organizationID)
+func (s *EventService) ListByOrganization(orgAccess middleware.OrganizationAccess) ([]*model.EventModel, error) {
+	org, err := s.orgRepo.GetByKeycloakOrgID(orgAccess.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.eventRepo.ListByOrganization(org.OrganizationID)
 }
 
 func isEventComplete(event *model.EventModel) bool {
