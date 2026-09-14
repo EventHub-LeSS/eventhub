@@ -9,6 +9,7 @@ import (
 type OrganizationModel struct {
 	OrganizationID     uuid.UUID `json:"organizationId" gorm:"column:organization_id;type:uuid;primaryKey"`
 	KeycloakOrgID      string    `json:"keycloakOrgId" gorm:"column:keycloak_org_id;type:text;not null;uniqueIndex"`
+	Alias              string    `json:"alias" gorm:"column:alias;type:text"`
 	Name               string    `json:"name" gorm:"column:name;type:text;not null"`
 	ContactEmail       *string   `json:"contactEmail" gorm:"column:contact_email;type:text"`
 	ContactPhoneNumber *string   `json:"contactPhoneNumber" gorm:"column:contact_phone_number;type:text"`

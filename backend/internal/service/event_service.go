@@ -55,7 +55,7 @@ func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgIDs []string, r
 	if err != nil {
 		return nil, err
 	}
-	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return nil, ErrForbidden
 	}
 
@@ -123,7 +123,7 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 	if err != nil {
 		return err
 	}
-	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusDraft {
@@ -151,7 +151,7 @@ func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string)
 	if err != nil {
 		return err
 	}
-	if org == nil || !slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return ErrForbidden
 	}
 	if event.Status != model.EventStatusPublished {

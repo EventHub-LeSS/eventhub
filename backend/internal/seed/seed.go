@@ -98,6 +98,7 @@ func (s *Seeder) syncDB(ctx context.Context, realm, token string) error {
 		org := &model.OrganizationModel{
 			OrganizationID: uuid.New(),
 			KeycloakOrgID:  *kcOrg.ID,
+			Alias:          safeStr(kcOrg.Alias),
 			Name:           safeStr(kcOrg.Name),
 		}
 		if err := orgRepo.CreateOrganization(org); err != nil {
