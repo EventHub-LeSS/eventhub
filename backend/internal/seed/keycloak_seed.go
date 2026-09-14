@@ -27,6 +27,9 @@ func NewKeycloakSeeder(kc *service.KeycloakService, realm, token string) *Keyclo
 }
 
 func (s *KeycloakSeeder) Seed(ctx context.Context) error {
+	if err := s.ensureOrganizationClaimName(ctx); err != nil {
+		return err
+	}
 	if err := s.seedUsers(ctx); err != nil {
 		return err
 	}
@@ -34,6 +37,19 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 		return err
 	}
 	return s.seedMemberships(ctx)
+}
+
+// ensureOrganizationClaimName repairs realms that were imported before claim.name was added
+// to the organization membership mapper; --import-realm never updates an existing realm.
+func (s *KeycloakSeeder) ensureOrganizationClaimName(ctx context.Context) error {
+	updated, err := s.kc.EnsureOrganizationClaimName(ctx, s.token, s.realm)
+	if err != nil {
+		return fmt.Errorf("ensure organization claim name: %w", err)
+	}
+	if updated {
+		log.Println("keycloak: set claim.name on the organization membership mapper")
+	}
+	return nil
 }
 
 func (s *KeycloakSeeder) seedUsers(ctx context.Context) error {

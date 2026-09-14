@@ -38,7 +38,7 @@ func (h *DebugHandler) GetToken(c *gin.Context) {
 		return
 	}
 
-	jwt, err := h.keycloakService.LoginUser(c.Request.Context(), req.Username, req.Password)
+	jwt, err := h.keycloakService.LoginUserWithOrganizations(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, model.ErrorResponse{
 			Type:   "about:blank",
