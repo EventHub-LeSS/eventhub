@@ -25,6 +25,7 @@ func NewBookingRepository(db *gorm.DB) BookingRepository {
 }
 
 func (r *bookingRepository) CreateBooking(booking *model.BookingModel) error {
+	booking.BookingID = uuid.New()
 	return r.db.Create(booking).Error
 }
 
