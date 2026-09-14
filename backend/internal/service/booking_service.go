@@ -39,18 +39,21 @@ func (s *BookingService) CreateBooking(booking *model.BookingModel) (*model.Book
 		return nil, errors.New("event is not available for booking")
 	}
 
-	booked, err := s.bookingRepo.CountByEventID(*booking.EventID)
+	err = s.bookingRepo.WithTransaction(func(txRepo repository.BookingRepository) error {
+		booked, err := txRepo.CountByEventID(*booking.EventID)
+		if err != nil {
+			return err
+		}
+
+		available := int64(event.Capacity) - booked
+		if available < int64(booking.NumberOfTickets) {
+			return errors.New("no available seats left")
+		}
+
+		booking.Status = model.BookingStatusReserved
+		return txRepo.CreateBooking(booking)
+	})
 	if err != nil {
-		return nil, err
-	}
-	available := int64(event.Capacity) - booked
-	if available < int64(booking.NumberOfTickets) {
-		return nil, errors.New("no available seats left")
-	}
-
-	booking.Status = model.BookingStatusReserved
-
-	if err := s.bookingRepo.CreateBooking(booking); err != nil {
 		return nil, err
 	}
 
