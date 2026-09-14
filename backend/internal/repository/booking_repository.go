@@ -14,6 +14,7 @@ type BookingRepository interface {
 	UpdateBooking(booking *model.BookingModel) error
 	DeleteBooking(bookingID uuid.UUID) error
 	CountByEventID(eventID uuid.UUID) (int64, error)
+	WithTransaction(fn func(repo BookingRepository) error) error
 }
 
 type bookingRepository struct {
@@ -59,6 +60,13 @@ func (r *bookingRepository) DeleteBooking(bookingID uuid.UUID) error {
 }
 func (r *bookingRepository) CountByEventID(eventID uuid.UUID) (int64, error) {
 	var count int64
-	err := r.db.Model(&model.BookingModel{}).Where("event_id = ?", eventID).Count(&count).Error
+	err := r.db.Model(&model.BookingModel{}).Set("gorm:query_option", "FOR UPDATE").Where("event_id = ?", eventID).Count(&count).Error
 	return count, err
+}
+
+func (r *bookingRepository) WithTransaction(fn func(repo BookingRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := &bookingRepository{db: tx}
+		return fn(txRepo)
+	})
 }
