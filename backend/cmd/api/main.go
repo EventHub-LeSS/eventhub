@@ -38,8 +38,6 @@ func main() {
 		log.Fatal(db_err)
 	}
 
-	_ = db
-
 	authConfig, err := middleware.LoadAuthenticationConfig()
 	if err != nil {
 		log.Fatal(err)
