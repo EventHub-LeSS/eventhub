@@ -45,3 +45,8 @@ type UpdateEventRequest struct {
 	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
 	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
 }
+
+// EVENTHUB-76: Veranstaltung veröffentlichen
+type EventActionResponse struct {
+	Message string `json:"message" example:"event published"`
+}

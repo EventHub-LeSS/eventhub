@@ -141,3 +141,95 @@ func TestUpdateEvent_KeepsStatusAndOrganizer(t *testing.T) {
 		t.Errorf("fields not applied: title=%q capacity=%d", updated.Title, updated.Capacity)
 	}
 }
+
+func TestPublishEvent_Ownership(t *testing.T) {
+	tests := []struct {
+		name        string
+		event       *model.EventModel
+		managedOrgs []string
+		wantErr     error
+	}{
+		{name: "own organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}},
+		{name: "member of several organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a", "kc-org-b"}},
+		{name: "event belongs to another organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a"}, wantErr: ErrForbidden},
+		{name: "no managed organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: nil, wantErr: ErrForbidden},
+		{name: "event without organizer", event: eventOwnedBy(nil, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}, wantErr: ErrForbidden},
+		{name: "unknown event", event: nil, managedOrgs: []string{"kc-org-b"}, wantErr: ErrEventNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(tt.event)
+
+			err := svc.PublishEvent(uuid.New(), tt.managedOrgs)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErr != nil && repo.saved != nil {
+				t.Fatal("rejected publish must not be saved")
+			}
+			if tt.wantErr == nil && repo.saved == nil {
+				t.Fatal("accepted publish was not saved")
+			}
+		})
+	}
+}
+
+func TestPublishEvent_PersistsPublishedStatus(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	svc, repo := newTestService(event)
+
+	if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.saved == nil || repo.saved.Status != model.EventStatusPublished {
+		t.Fatalf("status not persisted as published: %#v", repo.saved)
+	}
+}
+
+func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
+	for _, status := range []model.EventStatus{model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		t.Run(string(status), func(t *testing.T) {
+			event := eventOwnedBy(orgB, status)
+			svc, repo := newTestService(event)
+
+			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotDraft) {
+				t.Fatalf("expected ErrNotDraft, got %v", err)
+			}
+			if repo.saved != nil {
+				t.Fatal("non-draft publish must not be saved")
+			}
+		})
+	}
+}
+
+func TestPublishEvent_RequiresCompleteness(t *testing.T) {
+	mutations := map[string]func(*model.EventModel){
+		"missing title":     func(e *model.EventModel) { e.Title = "" },
+		"zero start time":   func(e *model.EventModel) { e.StartTime = time.Time{} },
+		"zero end time":     func(e *model.EventModel) { e.EndTime = time.Time{} },
+		"end before start":  func(e *model.EventModel) { e.EndTime = e.StartTime.Add(-time.Hour) },
+		"end equals start":  func(e *model.EventModel) { e.EndTime = e.StartTime },
+		"zero capacity":     func(e *model.EventModel) { e.Capacity = 0 },
+		"missing category":  func(e *model.EventModel) { e.CategoryID = nil },
+		"zero category id":  func(e *model.EventModel) { id := uuid.Nil; e.CategoryID = &id },
+		"missing location":  func(e *model.EventModel) { e.LocationID = nil },
+		"zero location id":  func(e *model.EventModel) { id := uuid.Nil; e.LocationID = &id },
+	}
+
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			event := eventOwnedBy(orgB, model.EventStatusDraft)
+			mutate(event)
+			svc, repo := newTestService(event)
+
+			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrIncomplete) {
+				t.Fatalf("expected ErrIncomplete, got %v", err)
+			}
+			if repo.saved != nil {
+				t.Fatal("incomplete event must not be published")
+			}
+		})
+	}
+}
