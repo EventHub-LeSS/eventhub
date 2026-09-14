@@ -4,8 +4,6 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"errors"
-
-	"github.com/google/uuid"
 )
 
 type BookingService struct {
@@ -50,7 +48,6 @@ func (s *BookingService) CreateBooking(booking *model.BookingModel) (*model.Book
 		return nil, errors.New("no available seats left")
 	}
 
-	booking.BookingID = uuid.New()
 	booking.Status = model.BookingStatusReserved
 
 	if err := s.bookingRepo.CreateBooking(booking); err != nil {
