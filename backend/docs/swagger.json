@@ -28,6 +28,72 @@
                 }
             }
         },
+        "/bookings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Legt eine neue Buchung für ein Event an",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Buchung anlegen",
+                "parameters": [
+                    {
+                        "description": "Buchungsdaten",
+                        "name": "booking",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateBookingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.BookingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/debug/token": {
             "post": {
                 "description": "TEST ONLY — accepts username/password and returns a Keycloak access token. Disabled in production (requires DEBUG_ENABLED=true).",
@@ -268,101 +334,6 @@
                             "$ref": "#/definitions/model.APIError"
                         }
                     },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/organizations/{organizationID}/members/{username}/roles": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Replaces the complete role set of an organization member. Requires the org_admin role in the given organization (global admins bypass this check); it is checked against the token and again against Keycloak, so a demoted admin cannot act on an old token. organizationID is the Keycloak organization ID or alias as returned by POST /organizations and GET /users/me. roles is required; an empty array removes all roles. Roles: org_admin (manage members), event_manager (manage events), finance_viewer (view sales and billing). Removing the last org_admin is rejected. The affected user must refresh their token before the new roles take effect.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "organizations"
-                ],
-                "summary": "Configure organization member roles",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Keycloak organization ID or Alias",
-                        "name": "organizationID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Username of the organization member",
-                        "name": "username",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Complete role set for the member (empty array = no roles)",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/model.ConfigureOrgRolesRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/model.ConfigureOrgRolesResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.APIError"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.APIError"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -405,6 +376,19 @@
         }
     },
     "definitions": {
+        "handler.CreateBookingRequest": {
+            "type": "object",
+            "properties": {
+                "eventId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
         "handler.CurrentOrganizationResponse": {
             "type": "object",
             "properties": {
@@ -493,40 +477,49 @@
                 }
             }
         },
-        "model.ConfigureOrgRolesRequest": {
+        "model.BookingModel": {
             "type": "object",
-            "required": [
-                "roles"
-            ],
             "properties": {
-                "roles": {
-                    "type": "array",
-                    "uniqueItems": true,
-                    "items": {
-                        "$ref": "#/definitions/model.OrganizationRole"
-                    }
+                "bookingId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "numberOfTickets": {
+                    "type": "integer"
+                },
+                "paymentId": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.BookingStatus"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
                 }
             }
         },
-        "model.ConfigureOrgRolesResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "organizationId": {
-                    "type": "string"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "username": {
-                    "type": "string"
-                }
-            }
+        "model.BookingStatus": {
+            "type": "string",
+            "enum": [
+                "reserved",
+                "confirmed",
+                "cancelled",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "BookingStatusReserved",
+                "BookingStatusConfirmed",
+                "BookingStatusCancelled",
+                "BookingStatusFailed"
+            ]
         },
         "model.CreateOrganizationRequest": {
             "type": "object",
@@ -712,19 +705,6 @@
                     "type": "string"
                 }
             }
-        },
-        "model.OrganizationRole": {
-            "type": "string",
-            "enum": [
-                "org_admin",
-                "event_manager",
-                "finance_viewer"
-            ],
-            "x-enum-varnames": [
-                "RoleOrganizationAdmin",
-                "RoleEventManager",
-                "RoleFinanceViewer"
-            ]
         },
         "model.UpdateEventRequest": {
             "type": "object",
