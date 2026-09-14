@@ -79,6 +79,19 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
+// @Summary      Publish event
+// @Description  Publishes a draft event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft can be published.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path   string                     true  "Event ID"
+// @Success      200  {object} model.EventActionResponse
+// @Failure      400  {object} model.ErrorResponse
+// @Failure      401  {object} model.APIError
+// @Failure      403  {object} model.ErrorResponse
+// @Failure      404  {object} model.ErrorResponse
+// @Failure      500  {object} model.ErrorResponse
+// @Router       /events/{id}/publish [post]
 func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -103,7 +116,7 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "event published"})
+	c.JSON(http.StatusOK, model.EventActionResponse{Message: "event published"})
 }
 
 // EVENTHUB-82: Veranstaltung zurückziehen

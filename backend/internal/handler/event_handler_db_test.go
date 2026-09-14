@@ -78,14 +78,22 @@ type seededEvent struct {
 
 func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status model.EventStatus) seededEvent {
 	t.Helper()
-	s := seededEvent{eventID: uuid.New(), categoryID: uuid.New(), locationID: uuid.New(), ownerOrgID: uuid.New()}
+	// The organization ID is derived from the Keycloak org ID so that several
+	// seeded events can share one organization without breaking the unique
+	// constraint on keycloak_org_id.
+	s := seededEvent{
+		eventID:    uuid.New(),
+		categoryID: uuid.New(),
+		locationID: uuid.New(),
+		ownerOrgID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("org-"+keycloakOrgID)),
+	}
 	statements := []struct {
 		sql  string
 		args []any
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{s.categoryID, "cat-" + s.categoryID.String()}},
 		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "loc-" + s.locationID.String(), "Bonn", "53111", "Weg"}},
-		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID}},
+		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', 100, ?, 20, ?, ?, ?)`,
 			[]any{s.eventID, "Altes Konzert", string(status), s.categoryID, s.ownerOrgID, s.locationID}},
@@ -115,13 +123,16 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	eventService := service.NewEventService(repository.NewEventRepository(db), repository.NewOrganizationRepository(db))
 	h := NewEventHandler(eventService)
 
-	r := gin.New()
-	r.PUT("/api/v1/events/:id", func(c *gin.Context) {
+	setPrincipal := func(c *gin.Context) {
 		if principal != nil {
 			middleware.SetPrincipalForRequest(c, principal)
 		}
 		c.Next()
-	}, h.UpdateEventHandler)
+	}
+
+	r := gin.New()
+	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)
+	r.POST("/api/v1/events/:id/publish", setPrincipal, h.PublishEventHandler)
 	return r
 }
 
@@ -133,6 +144,14 @@ func putEvent(t *testing.T, router http.Handler, eventID string, body map[string
 	}
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/events/"+eventID, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func postPublish(t *testing.T, router http.Handler, eventID string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/"+eventID+"/publish", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
@@ -221,5 +240,83 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestPublishEventHandler_PublishesOwnDraftEvent(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+
+	rec := postPublish(t, router, seeded.eventID.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response model.EventActionResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || response.Message != "event published" {
+		t.Errorf("unexpected response body: %s", rec.Body.String())
+	}
+
+	var stored model.EventModel
+	if err := db.First(&stored, "event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if stored.Status != model.EventStatusPublished {
+		t.Errorf("status not persisted in database: %s", stored.Status)
+	}
+}
+
+func TestPublishEventHandler_RejectsIncompleteEvent(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	if err := db.Exec("UPDATE events SET category_id = NULL WHERE event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("break event: %v", err)
+	}
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+
+	rec := postPublish(t, router, seeded.eventID.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var stored model.EventModel
+	db.First(&stored, "event_id = ?", seeded.eventID)
+	if stored.Status != model.EventStatusDraft {
+		t.Errorf("rejected publish changed status to %s", stored.Status)
+	}
+}
+
+func TestPublishEventHandler_StatusCodes(t *testing.T) {
+	db := setupHandlerDB(t)
+	draft := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	published := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+
+	tests := []struct {
+		name      string
+		principal *middleware.Principal
+		eventID   string
+		want      int
+	}{
+		{name: "no principal", principal: nil, eventID: draft.eventID.String(), want: http.StatusUnauthorized},
+		{name: "no event_manager role", principal: &middleware.Principal{Subject: "u"}, eventID: draft.eventID.String(), want: http.StatusForbidden},
+		{name: "foreign organization", principal: principalManaging("kc-org-a"), eventID: draft.eventID.String(), want: http.StatusForbidden},
+		{name: "invalid id", principal: principalManaging("kc-org-b"), eventID: "not-a-uuid", want: http.StatusBadRequest},
+		{name: "unknown event", principal: principalManaging("kc-org-b"), eventID: uuid.New().String(), want: http.StatusNotFound},
+		{name: "already published", principal: principalManaging("kc-org-b"), eventID: published.eventID.String(), want: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postPublish(t, newEventRouter(db, tt.principal), tt.eventID)
+			if rec.Code != tt.want {
+				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	var stored model.EventModel
+	db.First(&stored, "event_id = ?", draft.eventID)
+	if stored.Status != model.EventStatusDraft {
+		t.Errorf("rejected publish changed status to %s", stored.Status)
 	}
 }

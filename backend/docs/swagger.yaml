@@ -130,6 +130,12 @@ definitions:
       type:
         type: string
     type: object
+  model.EventActionResponse:
+    properties:
+      message:
+        example: event published
+        type: string
+    type: object
   model.EventModel:
     properties:
       capacity:
@@ -308,6 +314,49 @@ paths:
       security:
       - BearerAuth: []
       summary: Update event
+      tags:
+      - events
+  /events/{id}/publish:
+    post:
+      description: Publishes a draft event so that visitors can find and book it.
+        Requires the event_manager role in the organization that owns the event. Only
+        sufficiently complete events in status draft can be published.
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventActionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Publish event
       tags:
       - events
   /organizations/:
