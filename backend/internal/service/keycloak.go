@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/henning-kln/gocloak"
 )
 
@@ -38,8 +40,17 @@ func (k *KeycloakService) login(ctx context.Context) (*gocloak.JWT, error) {
 }
 
 func (k *KeycloakService) LoginUser(ctx context.Context, username, password string) (*gocloak.JWT, error) {
-	// organization:* puts all organization memberships (incl. group roles) into the token;
-	// without it Keycloak omits the claim for users in more than one organization.
+	token, err := k.client.Login(ctx, k.cfg.FrontendClientID, "", k.cfg.UserRealm, username, password)
+	if err != nil {
+		return nil, fmt.Errorf("keycloak user login failed: %w", err)
+	}
+	return token, nil
+}
+
+// LoginUserWithOrganizations logs a user in like LoginUser, but requests the organization:*
+// scope so the access token carries all organization memberships and their group roles.
+// Keycloak omits the claim for users in more than one organization unless all are requested.
+func (k *KeycloakService) LoginUserWithOrganizations(ctx context.Context, username, password string) (*gocloak.JWT, error) {
 	token, err := k.client.GetToken(ctx, k.cfg.UserRealm, gocloak.TokenOptions{
 		ClientID:  gocloak.StringP(k.cfg.FrontendClientID),
 		GrantType: gocloak.StringP("password"),
@@ -51,6 +62,90 @@ func (k *KeycloakService) LoginUser(ctx context.Context, username, password stri
 		return nil, fmt.Errorf("keycloak user login failed: %w", err)
 	}
 	return token, nil
+}
+
+const organizationMembershipMapper = "oidc-organization-membership-mapper"
+
+// EnsureOrganizationClaimName sets claim.name on the organization membership mapper of the
+// "organization" client scope if it is missing. Without it Keycloak throws a
+// NullPointerException for every token request with an organization scope. Realms imported
+// before the fix keep the broken mapper, because --import-realm skips existing realms.
+// The mapper is read and written as raw JSON so that no config keys get lost.
+// Reports whether a mapper was updated.
+func (k *KeycloakService) EnsureOrganizationClaimName(ctx context.Context, accessToken, realm string) (bool, error) {
+	scopesURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + realm + "/client-scopes"
+
+	var scopes []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := k.adminGetJSON(ctx, accessToken, scopesURL, &scopes); err != nil {
+		return false, fmt.Errorf("list client scopes: %w", err)
+	}
+	scopeID := ""
+	for _, scope := range scopes {
+		if scope.Name == "organization" {
+			scopeID = scope.ID
+			break
+		}
+	}
+	if scopeID == "" {
+		return false, nil
+	}
+
+	// Read the scope itself: the .../protocol-mappers/models endpoints fill in claim.name as a
+	// default even when it is not stored, which would hide exactly the broken mapper.
+	var scope struct {
+		ProtocolMappers []map[string]any `json:"protocolMappers"`
+	}
+	if err := k.adminGetJSON(ctx, accessToken, scopesURL+"/"+scopeID, &scope); err != nil {
+		return false, fmt.Errorf("read organization client scope: %w", err)
+	}
+	mappersURL := scopesURL + "/" + scopeID + "/protocol-mappers/models"
+	mappers := scope.ProtocolMappers
+
+	updated := false
+	for _, mapper := range mappers {
+		if mapper["protocolMapper"] != organizationMembershipMapper {
+			continue
+		}
+		config, _ := mapper["config"].(map[string]any)
+		if config == nil {
+			config = map[string]any{}
+			mapper["config"] = config
+		}
+		if name, _ := config["claim.name"].(string); name != "" {
+			continue
+		}
+		config["claim.name"] = "organization"
+		id, _ := mapper["id"].(string)
+		resp, err := k.client.GetRequestWithBearerAuth(ctx, accessToken).
+			SetBody(mapper).
+			Put(mappersURL + "/" + id)
+		if err := adminResponseError(resp, err); err != nil {
+			return updated, fmt.Errorf("update organization membership mapper: %w", err)
+		}
+		updated = true
+	}
+	return updated, nil
+}
+
+func (k *KeycloakService) adminGetJSON(ctx context.Context, accessToken, url string, target any) error {
+	resp, err := k.client.GetRequestWithBearerAuth(ctx, accessToken).Get(url)
+	if err := adminResponseError(resp, err); err != nil {
+		return err
+	}
+	return json.Unmarshal(resp.Body(), target)
+}
+
+func adminResponseError(resp *resty.Response, err error) error {
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("%s: %s", resp.Status(), resp.String())
+	}
+	return nil
 }
 
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
