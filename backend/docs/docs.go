@@ -35,6 +35,72 @@ const docTemplate = `{
                 }
             }
         },
+        "/bookings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Legt eine neue Buchung für ein Event an",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Buchung anlegen",
+                "parameters": [
+                    {
+                        "description": "Buchungsdaten",
+                        "name": "booking",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateBookingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.BookingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/debug/token": {
             "post": {
                 "description": "TEST ONLY — accepts username/password and returns a Keycloak access token. Disabled in production (requires DEBUG_ENABLED=true).",
@@ -317,6 +383,19 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handler.CreateBookingRequest": {
+            "type": "object",
+            "properties": {
+                "eventId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
         "handler.CurrentOrganizationResponse": {
             "type": "object",
             "properties": {
@@ -404,6 +483,50 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "model.BookingModel": {
+            "type": "object",
+            "properties": {
+                "bookingId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "numberOfTickets": {
+                    "type": "integer"
+                },
+                "paymentId": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.BookingStatus"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.BookingStatus": {
+            "type": "string",
+            "enum": [
+                "reserved",
+                "confirmed",
+                "cancelled",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "BookingStatusReserved",
+                "BookingStatusConfirmed",
+                "BookingStatusCancelled",
+                "BookingStatusFailed"
+            ]
         },
         "model.CreateOrganizationRequest": {
             "type": "object",

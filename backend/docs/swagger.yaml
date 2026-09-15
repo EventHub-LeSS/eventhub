@@ -1,5 +1,14 @@
 basePath: /api/v1
 definitions:
+  handler.CreateBookingRequest:
+    properties:
+      eventId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      numberOfTickets:
+        example: 2
+        type: integer
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -60,6 +69,37 @@ definitions:
       message:
         type: string
     type: object
+  model.BookingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      eventId:
+        type: string
+      numberOfTickets:
+        type: integer
+      paymentId:
+        type: string
+      status:
+        $ref: '#/definitions/model.BookingStatus'
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  model.BookingStatus:
+    enum:
+    - reserved
+    - confirmed
+    - cancelled
+    - failed
+    type: string
+    x-enum-varnames:
+    - BookingStatusReserved
+    - BookingStatusConfirmed
+    - BookingStatusCancelled
+    - BookingStatusFailed
   model.CreateOrganizationRequest:
     properties:
       alias:
@@ -234,6 +274,48 @@ paths:
       summary: Health check
       tags:
       - system
+  /bookings:
+    post:
+      consumes:
+      - application/json
+      description: Legt eine neue Buchung für ein Event an
+      parameters:
+      - description: Buchungsdaten
+        in: body
+        name: booking
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateBookingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Buchung anlegen
+      tags:
+      - bookings
   /debug/token:
     post:
       consumes:
