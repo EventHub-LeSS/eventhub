@@ -92,6 +92,8 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
+		// events
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
