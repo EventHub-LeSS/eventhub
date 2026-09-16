@@ -5,6 +5,9 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -141,4 +144,119 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 		Alias:   req.DisplayName,
 		Message: "Organization created successfully",
 	})
+}
+
+// EVENTHUB-188: Rollen innerhalb einer Organisation vergeben und entziehen
+// @Summary      Configure organization member roles
+// @Description  Replaces the complete role set of an organization member. Requires the org_admin role in the given organization (global admins bypass this check). organizationID is the Keycloak organization ID or alias as returned by POST /organizations and GET /users/me. Roles: org_admin (manage members), event_manager (manage events), finance_viewer (view sales and billing). Removing the last org_admin is rejected. The affected user must refresh their token before the new roles take effect.
+// @Tags         organizations
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        organizationID path string true "Keycloak organization ID or Alias"
+// @Param        username path string true "Username of the organization member"
+// @Param        request body model.ConfigureOrgRolesRequest true "Complete role set for the member (empty = no roles)"
+// @Success      200 {object} model.ConfigureOrgRolesResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.APIError
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /organizations/{organizationID}/members/{username}/roles [put]
+func (h *OrganizationHandler) ConfigureMemberRoles(c *gin.Context) {
+	keycloakOrgID := c.Param("organizationID")
+	username := strings.TrimSpace(c.Param("username"))
+
+	var req model.ConfigureOrgRolesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, "request body must be a JSON object with a roles array")
+		return
+	}
+	if detail := validateOrgRoles(req.Roles); detail != "" {
+		writeProblem(c, http.StatusBadRequest, detail)
+		return
+	}
+
+	change, err := h.keycloakService.ConfigureOrganizationMemberRoles(c.Request.Context(), keycloakOrgID, username, req.Roles)
+	if err != nil {
+		logOrgRoleChangeFailure(c, username, keycloakOrgID, err)
+		writeOrgRolesError(c, err)
+		return
+	}
+
+	logOrgRoleChange(c, username, change)
+
+	c.JSON(http.StatusOK, model.ConfigureOrgRolesResponse{
+		Username:       username,
+		OrganizationID: keycloakOrgID,
+		Roles:          change.Applied,
+		Message:        "roles updated successfully",
+	})
+}
+
+// validateOrgRoles reports why a requested role set is invalid, or "" if it is valid.
+// middleware.OrganizationRoles is the single source of truth for valid roles.
+func validateOrgRoles(roles []string) string {
+	seen := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		if !middleware.IsValidOrganizationRole(role) {
+			return fmt.Sprintf("unknown role %q; allowed roles: %s", role, strings.Join(middleware.OrganizationRoleNames(), ", "))
+		}
+		if seen[role] {
+			return fmt.Sprintf("duplicate role %q; roles must be unique", role)
+		}
+		seen[role] = true
+	}
+	return ""
+}
+
+// writeOrgRolesError maps service errors to RFC 9457 problem+json responses
+// (model.ErrorResponse via writeProblem). 401/403 come from the auth middleware
+// and keep the model.APIError shape used across the API.
+func writeOrgRolesError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrUserNotFound),
+		errors.Is(err, service.ErrOrganizationNotFound),
+		errors.Is(err, service.ErrNotAMember):
+		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrLastAdmin):
+		writeProblem(c, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrOrgGroupsMissing):
+		writeProblem(c, http.StatusInternalServerError, err.Error())
+	default:
+		writeProblem(c, http.StatusInternalServerError, "failed to configure organization roles, the request is safe to retry")
+	}
+}
+
+// logOrgRoleChange records who changed whose roles where, for the audit trail (EVENTHUB-188).
+func logOrgRoleChange(c *gin.Context, targetUsername string, change *service.OrgRoleChange) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		return
+	}
+	slog.Info("organization member roles changed",
+		"event", "org_member_roles_changed",
+		"actor_username", principal.Username,
+		"actor_subject", principal.Subject,
+		"organization_id", change.OrganizationID,
+		"target_username", targetUsername,
+		"granted", strings.Join(change.Granted, ","),
+		"revoked", strings.Join(change.Revoked, ","),
+	)
+}
+
+func logOrgRoleChangeFailure(c *gin.Context, targetUsername, organizationID string, err error) {
+	principal, _ := middleware.PrincipalFromContext(c)
+	actor := ""
+	if principal != nil {
+		actor = principal.Username
+	}
+	slog.Error("organization member roles change failed",
+		"event", "org_member_roles_change_failed",
+		"actor_username", actor,
+		"organization_id", organizationID,
+		"target_username", targetUsername,
+		"error", err.Error(),
+	)
 }

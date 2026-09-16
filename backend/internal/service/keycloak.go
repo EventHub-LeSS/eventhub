@@ -1,10 +1,15 @@
 package service
 
 import (
+	"backend/internal/middleware"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/henning-kln/gocloak"
@@ -22,6 +27,11 @@ type KeycloakClientConfig struct {
 type KeycloakService struct {
 	cfg    KeycloakClientConfig
 	client *gocloak.GoCloak
+
+	// Cached service-account token for admin operations (EVENTHUB-188).
+	adminTokenMu      sync.Mutex
+	adminTokenValue   string
+	adminTokenExpires time.Time
 }
 
 func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
@@ -31,12 +41,22 @@ func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 	}
 }
 
-func (k *KeycloakService) login(ctx context.Context) (*gocloak.JWT, error) {
+// adminToken returns the service-account token for admin operations, caching it
+// until shortly before it expires instead of logging in on every call.
+func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
+	k.adminTokenMu.Lock()
+	defer k.adminTokenMu.Unlock()
+	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
+		return k.adminTokenValue, nil
+	}
 	token, err := k.client.LoginClient(ctx, k.cfg.ClientID, k.cfg.ClientSecret, k.cfg.AdminRealm)
 	if err != nil {
-		return nil, fmt.Errorf("keycloak admin login failed: %w", err)
+		return "", fmt.Errorf("keycloak admin login failed: %w", err)
 	}
-	return token, nil
+	const expirySkew = 30 * time.Second
+	k.adminTokenValue = token.AccessToken
+	k.adminTokenExpires = time.Now().Add(time.Duration(token.ExpiresIn)*time.Second - expirySkew)
+	return token.AccessToken, nil
 }
 
 func (k *KeycloakService) LoginUser(ctx context.Context, username, password string) (*gocloak.JWT, error) {
@@ -212,10 +232,15 @@ func (k *KeycloakService) GetOrganizationMembers(ctx context.Context, accessToke
 }
 
 func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken string, org gocloak.OrganizationRepresentation, orgAdmin string) (string, string, error) {
-	//check if org exists
+	// Only proceed to creation when the organization is known to not exist;
+	// an infrastructure error must not be mistaken for "does not exist".
 	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, *org.Name)
-	if err == nil {
+	switch {
+	case err == nil:
 		return oid, "", fmt.Errorf("organization already exists")
+	case errors.Is(err, ErrOrganizationNotFound):
+	default:
+		return "", "", fmt.Errorf("failed to check whether the organization exists: %w", err)
 	}
 
 	oId, err := k.client.CreateOrganization(ctx, accessToken, k.cfg.UserRealm, org)
@@ -272,10 +297,10 @@ func (k *KeycloakService) GetOrganizationIDBySlug(ctx context.Context, accessTok
 			},
 		)
 		if err != nil {
-			return "", fmt.Errorf("failed to get organization %q: %w", orgs, err)
+			return "", fmt.Errorf("failed to list organizations: %w", err)
 		}
 		for _, org := range orgs {
-			if strings.Compare(*org.Alias, slug) == 0 {
+			if org.Alias != nil && *org.Alias == slug && org.ID != nil {
 				return *org.ID, nil
 			}
 		}
@@ -285,16 +310,16 @@ func (k *KeycloakService) GetOrganizationIDBySlug(ctx context.Context, accessTok
 		page++
 	}
 
-	return "", fmt.Errorf("organization not found")
+	return "", ErrOrganizationNotFound
 }
 
 func (k *KeycloakService) GetOrganizationByID(id string) (*gocloak.OrganizationRepresentation, error) {
 	ctx := context.Background()
-	token, err := k.login(ctx)
+	token, err := k.adminToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	org, err := k.client.GetOrganizationByID(ctx, token.AccessToken, k.cfg.UserRealm, id)
+	org, err := k.client.GetOrganizationByID(ctx, token, k.cfg.UserRealm, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get organization %q: %w", org, err)
 	}
@@ -303,11 +328,11 @@ func (k *KeycloakService) GetOrganizationByID(id string) (*gocloak.OrganizationR
 
 func (k *KeycloakService) AddUserToOrganization(orgID, userID string) error {
 	ctx := context.Background()
-	token, err := k.login(ctx)
+	token, err := k.adminToken(ctx)
 	if err != nil {
 		return err
 	}
-	return k.client.AddUserToOrganization(ctx, token.AccessToken, k.cfg.UserRealm, orgID, userID)
+	return k.client.AddUserToOrganization(ctx, token, k.cfg.UserRealm, orgID, userID)
 }
 
 func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrID string) (string, error) {
@@ -381,4 +406,216 @@ func (k *KeycloakService) GetOrganizationGroupIDByName(ctx context.Context, acce
 		}
 	}
 	return "", fmt.Errorf("organization group %q not found", name)
+}
+
+// EVENTHUB-188: errors returned by ConfigureOrganizationMemberRoles.
+var (
+	ErrUserNotFound         = errors.New("user not found")
+	ErrOrganizationNotFound = errors.New("organization not found")
+	ErrNotAMember           = errors.New("user is not a member of the organization")
+	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
+	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+)
+
+// OrgRoleChange is the outcome of a role configuration: the resolved organization,
+// which roles were granted and revoked, and the resulting role set.
+type OrgRoleChange struct {
+	OrganizationID string
+	Granted        []string
+	Revoked        []string
+	Applied        []string
+}
+
+// orgMutexes serializes role changes per organization so that concurrent calls
+// cannot interleave (e.g. two admins demoting each other between the last-admin
+// guard check and the writes). It only works because the API runs as a single
+// instance; a global platform admin can repair organizations through the same
+// endpoint if roles ever end up inconsistent.
+var orgMutexes sync.Map // map[string]*sync.Mutex
+
+func lockOrganization(orgID string) func() {
+	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+// ConfigureOrganizationMemberRoles replaces the organization roles of a user with the requested
+// set; an empty set strips all roles. It refuses to remove the last organization admin so an
+// organization cannot lock itself out. Revokes run before grants so a failure mid-sequence can
+// only leave the member with fewer roles than intended, never with the union of old and new
+// roles; the request is idempotent and safe to retry. Keycloak calls run with the backend
+// service account; callers must enforce that only organization admins may use it (EVENTHUB-188).
+func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, keycloakOrgID, username string, requestedRoles []string) (*OrgRoleChange, error) {
+	orgAdminRole := string(middleware.RoleOrganizationAdmin)
+
+	token, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := k.GetUserByUsername(ctx, token, k.cfg.UserRealm, username)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || user.ID == nil {
+		return nil, ErrUserNotFound
+	}
+	userID := *user.ID
+
+	// Tokens may identify organizations by alias when the organization claim
+	// carries no ID, so the parameter is resolved to the Keycloak org ID.
+	// Authorization happened on the raw parameter before this point.
+	keycloakOrgID, err = k.resolveOrganizationID(ctx, token, keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+
+	unlock := lockOrganization(keycloakOrgID)
+	defer unlock()
+
+	groupIDByName, err := k.organizationRoleGroupIDs(ctx, token, keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := k.client.GetOrganizationMemberByID(ctx, token, k.cfg.UserRealm, keycloakOrgID, userID); err != nil {
+		if isKeycloakNotFound(err) {
+			return nil, ErrNotAMember
+		}
+		return nil, fmt.Errorf("failed to check organization membership: %w", err)
+	}
+
+	currentRoles := make(map[string]bool, len(middleware.OrganizationRoles))
+	adminCount := 0
+	for _, role := range middleware.OrganizationRoles {
+		name := string(role)
+		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, token, keycloakOrgID, groupIDByName[name])
+		if err != nil {
+			return nil, err
+		}
+		for _, memberID := range memberIDs {
+			if memberID == userID {
+				currentRoles[name] = true
+			}
+		}
+		if name == orgAdminRole {
+			adminCount = len(memberIDs)
+		}
+	}
+
+	requested := make(map[string]bool, len(requestedRoles))
+	for _, role := range requestedRoles {
+		requested[role] = true
+	}
+
+	if currentRoles[orgAdminRole] && !requested[orgAdminRole] && adminCount < 2 {
+		return nil, ErrLastAdmin
+	}
+
+	change := &OrgRoleChange{OrganizationID: keycloakOrgID}
+	for _, role := range middleware.OrganizationRoles {
+		name := string(role)
+		if !requested[name] && currentRoles[name] {
+			if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+				return nil, fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
+			}
+			change.Revoked = append(change.Revoked, name)
+		}
+	}
+	for _, role := range middleware.OrganizationRoles {
+		name := string(role)
+		if requested[name] && !currentRoles[name] {
+			if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+				return nil, fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
+			}
+			change.Granted = append(change.Granted, name)
+		}
+	}
+
+	change.Applied = make([]string, 0, len(middleware.OrganizationRoles))
+	for _, role := range middleware.OrganizationRoles {
+		if requested[string(role)] {
+			change.Applied = append(change.Applied, string(role))
+		}
+	}
+	return change, nil
+}
+
+// resolveOrganizationID accepts a Keycloak organization ID or alias and returns the ID.
+func (k *KeycloakService) resolveOrganizationID(ctx context.Context, accessToken, organizationIDOrAlias string) (string, error) {
+	org, err := k.client.GetOrganizationByID(ctx, accessToken, k.cfg.UserRealm, organizationIDOrAlias)
+	if err == nil {
+		if org != nil && org.ID != nil {
+			return *org.ID, nil
+		}
+	} else if !isKeycloakNotFound(err) {
+		return "", fmt.Errorf("failed to look up organization: %w", err)
+	}
+	id, err := k.GetOrganizationIDBySlug(ctx, accessToken, organizationIDOrAlias)
+	if err != nil {
+		if errors.Is(err, ErrOrganizationNotFound) {
+			return "", ErrOrganizationNotFound
+		}
+		return "", fmt.Errorf("failed to look up organization by alias: %w", err)
+	}
+	return id, nil
+}
+
+// organizationRoleGroupIDs maps the canonical role group names to their Keycloak group IDs.
+func (k *KeycloakService) organizationRoleGroupIDs(ctx context.Context, accessToken, keycloakOrgID string) (map[string]string, error) {
+	groups, err := k.GetOrganizationGroups(ctx, accessToken, k.cfg.UserRealm, keycloakOrgID)
+	if err != nil {
+		if isKeycloakNotFound(err) {
+			return nil, ErrOrganizationNotFound
+		}
+		return nil, err
+	}
+	groupIDByName := make(map[string]string, len(middleware.OrganizationRoles))
+	for _, g := range groups {
+		if g.Name == nil || g.ID == nil {
+			continue
+		}
+		groupIDByName[*g.Name] = *g.ID
+	}
+	for _, role := range middleware.OrganizationRoles {
+		if _, ok := groupIDByName[string(role)]; !ok {
+			return nil, fmt.Errorf("%w: missing group %q", ErrOrgGroupsMissing, role)
+		}
+	}
+	return groupIDByName, nil
+}
+
+// getOrganizationGroupMemberIDs returns the IDs of all members of an organization group.
+func (k *KeycloakService) getOrganizationGroupMemberIDs(ctx context.Context, accessToken, keycloakOrgID, groupID string) ([]string, error) {
+	maxResults := 100
+	page := 0
+	var memberIDs []string
+	for {
+		users, err := k.client.GetOrganizationGroupMembers(ctx, accessToken, k.cfg.UserRealm, keycloakOrgID, groupID, gocloak.GetGroupsParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get members of organization group %q: %w", groupID, err)
+		}
+		for _, u := range users {
+			if u.ID != nil {
+				memberIDs = append(memberIDs, *u.ID)
+			}
+		}
+		if len(users) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+	return memberIDs, nil
+}
+
+func isKeycloakNotFound(err error) bool {
+	var apiErr *gocloak.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == http.StatusNotFound
+	}
+	return false
 }
