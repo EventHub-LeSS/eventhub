@@ -20,6 +20,20 @@ type CreateOrganizationResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+// EVENTHUB-188: ConfigureOrgRolesRequest is the complete role set of an organization member.
+// An empty set strips all roles; the last organization admin cannot be removed.
+// Roles are validated against middleware.OrganizationRoles, the single source of truth.
+type ConfigureOrgRolesRequest struct {
+	Roles []string `json:"roles"`
+}
+
+type ConfigureOrgRolesResponse struct {
+	Username       string   `json:"username"`
+	OrganizationID string   `json:"organizationId"`
+	Roles          []string `json:"roles"`
+	Message        string   `json:"message,omitempty"`
+}
+
 type ErrorResponse struct {
 	Type   string `json:"type"`
 	Title  string `json:"title"`
