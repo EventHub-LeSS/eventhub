@@ -16,6 +16,9 @@ export interface Session {
   name: string
   /** Aliases of the Keycloak organizations the user belongs to. */
   organizations: string[]
+  accessToken: string
+  refreshToken: string
+  accessTokenExpiresAt: number
   expiresAt: number
 }
 
@@ -71,8 +74,19 @@ function cookieOptions(maxAge: number) {
   }
 }
 
+/** Exported so the refresh middleware (which uses the NextRequest/NextResponse cookie API instead of next/headers) can reseal a session without duplicating the crypto setup. */
+export async function sealSession(session: Session) {
+  return seal(session, SESSION_MAX_AGE_SECONDS)
+}
+
+export async function unsealSession(value: string | undefined) {
+  return unseal<Session>(value)
+}
+
+export const sessionCookieOptions = () => cookieOptions(SESSION_MAX_AGE_SECONDS)
+
 export async function createSessionCookie(session: Session) {
-  const value = await seal(session, SESSION_MAX_AGE_SECONDS)
+  const value = await sealSession(session)
   const store = await cookies()
 
   store.set(SESSION_COOKIE, value, cookieOptions(SESSION_MAX_AGE_SECONDS))
@@ -80,7 +94,7 @@ export async function createSessionCookie(session: Session) {
 
 export async function readSession(): Promise<Session | null> {
   const store = await cookies()
-  const session = await unseal<Session>(store.get(SESSION_COOKIE)?.value)
+  const session = await unsealSession(store.get(SESSION_COOKIE)?.value)
 
   if (!session || session.expiresAt < Date.now()) {
     return null

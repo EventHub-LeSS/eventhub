@@ -74,7 +74,26 @@ export async function exchangeCode(
     expectedNonce: checks.nonce,
   })
 
-  return tokens.claims()
+  return {
+    claims: tokens.claims(),
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresIn: tokens.expiresIn(),
+  }
+}
+
+/** Exchanges the refresh token for a new access token once the short-lived access token expires. */
+export async function refreshAccessToken(refreshToken: string) {
+  const config = await getOidcConfig()
+
+  const tokens = await client.refreshTokenGrant(config, refreshToken)
+
+  return {
+    accessToken: tokens.access_token,
+    // Keycloak rotates refresh tokens on use; fall back to the old one if none comes back.
+    refreshToken: tokens.refresh_token ?? refreshToken,
+    expiresIn: tokens.expiresIn(),
+  }
 }
 
 /**
