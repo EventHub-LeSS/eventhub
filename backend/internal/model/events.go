@@ -50,3 +50,8 @@ type UpdateEventRequest struct {
 type EventActionResponse struct {
 	Message string `json:"message" example:"event published"`
 }
+
+// EVENTHUB-82: Veranstaltung zurückziehen
+type EventWithdrawnResponse struct {
+	Message string `json:"message" example:"event withdrawn"`
+}

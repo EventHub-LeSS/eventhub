@@ -80,7 +80,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
 // @Summary      Publish event
-// @Description  Publishes a draft event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft can be published.
+// @Description  Publishes a draft event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft can be published. If the event is already published, returns 400 with detail "this event is already published".
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -120,6 +120,19 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 }
 
 // EVENTHUB-82: Veranstaltung zurückziehen
+// @Summary      Withdraw event
+// @Description  Withdraws a published event so that it is no longer bookable. Requires the event_manager role in the organization that owns the event. Only events in status published can be withdrawn; the event status becomes cancelled.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path   string                     true  "Event ID"
+// @Success      200  {object} model.EventWithdrawnResponse
+// @Failure      400  {object} model.ErrorResponse
+// @Failure      401  {object} model.APIError
+// @Failure      403  {object} model.ErrorResponse
+// @Failure      404  {object} model.ErrorResponse
+// @Failure      500  {object} model.ErrorResponse
+// @Router       /events/{id}/withdraw [post]
 func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -144,7 +157,7 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "event withdrawn"})
+	c.JSON(http.StatusOK, model.EventWithdrawnResponse{Message: "event withdrawn"})
 }
 
 func writeProblem(c *gin.Context, status int, detail string) {
@@ -169,6 +182,8 @@ func writeEventActionError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrNotDraft):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotPublished):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrAlreadyPublished):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")

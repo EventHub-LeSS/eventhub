@@ -189,13 +189,21 @@ func TestPublishEvent_PersistsPublishedStatus(t *testing.T) {
 }
 
 func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
-	for _, status := range []model.EventStatus{model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
-		t.Run(string(status), func(t *testing.T) {
-			event := eventOwnedBy(orgB, status)
+	tests := []struct {
+		status  model.EventStatus
+		wantErr error
+	}{
+		{status: model.EventStatusPublished, wantErr: ErrAlreadyPublished},
+		{status: model.EventStatusCancelled, wantErr: ErrNotDraft},
+		{status: model.EventStatusCompleted, wantErr: ErrNotDraft},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			event := eventOwnedBy(orgB, tt.status)
 			svc, repo := newTestService(event)
 
-			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotDraft) {
-				t.Fatalf("expected ErrNotDraft, got %v", err)
+			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
 			}
 			if repo.saved != nil {
 				t.Fatal("non-draft publish must not be saved")
@@ -229,6 +237,68 @@ func TestPublishEvent_RequiresCompleteness(t *testing.T) {
 			}
 			if repo.saved != nil {
 				t.Fatal("incomplete event must not be published")
+			}
+		})
+	}
+}
+
+func TestWithdrawEvent_Ownership(t *testing.T) {
+	tests := []struct {
+		name        string
+		event       *model.EventModel
+		managedOrgs []string
+		wantErr     error
+	}{
+		{name: "own organization", event: eventOwnedBy(orgB, model.EventStatusPublished), managedOrgs: []string{"kc-org-b"}},
+		{name: "member of several organizations", event: eventOwnedBy(orgB, model.EventStatusPublished), managedOrgs: []string{"kc-org-a", "kc-org-b"}},
+		{name: "event belongs to another organization", event: eventOwnedBy(orgB, model.EventStatusPublished), managedOrgs: []string{"kc-org-a"}, wantErr: ErrForbidden},
+		{name: "no managed organizations", event: eventOwnedBy(orgB, model.EventStatusPublished), managedOrgs: nil, wantErr: ErrForbidden},
+		{name: "event without organizer", event: eventOwnedBy(nil, model.EventStatusPublished), managedOrgs: []string{"kc-org-b"}, wantErr: ErrForbidden},
+		{name: "unknown event", event: nil, managedOrgs: []string{"kc-org-b"}, wantErr: ErrEventNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(tt.event)
+
+			err := svc.WithdrawEvent(uuid.New(), tt.managedOrgs)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErr != nil && repo.saved != nil {
+				t.Fatal("rejected withdraw must not be saved")
+			}
+			if tt.wantErr == nil && repo.saved == nil {
+				t.Fatal("accepted withdraw was not saved")
+			}
+		})
+	}
+}
+
+func TestWithdrawEvent_PersistsCancelledStatus(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusPublished)
+	svc, repo := newTestService(event)
+
+	if err := svc.WithdrawEvent(event.EventID, []string{"kc-org-b"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.saved == nil || repo.saved.Status != model.EventStatusCancelled {
+		t.Fatalf("status not persisted as cancelled: %#v", repo.saved)
+	}
+}
+
+func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
+		t.Run(string(status), func(t *testing.T) {
+			event := eventOwnedBy(orgB, status)
+			svc, repo := newTestService(event)
+
+			if err := svc.WithdrawEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotPublished) {
+				t.Fatalf("expected ErrNotPublished, got %v", err)
+			}
+			if repo.saved != nil {
+				t.Fatal("non-published withdraw must not be saved")
 			}
 		})
 	}
