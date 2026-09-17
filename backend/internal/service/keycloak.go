@@ -442,10 +442,13 @@ func lockOrganization(orgID string) func() {
 
 // ConfigureOrganizationMemberRoles replaces the organization roles of a user with the requested
 // set; an empty set strips all roles. It refuses to remove the last organization admin so an
-// organization cannot lock itself out. Revokes run before grants so a failure mid-sequence can
-// only leave the member with fewer roles than intended, never with the union of old and new
-// roles; the request is idempotent and safe to retry. Keycloak calls run with the backend
-// service account; callers must enforce that only organization admins may use it (EVENTHUB-188).
+// organization cannot lock itself out. The member's current roles are resolved through a single
+// per-user group listing instead of scanning the member lists of every role group, and the admin
+// group member list is only fetched (capped at two entries) when an admin is actually demoted.
+// Revokes run before grants so a failure mid-sequence can only leave the member with fewer
+// roles than intended, never with the union of old and new roles; the request is idempotent
+// and safe to retry. Keycloak calls run with the backend service account; callers must enforce
+// that only organization admins may use it (EVENTHUB-188).
 func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, keycloakOrgID, username string, requestedRoles []string) (*OrgRoleChange, error) {
 	orgAdminRole := string(middleware.RoleOrganizationAdmin)
 
@@ -486,22 +489,9 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		return nil, fmt.Errorf("failed to check organization membership: %w", err)
 	}
 
-	currentRoles := make(map[string]bool, len(middleware.OrganizationRoles))
-	adminCount := 0
-	for _, role := range middleware.OrganizationRoles {
-		name := string(role)
-		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, token, keycloakOrgID, groupIDByName[name])
-		if err != nil {
-			return nil, err
-		}
-		for _, memberID := range memberIDs {
-			if memberID == userID {
-				currentRoles[name] = true
-			}
-		}
-		if name == orgAdminRole {
-			adminCount = len(memberIDs)
-		}
+	currentRoles, err := k.currentUserRoles(ctx, token, userID, groupIDByName)
+	if err != nil {
+		return nil, err
 	}
 
 	requested := make(map[string]bool, len(requestedRoles))
@@ -509,11 +499,19 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		requested[role] = true
 	}
 
-	if currentRoles[orgAdminRole] && !requested[orgAdminRole] && adminCount < 2 {
-		return nil, ErrLastAdmin
+	if currentRoles[orgAdminRole] && !requested[orgAdminRole] {
+		other, err := k.hasOtherAdmin(ctx, token, keycloakOrgID, groupIDByName[orgAdminRole], userID)
+		if err != nil {
+			return nil, err
+		}
+		if !other {
+			return nil, ErrLastAdmin
+		}
 	}
 
 	change := &OrgRoleChange{OrganizationID: keycloakOrgID}
+	// Two separate loops on purpose: all revokes complete before the first
+	// grant, so a failure can never leave the union of old and new roles.
 	for _, role := range middleware.OrganizationRoles {
 		name := string(role)
 		if !requested[name] && currentRoles[name] {
@@ -540,6 +538,61 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		}
 	}
 	return change, nil
+}
+
+// currentUserRoles returns which of the given role groups the user belongs to.
+// The user's groups are listed in one paginated request and matched against the
+// organization's role group IDs, instead of scanning the member lists of every
+// role group (EVENTHUB-188).
+func (k *KeycloakService) currentUserRoles(ctx context.Context, accessToken, userID string, groupIDByName map[string]string) (map[string]bool, error) {
+	roleByGroupID := make(map[string]string, len(groupIDByName))
+	for name, groupID := range groupIDByName {
+		roleByGroupID[groupID] = name
+	}
+	current := make(map[string]bool, len(groupIDByName))
+	maxResults := 100
+	page := 0
+	for {
+		groups, err := k.client.GetUserGroups(ctx, accessToken, k.cfg.UserRealm, userID, gocloak.GetGroupsParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list groups of user: %w", err)
+		}
+		for _, g := range groups {
+			if g.ID == nil {
+				continue
+			}
+			if name, ok := roleByGroupID[*g.ID]; ok {
+				current[name] = true
+			}
+		}
+		if len(groups) < maxResults {
+			return current, nil
+		}
+		page += maxResults
+	}
+}
+
+// hasOtherAdmin reports whether anyone other than userID belongs to the
+// organization admin group. Keycloak offers no per-user view of a group, so the
+// member listing is fetched capped at two entries: a single other admin is
+// enough to allow the demotion (EVENTHUB-188).
+func (k *KeycloakService) hasOtherAdmin(ctx context.Context, accessToken, keycloakOrgID, adminGroupID, userID string) (bool, error) {
+	maxResults := 2
+	members, err := k.client.GetOrganizationGroupMembers(ctx, accessToken, k.cfg.UserRealm, keycloakOrgID, adminGroupID, gocloak.GetGroupsParams{
+		Max: &maxResults,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to get members of organization group %q: %w", adminGroupID, err)
+	}
+	for _, member := range members {
+		if member.ID != nil && *member.ID != userID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // resolveOrganizationID accepts a Keycloak organization ID or alias and returns the ID.
@@ -584,32 +637,6 @@ func (k *KeycloakService) organizationRoleGroupIDs(ctx context.Context, accessTo
 		}
 	}
 	return groupIDByName, nil
-}
-
-// getOrganizationGroupMemberIDs returns the IDs of all members of an organization group.
-func (k *KeycloakService) getOrganizationGroupMemberIDs(ctx context.Context, accessToken, keycloakOrgID, groupID string) ([]string, error) {
-	maxResults := 100
-	page := 0
-	var memberIDs []string
-	for {
-		users, err := k.client.GetOrganizationGroupMembers(ctx, accessToken, k.cfg.UserRealm, keycloakOrgID, groupID, gocloak.GetGroupsParams{
-			First: &page,
-			Max:   &maxResults,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get members of organization group %q: %w", groupID, err)
-		}
-		for _, u := range users {
-			if u.ID != nil {
-				memberIDs = append(memberIDs, *u.ID)
-			}
-		}
-		if len(users) < maxResults {
-			break
-		}
-		page += maxResults
-	}
-	return memberIDs, nil
 }
 
 func isKeycloakNotFound(err error) bool {

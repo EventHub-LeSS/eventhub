@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"backend/internal/keycloaktest"
+	"backend/internal/keycloakmock"
 	"backend/internal/middleware"
 	"backend/internal/model"
 
@@ -18,9 +18,9 @@ import (
 
 // newOrgRolesRouter mirrors the route registration of cmd/api: only organization
 // admins of the addressed organization (or global admins) reach the handler.
-func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Handler, *keycloaktest.Fake) {
+func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Handler, *keycloakmock.Fake) {
 	t.Helper()
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	h := NewOrganizationHandler(fake.KeycloakService(t), nil, nil)
 
 	gin.SetMode(gin.TestMode)

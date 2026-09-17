@@ -22,9 +22,10 @@ type CreateOrganizationResponse struct {
 
 // EVENTHUB-188: ConfigureOrgRolesRequest is the complete role set of an organization member.
 // An empty set strips all roles; the last organization admin cannot be removed.
-// Roles are validated against middleware.OrganizationRoles, the single source of truth.
+// Role names are checked by the org_role binding validator registered by the
+// handler package; middleware.OrganizationRoles is the single source of truth.
 type ConfigureOrgRolesRequest struct {
-	Roles []string `json:"roles"`
+	Roles []string `json:"roles" binding:"omitempty,unique,dive,org_role"`
 }
 
 type ConfigureOrgRolesResponse struct {

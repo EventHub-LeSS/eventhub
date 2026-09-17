@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/henning-kln/gocloak"
 )
@@ -170,14 +171,9 @@ func (h *OrganizationHandler) ConfigureMemberRoles(c *gin.Context) {
 
 	var req model.ConfigureOrgRolesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		writeProblem(c, http.StatusBadRequest, "request body must be a JSON object with a roles array")
+		writeProblem(c, http.StatusBadRequest, orgRolesBindingMessage(err))
 		return
 	}
-	if detail := validateOrgRoles(req.Roles); detail != "" {
-		writeProblem(c, http.StatusBadRequest, detail)
-		return
-	}
-
 	change, err := h.keycloakService.ConfigureOrganizationMemberRoles(c.Request.Context(), keycloakOrgID, username, req.Roles)
 	if err != nil {
 		logOrgRoleChangeFailure(c, username, keycloakOrgID, err)
@@ -195,20 +191,27 @@ func (h *OrganizationHandler) ConfigureMemberRoles(c *gin.Context) {
 	})
 }
 
-// validateOrgRoles reports why a requested role set is invalid, or "" if it is valid.
+// orgRolesBindingMessage turns binding errors of ConfigureOrgRolesRequest into
+// problem details: unknown and duplicate roles are reported explicitly, any
+// other error means a malformed body and gets a sanitized message.
 // middleware.OrganizationRoles is the single source of truth for valid roles.
-func validateOrgRoles(roles []string) string {
-	seen := make(map[string]bool, len(roles))
-	for _, role := range roles {
-		if !middleware.IsValidOrganizationRole(role) {
-			return fmt.Sprintf("unknown role %q; allowed roles: %s", role, strings.Join(middleware.OrganizationRoleNames(), ", "))
-		}
-		if seen[role] {
-			return fmt.Sprintf("duplicate role %q; roles must be unique", role)
-		}
-		seen[role] = true
+func orgRolesBindingMessage(err error) string {
+	var valErrs validator.ValidationErrors
+	if !errors.As(err, &valErrs) {
+		return "request body must be a JSON object with a roles array"
 	}
-	return ""
+	details := make([]string, 0, len(valErrs))
+	for _, fieldErr := range valErrs {
+		switch fieldErr.Tag() {
+		case "org_role":
+			details = append(details, fmt.Sprintf("unknown role %q; allowed roles: %s", fieldErr.Value(), strings.Join(middleware.OrganizationRoleNames(), ", ")))
+		case "unique":
+			details = append(details, "duplicate role: roles must be unique")
+		default:
+			details = append(details, fieldErr.Error())
+		}
+	}
+	return strings.Join(details, "; ")
 }
 
 // writeOrgRolesError maps service errors to RFC 9457 problem+json responses

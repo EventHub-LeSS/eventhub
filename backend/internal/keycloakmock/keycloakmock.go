@@ -1,7 +1,7 @@
-// Package keycloaktest provides an in-memory fake of the Keycloak admin API
+// Package keycloakmock provides an in-memory mock of the Keycloak admin API
 // used by the organization role endpoints. It is shared by handler and
 // service tests so both exercise the same wire behavior (EVENTHUB-188).
-package keycloaktest
+package keycloakmock
 
 import (
 	"encoding/json"
@@ -153,6 +153,29 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	mux.HandleFunc("GET /admin/realms/eventhub/users/{userID}/groups", admin(func(w http.ResponseWriter, r *http.Request) {
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		// The fake stores memberships per group, so the user's groups are
+		// resolved by a reverse lookup. First/Max are ignored; the datasets in
+		// tests stay small enough that callers never page.
+		groupNames := make(map[string]string)
+		for _, groups := range f.OrgGroups {
+			for name, id := range groups {
+				groupNames[id] = name
+			}
+		}
+		userID := r.PathValue("userID")
+		w.Header().Set("Content-Type", "application/json")
+		list := make([]map[string]any, 0)
+		for groupID, members := range f.GroupMembers {
+			if members[userID] {
+				list = append(list, map[string]any{"id": groupID, "name": groupNames[groupID]})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(list)
 	}))
 
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/groups/{groupID}/members", admin(func(w http.ResponseWriter, r *http.Request) {

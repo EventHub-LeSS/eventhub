@@ -8,12 +8,12 @@ import (
 	"sync"
 	"testing"
 
-	"backend/internal/keycloaktest"
+	"backend/internal/keycloakmock"
 	"backend/internal/service"
 )
 
 func TestConfigureOrganizationMemberRoles_GrantsAndRevokesRoles(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// bob currently holds event_manager only.
@@ -42,7 +42,7 @@ func TestConfigureOrganizationMemberRoles_GrantsAndRevokesRoles(t *testing.T) {
 }
 
 func TestConfigureOrganizationMemberRoles_IsIdempotentForUnchangedRoles(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// alice currently holds org_admin only.
@@ -59,7 +59,7 @@ func TestConfigureOrganizationMemberRoles_IsIdempotentForUnchangedRoles(t *testi
 }
 
 func TestConfigureOrganizationMemberRoles_RejectsRemovingLastAdmin(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// alice is the only org_admin of org-1.
@@ -76,7 +76,7 @@ func TestConfigureOrganizationMemberRoles_RejectsRemovingLastAdmin(t *testing.T)
 }
 
 func TestConfigureOrganizationMemberRoles_AllowsRemovingAdminWithSecondAdmin(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	fake.GroupMembers["g-admin"]["u-bob"] = true
 	kc := fake.KeycloakService(t)
 
@@ -95,8 +95,31 @@ func TestConfigureOrganizationMemberRoles_AllowsRemovingAdminWithSecondAdmin(t *
 	}
 }
 
+func TestConfigureOrganizationMemberRoles_ResolvesCurrentRolesPerUser(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	// bob holds event_manager only and no admin is demoted, so the admin group
+	// member listing must not be requested at all.
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []string{"finance_viewer"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	usedUserGroups := false
+	for _, request := range fake.AdminRequests {
+		if strings.HasSuffix(request, "/groups/g-admin/members") {
+			t.Errorf("admin group members were listed although no admin was demoted: %s", request)
+		}
+		if strings.HasSuffix(request, "/users/u-bob/groups") {
+			usedUserGroups = true
+		}
+	}
+	if !usedUserGroups {
+		t.Error("current roles must be resolved through the per-user groups listing")
+	}
+}
+
 func TestConfigureOrganizationMemberRoles_EmptyRoleSetStripsAllRoles(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", nil)
@@ -112,7 +135,7 @@ func TestConfigureOrganizationMemberRoles_EmptyRoleSetStripsAllRoles(t *testing.
 }
 
 func TestConfigureOrganizationMemberRoles_ResolvesOrganizationAlias(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// Tokens may identify organizations by alias when the claim carries no ID.
@@ -135,7 +158,7 @@ func TestConfigureOrganizationMemberRoles_ResolvesOrganizationAlias(t *testing.T
 }
 
 func TestConfigureOrganizationMemberRoles_UserNotFound(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "dave", []string{"event_manager"})
@@ -145,7 +168,7 @@ func TestConfigureOrganizationMemberRoles_UserNotFound(t *testing.T) {
 }
 
 func TestConfigureOrganizationMemberRoles_UserNotAMember(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// carol exists in the realm but is not a member of org-1.
@@ -156,7 +179,7 @@ func TestConfigureOrganizationMemberRoles_UserNotAMember(t *testing.T) {
 }
 
 func TestConfigureOrganizationMemberRoles_UnknownOrganization(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-x", "bob", []string{"event_manager"})
@@ -166,7 +189,7 @@ func TestConfigureOrganizationMemberRoles_UnknownOrganization(t *testing.T) {
 }
 
 func TestConfigureOrganizationMemberRoles_IncompleteRoleGroups(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	fake.OrgGroups["org-2"] = map[string]string{"org_admin": "g2-admin"}
 	fake.OrgMembers["org-2"] = map[string]bool{"u-bob": true}
 	kc := fake.KeycloakService(t)
@@ -178,7 +201,7 @@ func TestConfigureOrganizationMemberRoles_IncompleteRoleGroups(t *testing.T) {
 }
 
 func TestConfigureOrganizationMemberRoles_FailsClosedWhenGrantFailsAfterRevoke(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	// Fail the org_admin grant; the event_manager revoke happens before it.
 	fake.FailAdminRequest = func(method, path string) bool {
 		return method == http.MethodPut && strings.HasSuffix(path, "/groups/g-admin/members/u-bob")
@@ -208,7 +231,7 @@ func TestConfigureOrganizationMemberRoles_FailsClosedWhenGrantFailsAfterRevoke(t
 }
 
 func TestConfigureOrganizationMemberRoles_OutageDuringAliasLookupIsNotOrganizationNotFound(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	// The by-ID lookup 404s for org-x; the alias listing then fails with 500.
 	fake.FailAdminRequest = func(method, path string) bool {
 		return method == http.MethodGet && path == "/admin/realms/eventhub/organizations"
@@ -225,7 +248,7 @@ func TestConfigureOrganizationMemberRoles_OutageDuringAliasLookupIsNotOrganizati
 }
 
 func TestConfigureOrganizationMemberRoles_ConcurrentDemotionsLeaveOneAdmin(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	fake.GroupMembers["g-admin"]["u-bob"] = true // alice and bob are both org_admins
 	kc := fake.KeycloakService(t)
 
@@ -265,7 +288,7 @@ func TestConfigureOrganizationMemberRoles_ConcurrentDemotionsLeaveOneAdmin(t *te
 }
 
 func TestConfigureOrganizationMemberRoles_CachesServiceAccountToken(t *testing.T) {
-	fake := keycloaktest.New()
+	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	for range 2 {
