@@ -530,13 +530,19 @@ func (k *KeycloakService) AddUserToOrganization(orgID, userID string) error {
 	return k.client.AddUserToOrganization(ctx, token, k.cfg.UserRealm, orgID, userID)
 }
 
-func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrID string) (string, error) {
-	user, err := k.GetUserByUsername(ctx, accessToken, k.cfg.UserRealm, usernameOrID)
+func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrEmail string) (string, error) {
+	user, err := k.GetUserByUsername(ctx, accessToken, k.cfg.UserRealm, usernameOrEmail)
 	if err != nil {
 		return "", err
 	}
 	if user == nil || user.ID == nil {
-		return "", fmt.Errorf("user %q not found", usernameOrID)
+		user, err = k.GetUserByEmail(ctx, accessToken, k.cfg.UserRealm, usernameOrEmail)
+		if err != nil {
+			return "", err
+		}
+	}
+	if user == nil || user.ID == nil {
+		return "", fmt.Errorf("user %q not found", usernameOrEmail)
 	}
 	return *user.ID, nil
 }
@@ -559,6 +565,26 @@ func (k *KeycloakService) GetUserByUsername(ctx context.Context, accessToken, re
 		return users[0], nil
 	}
 	return nil, fmt.Errorf("ambiguous user %q: found %d matches", username, len(users))
+}
+
+func (k *KeycloakService) GetUserByEmail(ctx context.Context, accessToken, realm, email string) (*gocloak.User, error) {
+	exact := true
+	maxResults := 2
+	users, err := k.client.GetUsers(ctx, accessToken, realm, gocloak.GetUsersParams{
+		Email: &email,
+		Exact: &exact,
+		Max:   &maxResults,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up user by email %q: %w", email, err)
+	}
+	if len(users) == 0 {
+		return nil, nil
+	}
+	if len(users) == 1 {
+		return users[0], nil
+	}
+	return nil, fmt.Errorf("ambiguous user email %q: found %d matches", email, len(users))
 }
 
 func (k *KeycloakService) CreateUserWithToken(ctx context.Context, accessToken, realm string, user gocloak.User) (string, error) {
