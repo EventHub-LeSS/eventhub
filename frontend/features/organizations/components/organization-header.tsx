@@ -1,15 +1,13 @@
 import {
-  CalendarDaysIcon,
   CheckIcon,
   GlobeIcon,
-  MailIcon,
   PencilIcon,
   ShieldCheckIcon,
   ShieldOffIcon,
   UserPlusIcon,
 } from "lucide-react"
 
-import type { MockOrganization } from "@/features/organizations/lib/mock-data"
+import type { Organization } from "@/features/organizations/lib/types"
 import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
@@ -29,21 +27,13 @@ function initials(name: string) {
   )
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-}
-
 export function OrganizationHeader({
   organization,
   isEditing = false,
   onEditClick,
   onSaveClick,
 }: {
-  organization: MockOrganization
+  organization: Organization
   isEditing?: boolean
   onEditClick?: () => void
   onSaveClick?: () => void
@@ -62,9 +52,11 @@ export function OrganizationHeader({
           <p className="text-sm text-muted-foreground">@{organization.alias}</p>
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          {organization.description}
-        </p>
+        {organization.description && (
+          <p className="text-sm text-muted-foreground">
+            {organization.description}
+          </p>
+        )}
 
         <div className="flex flex-col gap-2">
           <Button variant="outline" className="w-full">
@@ -103,10 +95,6 @@ export function OrganizationHeader({
             )}
             {organization.enabled ? "Enabled" : "Disabled"}
           </li>
-          <li className="flex items-center gap-2">
-            <MailIcon className="size-4 shrink-0" />
-            <span className="truncate">{organization.contactEmail}</span>
-          </li>
           {organization.domains.map((domain) => (
             <li key={domain.name} className="flex items-center gap-2">
               <GlobeIcon className="size-4 shrink-0" />
@@ -121,10 +109,6 @@ export function OrganizationHeader({
               )}
             </li>
           ))}
-          <li className="flex items-center gap-2">
-            <CalendarDaysIcon className="size-4 shrink-0" />
-            Created {formatDate(organization.createdAt)}
-          </li>
         </ul>
       </CardContent>
     </Card>

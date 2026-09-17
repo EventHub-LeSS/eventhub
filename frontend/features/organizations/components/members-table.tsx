@@ -6,8 +6,8 @@ import { useState } from "react"
 import type {
   OrganizationMember,
   OrganizationRight,
-} from "@/features/organizations/lib/mock-data"
-import { organizationRights } from "@/features/organizations/lib/mock-data"
+} from "@/features/organizations/lib/types"
+import { organizationRights } from "@/features/organizations/lib/types"
 import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
@@ -53,7 +53,10 @@ const rightLabel: Record<OrganizationRight, string> = Object.fromEntries(
   organizationRights.map((right) => [right.value, right.label])
 ) as Record<OrganizationRight, string>
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
+  if (!value) {
+    return "—"
+  }
   return new Date(value).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -107,8 +110,7 @@ export function MembersTable({
         <TableHeader>
           <TableRow>
             <TableHead>Member</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Role</TableHead>
+            <TableHead>Rights</TableHead>
             <TableHead className="text-right">Joined</TableHead>
             <TableHead className="w-0">
               <span className="sr-only">Actions</span>
@@ -132,13 +134,6 @@ export function MembersTable({
                     </span>
                   </div>
                 </div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={member.status === "active" ? "secondary" : "outline"}
-                >
-                  {member.status === "active" ? "Active" : "Invited"}
-                </Badge>
               </TableCell>
               <TableCell>
                 {member.rights.length > 0 ? (
