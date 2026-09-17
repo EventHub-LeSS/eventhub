@@ -6,10 +6,8 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-import type {
-  OrganizationEvent,
-  OrganizationMember,
-} from "@/features/organizations/lib/mock-data"
+import type { OrganizationEvent } from "@/features/organizations/lib/mock-data"
+import type { OrganizationMember } from "@/features/organizations/lib/types"
 import {
   Card,
   CardAction,
@@ -32,7 +30,7 @@ export function OrganizationStats({
   members: OrganizationMember[]
   events: OrganizationEvent[]
 }) {
-  const activeMembers = members.filter((m) => m.status === "active").length
+  const membersWithRights = members.filter((m) => m.rights.length > 0).length
   const upcomingEvents = events.filter((e) => e.status === "upcoming").length
   const ticketsSold = events.reduce((sum, e) => sum + e.ticketsSold, 0)
   const revenue = ticketsSold * 12.5
@@ -41,7 +39,7 @@ export function OrganizationStats({
     {
       label: "Members",
       value: members.length.toString(),
-      hint: `${activeMembers} active`,
+      hint: `${membersWithRights} with rights`,
       icon: UsersIcon,
     },
     {

@@ -1,8 +1,12 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import type { OrganizationPayload } from "@/features/organizations/lib/organization";
+import type {
+  Organization,
+  OrganizationMember,
+} from "@/features/organizations/lib/types";
 
 export interface CreateOrganizationResponse {
   id: string;
@@ -45,7 +49,52 @@ function errorMessage(body: unknown, status: number): string {
     if (typeof message === "string" && message) {
       return message;
     }
+
+    if (error && typeof error === "object" && "message" in error) {
+      const nested = (error as { message?: unknown }).message;
+      if (typeof nested === "string" && nested) {
+        return nested;
+      }
+    }
   }
 
-  return `Could not create the organization (${status}).`;
+  return `Request failed (${status}).`;
+}
+
+export function useOrganization(alias: string) {
+  return useQuery<Organization, Error>({
+    queryKey: ["organization", alias],
+    queryFn: () => fetchOrganization(alias),
+  });
+}
+
+export function useOrganizationMembers(alias: string) {
+  return useQuery<OrganizationMember[], Error>({
+    queryKey: ["organization", alias, "members"],
+    queryFn: () => fetchOrganizationMembers(alias),
+  });
+}
+
+async function fetchOrganization(alias: string): Promise<Organization> {
+  const response = await fetch(`/api/organizations/${alias}`);
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status));
+  }
+
+  return body as Organization;
+}
+
+async function fetchOrganizationMembers(
+  alias: string,
+): Promise<OrganizationMember[]> {
+  const response = await fetch(`/api/organizations/${alias}/members`);
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status));
+  }
+
+  return body as OrganizationMember[];
 }
