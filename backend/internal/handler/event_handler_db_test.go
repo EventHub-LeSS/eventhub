@@ -133,6 +133,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r := gin.New()
 	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, h.PublishEventHandler)
+	r.POST("/api/v1/events/:id/withdraw", setPrincipal, h.WithdrawEventHandler)
 	return r
 }
 
@@ -152,6 +153,14 @@ func putEvent(t *testing.T, router http.Handler, eventID string, body map[string
 func postPublish(t *testing.T, router http.Handler, eventID string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/"+eventID+"/publish", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func postWithdraw(t *testing.T, router http.Handler, eventID string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/events/"+eventID+"/withdraw", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
@@ -318,5 +327,82 @@ func TestPublishEventHandler_StatusCodes(t *testing.T) {
 	db.First(&stored, "event_id = ?", draft.eventID)
 	if stored.Status != model.EventStatusDraft {
 		t.Errorf("rejected publish changed status to %s", stored.Status)
+	}
+}
+
+func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+
+	rec := postWithdraw(t, router, seeded.eventID.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response model.EventWithdrawnResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || response.Message != "event withdrawn" {
+		t.Errorf("unexpected response body: %s", rec.Body.String())
+	}
+
+	var stored model.EventModel
+	if err := db.First(&stored, "event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if stored.Status != model.EventStatusCancelled {
+		t.Errorf("status not persisted in database: %s", stored.Status)
+	}
+}
+
+func TestWithdrawEventHandler_RejectsDraftEvent(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+
+	rec := postWithdraw(t, router, seeded.eventID.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var stored model.EventModel
+	db.First(&stored, "event_id = ?", seeded.eventID)
+	if stored.Status != model.EventStatusDraft {
+		t.Errorf("rejected withdraw changed status to %s", stored.Status)
+	}
+}
+
+func TestWithdrawEventHandler_StatusCodes(t *testing.T) {
+	db := setupHandlerDB(t)
+	published := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	draft := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	cancelled := seedEventForOrg(t, db, "kc-org-b", model.EventStatusCancelled)
+
+	tests := []struct {
+		name      string
+		principal *middleware.Principal
+		eventID   string
+		want      int
+	}{
+		{name: "no principal", principal: nil, eventID: published.eventID.String(), want: http.StatusUnauthorized},
+		{name: "no event_manager role", principal: &middleware.Principal{Subject: "u"}, eventID: published.eventID.String(), want: http.StatusForbidden},
+		{name: "foreign organization", principal: principalManaging("kc-org-a"), eventID: published.eventID.String(), want: http.StatusForbidden},
+		{name: "invalid id", principal: principalManaging("kc-org-b"), eventID: "not-a-uuid", want: http.StatusBadRequest},
+		{name: "unknown event", principal: principalManaging("kc-org-b"), eventID: uuid.New().String(), want: http.StatusNotFound},
+		{name: "draft event", principal: principalManaging("kc-org-b"), eventID: draft.eventID.String(), want: http.StatusBadRequest},
+		{name: "already cancelled", principal: principalManaging("kc-org-b"), eventID: cancelled.eventID.String(), want: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := postWithdraw(t, newEventRouter(db, tt.principal), tt.eventID)
+			if rec.Code != tt.want {
+				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	var stored model.EventModel
+	db.First(&stored, "event_id = ?", published.eventID)
+	if stored.Status != model.EventStatusPublished {
+		t.Errorf("rejected withdraw changed status to %s", stored.Status)
 	}
 }

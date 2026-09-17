@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	ErrForbidden     = errors.New("forbidden")
-	ErrEventNotFound = errors.New("event not found")
-	ErrInvalidStatus = errors.New("invalid event status")
-	ErrIncomplete    = errors.New("event is incomplete")
-	ErrNotDraft      = errors.New("only draft events can be published")
-	ErrNotPublished  = errors.New("only published events can be withdrawn")
+	ErrForbidden        = errors.New("forbidden")
+	ErrEventNotFound    = errors.New("event not found")
+	ErrInvalidStatus    = errors.New("invalid event status")
+	ErrIncomplete       = errors.New("event is incomplete")
+	ErrNotDraft         = errors.New("only draft events can be published")
+	ErrNotPublished     = errors.New("only published events can be withdrawn")
+	ErrAlreadyPublished = errors.New("this event is already published")
 )
 
 type EventService struct {
@@ -125,6 +126,9 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 	}
 	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return ErrForbidden
+	}
+	if event.Status == model.EventStatusPublished {
+		return ErrAlreadyPublished
 	}
 	if event.Status != model.EventStatusDraft {
 		return ErrNotDraft
