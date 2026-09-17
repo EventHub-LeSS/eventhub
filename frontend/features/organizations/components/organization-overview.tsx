@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
 import { EventsTable } from "@/features/organizations/components/events-table"
@@ -8,11 +8,11 @@ import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import { OrganizationStats } from "@/features/organizations/components/organization-stats"
 import {
-  mockActivity,
-  mockEvents,
-  mockMembers,
-  mockOrganization,
-} from "@/features/organizations/lib/mock-data"
+  useOrganization,
+  useOrganizationMembers,
+} from "@/features/organizations/lib/api"
+import { mockActivity, mockEvents } from "@/features/organizations/lib/mock-data"
+import type { Organization } from "@/features/organizations/lib/types"
 import {
   Card,
   CardContent,
@@ -28,10 +28,19 @@ import {
   TabsTrigger,
 } from "@/features/shared/components/ui/tabs"
 
-export function OrganizationOverview() {
+export function OrganizationOverview({ alias }: { alias: string }) {
+  const organizationQuery = useOrganization(alias)
+  const membersQuery = useOrganizationMembers(alias)
+
   const [activeTab, setActiveTab] = useState("overview")
   const [isEditing, setIsEditing] = useState(false)
-  const [draft, setDraft] = useState(mockOrganization)
+  const [draft, setDraft] = useState<Organization | null>(null)
+
+  useEffect(() => {
+    if (organizationQuery.data) {
+      setDraft(organizationQuery.data)
+    }
+  }, [organizationQuery.data])
 
   function handleTabChange(value: unknown) {
     setActiveTab(value as string)
@@ -39,7 +48,9 @@ export function OrganizationOverview() {
   }
 
   function handleEditClick() {
-    setDraft(mockOrganization)
+    if (organizationQuery.data) {
+      setDraft(organizationQuery.data)
+    }
     setActiveTab("settings")
     setIsEditing(true)
   }
@@ -48,24 +59,57 @@ export function OrganizationOverview() {
     setIsEditing(false)
   }
 
+  if (organizationQuery.isLoading || membersQuery.isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Loading organization…
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (organizationQuery.isError || !organizationQuery.data) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-destructive">
+          {organizationQuery.error?.message ??
+            "Could not load this organization. You may not have permission to view it."}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const organization = organizationQuery.data
+  const members = membersQuery.data ?? []
+
+  if (membersQuery.isError) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-destructive">
+          {membersQuery.error?.message ??
+            "Could not load the member list for this organization."}
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
         <OrganizationHeader
-          organization={mockOrganization}
+          organization={organization}
           isEditing={isEditing}
           onEditClick={handleEditClick}
           onSaveClick={handleSaveClick}
         />
-        <OrganizationStats members={mockMembers} events={mockEvents} />
+        <OrganizationStats members={members} events={mockEvents} />
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="members">
-            Members ({mockMembers.length})
-          </TabsTrigger>
+          <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
           <TabsTrigger value="events">Events ({mockEvents.length})</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -80,7 +124,7 @@ export function OrganizationOverview() {
               <CardTitle>Members</CardTitle>
             </CardHeader>
             <CardContent>
-              <MembersTable members={mockMembers} />
+              <MembersTable members={members} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -104,34 +148,19 @@ export function OrganizationOverview() {
             <CardContent className="flex flex-col divide-y divide-border">
               <SettingsRow
                 label="Name"
-                value={draft.name}
+                value={draft?.name ?? organization.name}
                 isEditing={isEditing}
                 onChange={(value) =>
-                  setDraft((prev) => ({ ...prev, name: value }))
+                  setDraft((prev) => (prev ? { ...prev, name: value } : prev))
                 }
               />
               <SettingsRow
                 label="Alias"
-                value={draft.alias}
+                value={draft?.alias ?? organization.alias}
                 isEditing={isEditing}
                 onChange={(value) =>
-                  setDraft((prev) => ({ ...prev, alias: value }))
+                  setDraft((prev) => (prev ? { ...prev, alias: value } : prev))
                 }
-              />
-              <SettingsRow
-                label="Contact email"
-                value={draft.contactEmail}
-                isEditing={isEditing}
-                onChange={(value) =>
-                  setDraft((prev) => ({ ...prev, contactEmail: value }))
-                }
-              />
-              <SettingsRow
-                label="Created"
-                value={new Date(mockOrganization.createdAt).toLocaleDateString(
-                  undefined,
-                  { year: "numeric", month: "long", day: "numeric" }
-                )}
               />
               <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div>
@@ -141,10 +170,10 @@ export function OrganizationOverview() {
                   </p>
                 </div>
                 <Switch
-                  checked={draft.enabled}
+                  checked={draft?.enabled ?? organization.enabled}
                   disabled={!isEditing}
                   onCheckedChange={(checked) =>
-                    setDraft((prev) => ({ ...prev, enabled: checked }))
+                    setDraft((prev) => (prev ? { ...prev, enabled: checked } : prev))
                   }
                 />
               </div>

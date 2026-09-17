@@ -12,3 +12,20 @@ export type {
   OrganizationDraft,
   OrganizationPayload,
 } from "@/features/organizations/lib/organization";
+export {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/features/organizations/lib/api";
+export {
+  KeycloakAdminError,
+  getOrganizationByAlias,
+  getOrganizationMembersWithRights,
+} from "@/features/organizations/lib/keycloak-admin";
+export {
+  organizationRights,
+} from "@/features/organizations/lib/types";
+export type {
+  Organization,
+  OrganizationMember,
+  OrganizationRight,
+} from "@/features/organizations/lib/types";
