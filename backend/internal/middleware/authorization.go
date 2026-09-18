@@ -3,6 +3,8 @@ package middleware
 import (
 	"net/http"
 
+	"backend/internal/model"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -61,10 +63,10 @@ func RequireOrganizationRole(organizationParam string, roles ...OrganizationRole
 }
 
 func abortForbidden(c *gin.Context) {
-	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-		"error": gin.H{
-			"code":    "FORBIDDEN",
-			"message": "You do not have permission to perform this operation",
+	c.AbortWithStatusJSON(http.StatusForbidden, model.APIError{
+		Error: model.APIErrorDetail{
+			Code:    "FORBIDDEN",
+			Message: "You do not have permission to perform this operation",
 		},
 	})
 }

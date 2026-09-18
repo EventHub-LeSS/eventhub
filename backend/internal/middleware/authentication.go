@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"backend/internal/model"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -235,13 +237,11 @@ func (a *Authenticator) principalFromClaims(claims *accessClaims) (*Principal, e
 			Roles: make(map[OrganizationRole]struct{}),
 		}
 		for _, group := range organization.Groups {
-			switch group {
-			case "/org_admin", "/roles/org_admin":
-				access.Roles[RoleOrganizationAdmin] = struct{}{}
-			case "/event_manager", "/roles/event_manager":
-				access.Roles[RoleEventManager] = struct{}{}
-			case "/finance_viewer", "/roles/finance_viewer":
-				access.Roles[RoleFinanceViewer] = struct{}{}
+			for _, role := range OrganizationRoles {
+				name := string(role)
+				if group == "/"+name || group == "/roles/"+name {
+					access.Roles[role] = struct{}{}
+				}
 			}
 		}
 		principal.Organizations = append(principal.Organizations, access)
@@ -309,5 +309,7 @@ func abortAuthentication(c *gin.Context, status int, code, message string) {
 	if status == http.StatusUnauthorized {
 		c.Header("WWW-Authenticate", `Bearer realm="eventhub", error="invalid_token"`)
 	}
-	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
+	c.AbortWithStatusJSON(status, model.APIError{
+		Error: model.APIErrorDetail{Code: code, Message: message},
+	})
 }

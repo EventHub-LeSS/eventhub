@@ -18,6 +18,34 @@ const (
 	RoleFinanceViewer     OrganizationRole = "finance_viewer"
 )
 
+// OrganizationRoles is the single source of truth for the per-organization
+// roles in canonical order. Request validation, token claim mapping and the
+// Keycloak role group management all derive from it (EVENTHUB-188).
+var OrganizationRoles = []OrganizationRole{
+	RoleOrganizationAdmin,
+	RoleEventManager,
+	RoleFinanceViewer,
+}
+
+// IsValidOrganizationRole reports whether name is one of the canonical organization roles.
+func IsValidOrganizationRole(name string) bool {
+	for _, role := range OrganizationRoles {
+		if string(role) == name {
+			return true
+		}
+	}
+	return false
+}
+
+// OrganizationRoleNames returns the canonical role names in order.
+func OrganizationRoleNames() []string {
+	names := make([]string, 0, len(OrganizationRoles))
+	for _, role := range OrganizationRoles {
+		names = append(names, string(role))
+	}
+	return names
+}
+
 type OrganizationAccess struct {
 	ID    string
 	Alias string
