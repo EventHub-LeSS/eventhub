@@ -95,26 +95,30 @@ func TestConfigureOrganizationMemberRoles_AllowsRemovingAdminWithSecondAdmin(t *
 	}
 }
 
-func TestConfigureOrganizationMemberRoles_ResolvesCurrentRolesPerUser(t *testing.T) {
+func TestConfigureOrganizationMemberRoles_ResolvesCurrentRolesThroughGroupMembers(t *testing.T) {
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
-	// bob holds event_manager only and no admin is demoted, so the admin group
-	// member listing must not be requested at all.
+	// bob holds event_manager only and no admin is demoted.
 	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []string{"finance_viewer"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	usedUserGroups := false
+	scanned := make(map[string]bool)
 	for _, request := range fake.AdminRequests {
-		if strings.HasSuffix(request, "/groups/g-admin/members") {
-			t.Errorf("admin group members were listed although no admin was demoted: %s", request)
-		}
+		// Keycloak filters organization groups out of the per-user groups
+		// endpoint, so current roles must never be resolved through it.
 		if strings.HasSuffix(request, "/users/u-bob/groups") {
-			usedUserGroups = true
+			t.Errorf("per-user groups listing requested although it never returns org groups: %s", request)
+		}
+		if strings.HasPrefix(request, "GET /admin/realms/eventhub/organizations/org-1/groups/") && strings.HasSuffix(request, "/members") {
+			scanned[request] = true
 		}
 	}
-	if !usedUserGroups {
-		t.Error("current roles must be resolved through the per-user groups listing")
+	for _, groupID := range []string{"g-admin", "g-manager", "g-finance"} {
+		expected := "GET /admin/realms/eventhub/organizations/org-1/groups/" + groupID + "/members"
+		if !scanned[expected] {
+			t.Errorf("current roles must be resolved through the member listing of every role group, missing: %s", expected)
+		}
 	}
 }
 

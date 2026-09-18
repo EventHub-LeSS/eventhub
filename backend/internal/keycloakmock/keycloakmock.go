@@ -158,24 +158,12 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 	mux.HandleFunc("GET /admin/realms/eventhub/users/{userID}/groups", admin(func(w http.ResponseWriter, r *http.Request) {
 		f.Mu.Lock()
 		defer f.Mu.Unlock()
-		// The fake stores memberships per group, so the user's groups are
-		// resolved by a reverse lookup. First/Max are ignored; the datasets in
-		// tests stay small enough that callers never page.
-		groupNames := make(map[string]string)
-		for _, groups := range f.OrgGroups {
-			for name, id := range groups {
-				groupNames[id] = name
-			}
-		}
-		userID := r.PathValue("userID")
+		// Real Keycloak filters organization groups out of the per-user groups
+		// endpoint by group type, so a user whose only groups are org role
+		// groups gets an empty list. The endpoint stays registered to mirror
+		// that behavior and to let tests catch code that relies on it.
 		w.Header().Set("Content-Type", "application/json")
-		list := make([]map[string]any, 0)
-		for groupID, members := range f.GroupMembers {
-			if members[userID] {
-				list = append(list, map[string]any{"id": groupID, "name": groupNames[groupID]})
-			}
-		}
-		_ = json.NewEncoder(w).Encode(list)
+		_ = json.NewEncoder(w).Encode([]any{})
 	}))
 
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/groups/{groupID}/members", admin(func(w http.ResponseWriter, r *http.Request) {

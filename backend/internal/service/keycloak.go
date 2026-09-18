@@ -442,13 +442,15 @@ func lockOrganization(orgID string) func() {
 
 // ConfigureOrganizationMemberRoles replaces the organization roles of a user with the requested
 // set; an empty set strips all roles. It refuses to remove the last organization admin so an
-// organization cannot lock itself out. The member's current roles are resolved through a single
-// per-user group listing instead of scanning the member lists of every role group, and the admin
-// group member list is only fetched (capped at two entries) when an admin is actually demoted.
-// Revokes run before grants so a failure mid-sequence can only leave the member with fewer
-// roles than intended, never with the union of old and new roles; the request is idempotent
-// and safe to retry. Keycloak calls run with the backend service account; callers must enforce
-// that only organization admins may use it (EVENTHUB-188).
+// organization cannot lock itself out. The member's current roles are resolved by scanning the
+// member lists of the organization's role groups: Keycloak hides organization groups from the
+// per-user groups endpoint (GET /users/{id}/groups filters them out by group type), so the admin
+// API offers no per-user view of org group membership. The admin guard is only evaluated, capped
+// at two entries, when an admin is actually demoted. Revokes run before grants so a failure
+// mid-sequence can only leave the member with fewer roles than intended, never with the union of
+// old and new roles; the request is idempotent and safe to retry. Keycloak calls run with the
+// backend service account; callers must enforce that only organization admins may use it
+// (EVENTHUB-188).
 func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, keycloakOrgID, username string, requestedRoles []string) (*OrgRoleChange, error) {
 	orgAdminRole := string(middleware.RoleOrganizationAdmin)
 
@@ -489,7 +491,7 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		return nil, fmt.Errorf("failed to check organization membership: %w", err)
 	}
 
-	currentRoles, err := k.currentUserRoles(ctx, token, userID, groupIDByName)
+	currentRoles, err := k.currentUserRoles(ctx, token, keycloakOrgID, userID, groupIDByName)
 	if err != nil {
 		return nil, err
 	}
@@ -540,39 +542,53 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 	return change, nil
 }
 
-// currentUserRoles returns which of the given role groups the user belongs to.
-// The user's groups are listed in one paginated request and matched against the
-// organization's role group IDs, instead of scanning the member lists of every
-// role group (EVENTHUB-188).
-func (k *KeycloakService) currentUserRoles(ctx context.Context, accessToken, userID string, groupIDByName map[string]string) (map[string]bool, error) {
-	roleByGroupID := make(map[string]string, len(groupIDByName))
-	for name, groupID := range groupIDByName {
-		roleByGroupID[groupID] = name
+// currentUserRoles returns which of the organization's role groups the user belongs to by
+// scanning the member list of every role group. The per-user groups endpoint cannot be used
+// here: Keycloak filters organization groups out of GET /users/{id}/groups by group type, so a
+// member of org role groups gets an empty list there; the member listings of the org groups are
+// the only view the admin API offers, and the gocloak fork has no per-user function for it
+// either (EVENTHUB-188).
+func (k *KeycloakService) currentUserRoles(ctx context.Context, accessToken, keycloakOrgID, userID string, groupIDByName map[string]string) (map[string]bool, error) {
+	current := make(map[string]bool, len(middleware.OrganizationRoles))
+	for _, role := range middleware.OrganizationRoles {
+		name := string(role)
+		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, accessToken, keycloakOrgID, groupIDByName[name])
+		if err != nil {
+			return nil, err
+		}
+		for _, memberID := range memberIDs {
+			if memberID == userID {
+				current[name] = true
+			}
+		}
 	}
-	current := make(map[string]bool, len(groupIDByName))
+	return current, nil
+}
+
+// getOrganizationGroupMemberIDs returns the IDs of all members of an organization group.
+func (k *KeycloakService) getOrganizationGroupMemberIDs(ctx context.Context, accessToken, keycloakOrgID, groupID string) ([]string, error) {
 	maxResults := 100
 	page := 0
+	var memberIDs []string
 	for {
-		groups, err := k.client.GetUserGroups(ctx, accessToken, k.cfg.UserRealm, userID, gocloak.GetGroupsParams{
+		users, err := k.client.GetOrganizationGroupMembers(ctx, accessToken, k.cfg.UserRealm, keycloakOrgID, groupID, gocloak.GetGroupsParams{
 			First: &page,
 			Max:   &maxResults,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to list groups of user: %w", err)
+			return nil, fmt.Errorf("failed to get members of organization group %q: %w", groupID, err)
 		}
-		for _, g := range groups {
-			if g.ID == nil {
-				continue
-			}
-			if name, ok := roleByGroupID[*g.ID]; ok {
-				current[name] = true
+		for _, u := range users {
+			if u.ID != nil {
+				memberIDs = append(memberIDs, *u.ID)
 			}
 		}
-		if len(groups) < maxResults {
-			return current, nil
+		if len(users) < maxResults {
+			break
 		}
 		page += maxResults
 	}
+	return memberIDs, nil
 }
 
 // hasOtherAdmin reports whether anyone other than userID belongs to the
