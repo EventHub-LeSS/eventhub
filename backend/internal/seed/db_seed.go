@@ -363,6 +363,10 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 				NumberOfTickets: b.numTix,
 				Status:          b.status,
 			}
+			if b.status == model.BookingStatusReserved {
+				expiresAt := time.Now().Add(15 * time.Minute)
+				bk.ExpiresAt = &expiresAt
+			}
 			if err := s.db.Create(&bk).Error; err != nil {
 				return fmt.Errorf("create booking %q: %w", b.tag, err)
 			}

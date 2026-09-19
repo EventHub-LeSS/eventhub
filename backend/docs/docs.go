@@ -35,6 +35,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/bookings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Buchung anlegen",
+                "parameters": [
+                    {
+                        "description": "Buchungsdaten",
+                        "name": "booking",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateBookingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.BookingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Event nicht veröffentlicht oder Kapazität überschritten",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/debug/token": {
             "post": {
                 "description": "TEST ONLY — accepts username/password and returns a Keycloak access token. Disabled in production (requires DEBUG_ENABLED=true).",
@@ -317,6 +392,24 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handler.CreateBookingRequest": {
+            "type": "object",
+            "required": [
+                "eventId",
+                "numberOfTickets"
+            ],
+            "properties": {
+                "eventId": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 2
+                }
+            }
+        },
         "handler.CurrentOrganizationResponse": {
             "type": "object",
             "properties": {
@@ -404,6 +497,55 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "model.BookingModel": {
+            "type": "object",
+            "properties": {
+                "bookingId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "expiresAt": {
+                    "type": "string"
+                },
+                "numberOfTickets": {
+                    "type": "integer"
+                },
+                "paymentId": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.BookingStatus"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.BookingStatus": {
+            "type": "string",
+            "enum": [
+                "reserved",
+                "confirmed",
+                "cancelled",
+                "failed",
+                "expired"
+            ],
+            "x-enum-varnames": [
+                "BookingStatusReserved",
+                "BookingStatusConfirmed",
+                "BookingStatusCancelled",
+                "BookingStatusFailed",
+                "BookingStatusExpired"
+            ]
         },
         "model.CreateOrganizationRequest": {
             "type": "object",
