@@ -3,22 +3,23 @@ package handler
 import (
 	"backend/internal/middleware"
 	"backend/internal/model"
+	"backend/internal/repository"
 	"backend/internal/service"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type CreateBookingRequest struct {
-	EventID         *uuid.UUID `json:"eventId" example:"550e8400-e29b-41d4-a716-446655440000"`
-	NumberOfTickets int        `json:"numberOfTickets" example:"2"`
+	EventID         *uuid.UUID `json:"eventId" binding:"required" example:"550e8400-e29b-41d4-a716-446655440000"`
+	NumberOfTickets int        `json:"numberOfTickets" binding:"required,gte=1" example:"2"`
 }
 
 // CreateBookingHandler godoc
 // @Summary      Buchung anlegen
-// @Description  Legt eine neue Buchung für ein Event an
+// @Description  Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
 // @Tags         bookings
 // @Accept       json
 // @Produce      json
@@ -26,10 +27,13 @@ type CreateBookingRequest struct {
 // @Success      201 {object} model.BookingModel
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse "Event nicht veröffentlicht oder Kapazität überschritten"
 // @Failure      500 {object} model.ErrorResponse
 // @Security     BearerAuth
 // @Router       /bookings [post]
-func CreateBookingHandler(bookingService *service.BookingService) gin.HandlerFunc {
+func CreateBookingHandler(bookingService *service.BookingService, userRepo repository.UserRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := middleware.PrincipalFromContext(c)
 		if !ok {
@@ -38,47 +42,27 @@ func CreateBookingHandler(bookingService *service.BookingService) gin.HandlerFun
 			})
 			return
 		}
-		userID, err := uuid.Parse(principal.Subject)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, model.APIError{
-				Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Invalid user id in token"},
-			})
-			return
-		}
 
 		var req CreateBookingRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, model.ErrorResponse{
-				Type:   "about:blank",
-				Title:  http.StatusText(http.StatusBadRequest),
-				Status: http.StatusBadRequest,
-				Detail: err.Error(),
-			})
+			writeProblem(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		booking := model.BookingModel{
-			EventID:         req.EventID,
-			NumberOfTickets: req.NumberOfTickets,
-			UserID:          &userID,
+
+		// The token subject is the Keycloak user id, bookings reference the API user id.
+		user, err := userRepo.GetByKeycloakUserID(principal.Subject)
+		if err != nil {
+			writeProblem(c, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if user == nil {
+			writeProblem(c, http.StatusForbidden, "user not found in API database, run sync first")
+			return
 		}
 
-		created, err := bookingService.CreateBooking(&booking)
+		created, err := bookingService.ReserveTickets(c.Request.Context(), *req.EventID, user.UserID, req.NumberOfTickets)
 		if err != nil {
-			if isBookingBusinessError(err.Error()) {
-				c.JSON(http.StatusBadRequest, model.ErrorResponse{
-					Type:   "about:blank",
-					Title:  http.StatusText(http.StatusBadRequest),
-					Status: http.StatusBadRequest,
-					Detail: err.Error(),
-				})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-				Type:   "about:blank",
-				Title:  http.StatusText(http.StatusInternalServerError),
-				Status: http.StatusInternalServerError,
-				Detail: "internal server error",
-			})
+			writeBookingError(c, err)
 			return
 		}
 
@@ -86,19 +70,18 @@ func CreateBookingHandler(bookingService *service.BookingService) gin.HandlerFun
 	}
 }
 
-var bookingBusinessErrors = []string{
-	"event_id is required",
-	"number of tickets must be at least 1",
-	"event not found",
-	"event is not available for booking",
-	"no available seats left",
-}
-
-func isBookingBusinessError(msg string) bool {
-	for _, e := range bookingBusinessErrors {
-		if strings.Contains(msg, e) {
-			return true
-		}
+func writeBookingError(c *gin.Context, err error) {
+	var capacityErr *service.CapacityExceededError
+	switch {
+	case errors.Is(err, service.ErrInvalidTicketCount):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrEventNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrEventNotPublished):
+		writeProblem(c, http.StatusConflict, err.Error())
+	case errors.As(err, &capacityErr):
+		writeProblem(c, http.StatusConflict, err.Error())
+	default:
+		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
-	return false
 }

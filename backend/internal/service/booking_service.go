@@ -3,59 +3,88 @@ package service
 import (
 	"backend/internal/model"
 	"backend/internal/repository"
+	"context"
 	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
 )
 
+const DefaultReservationTTL = 15 * time.Minute
+
+var (
+	ErrEventNotPublished  = errors.New("event is not published")
+	ErrInvalidTicketCount = errors.New("number of tickets must be positive")
+)
+
+// CapacityExceededError maps to the CAPACITY_EXCEEDED (409) error code from the API error list.
+type CapacityExceededError struct {
+	Requested int
+	Available int64
+}
+
+func (e *CapacityExceededError) Error() string {
+	return fmt.Sprintf("capacity exceeded: requested %d, available %d", e.Requested, e.Available)
+}
+
 type BookingService struct {
-	bookingRepo repository.BookingRepository
-	eventRepo   repository.EventRepository
+	bookingRepo    repository.BookingRepository
+	reservationTTL time.Duration
 }
 
-func NewBookingService(bookingRepo repository.BookingRepository, eventRepo repository.EventRepository) *BookingService {
-	return &BookingService{
-		bookingRepo: bookingRepo,
-		eventRepo:   eventRepo,
+func NewBookingService(bookingRepo repository.BookingRepository, reservationTTL time.Duration) *BookingService {
+	if reservationTTL <= 0 {
+		reservationTTL = DefaultReservationTTL
 	}
+	return &BookingService{bookingRepo: bookingRepo, reservationTTL: reservationTTL}
 }
 
-func (s *BookingService) CreateBooking(booking *model.BookingModel) (*model.BookingModel, error) {
-	if booking.EventID == nil {
-		return nil, errors.New("event_id is required")
+// EVENTHUB-92: Überbuchung verhindern
+func (s *BookingService) ReserveTickets(ctx context.Context, eventID, userID uuid.UUID, tickets int) (*model.BookingModel, error) {
+	if tickets <= 0 {
+		return nil, ErrInvalidTicketCount
 	}
 
-	if booking.NumberOfTickets <= 0 {
-		return nil, errors.New("number of tickets must be at least 1")
-	}
-
-	event, err := s.eventRepo.GetEventByID(*booking.EventID)
-	if err != nil {
-		return nil, err
-	}
-	if event == nil {
-		return nil, errors.New("event not found")
-	}
-
-	if event.Status != model.EventStatusPublished {
-		return nil, errors.New("event is not available for booking")
-	}
-
-	err = s.bookingRepo.WithTransaction(func(txRepo repository.BookingRepository) error {
-		booked, err := txRepo.CountByEventID(*booking.EventID)
+	var booking *model.BookingModel
+	err := s.bookingRepo.InTransaction(ctx, func(tx repository.BookingTx) error {
+		event, err := tx.LockEvent(eventID)
 		if err != nil {
 			return err
 		}
-
-		available := int64(event.Capacity) - booked
-		if available < int64(booking.NumberOfTickets) {
-			return errors.New("no available seats left")
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.Status != model.EventStatusPublished {
+			return ErrEventNotPublished
 		}
 
-		booking.Status = model.BookingStatusReserved
-		return txRepo.CreateBooking(booking)
+		occupied, err := tx.CountOccupiedTickets(eventID)
+		if err != nil {
+			return err
+		}
+		available := int64(event.Capacity) - occupied
+		if available < 0 {
+			available = 0
+		}
+		if available < int64(tickets) {
+			return &CapacityExceededError{Requested: tickets, Available: available}
+		}
+
+		expiresAt := time.Now().Add(s.reservationTTL)
+		eventRef, userRef := eventID, userID
+		booking = &model.BookingModel{
+			BookingID:       uuid.New(),
+			UserID:          &userRef,
+			EventID:         &eventRef,
+			NumberOfTickets: tickets,
+			Status:          model.BookingStatusReserved,
+			ExpiresAt:       &expiresAt,
+		}
+		return tx.CreateBooking(booking)
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	return booking, nil
 }
