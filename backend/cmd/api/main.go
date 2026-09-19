@@ -62,13 +62,11 @@ func main() {
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
-
-	// Initialize Services
-	eventService := service.NewEventService(eventRepo, orgRepo)
 	bookingRepo := repository.NewBookingRepository(db)
 
 	// Initialize Services
-	bookingService := service.NewBookingService(bookingRepo, eventRepo)
+	eventService := service.NewEventService(eventRepo, orgRepo)
+	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -102,7 +100,7 @@ func main() {
 		}
 
 		// bookings
-		protected.POST("/bookings", handler.CreateBookingHandler(bookingService))
+		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
