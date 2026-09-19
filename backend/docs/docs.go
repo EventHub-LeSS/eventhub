@@ -80,7 +80,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/model.APIError"
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "403": {

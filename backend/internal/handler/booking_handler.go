@@ -2,7 +2,6 @@ package handler
 
 import (
 	"backend/internal/middleware"
-	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
 	"errors"
@@ -26,7 +25,7 @@ type CreateBookingRequest struct {
 // @Param        booking body CreateBookingRequest true "Buchungsdaten"
 // @Success      201 {object} model.BookingModel
 // @Failure      400 {object} model.ErrorResponse
-// @Failure      401 {object} model.APIError
+// @Failure      401 {object} model.ErrorResponse
 // @Failure      403 {object} model.ErrorResponse
 // @Failure      404 {object} model.ErrorResponse
 // @Failure      409 {object} model.ErrorResponse "Event nicht veröffentlicht oder Kapazität überschritten"
@@ -37,9 +36,7 @@ func CreateBookingHandler(bookingService *service.BookingService, userRepo repos
 	return func(c *gin.Context) {
 		principal, ok := middleware.PrincipalFromContext(c)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, model.APIError{
-				Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
-			})
+			writeProblem(c, http.StatusUnauthorized, "authentication is required")
 			return
 		}
 

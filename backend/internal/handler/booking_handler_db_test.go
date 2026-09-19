@@ -127,6 +127,10 @@ func TestCreateBooking_Rejections(t *testing.T) {
 			if rec.Code != tc.want {
 				t.Errorf("expected %d, got %d: %s", tc.want, rec.Code, rec.Body.String())
 			}
+			var problem model.ErrorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil || problem.Status != tc.want || problem.Title == "" {
+				t.Errorf("expected RFC 9457 problem body with status %d, got %s", tc.want, rec.Body.String())
+			}
 		})
 	}
 	if n := bookingCount(t, db); n != 0 {
