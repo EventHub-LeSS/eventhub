@@ -20,7 +20,6 @@ type BookingRepository interface {
 	GetBookingByID(bookingID uuid.UUID) (*model.BookingModel, error)
 	GetAllBookings() ([]*model.BookingModel, error)
 	UpdateBooking(booking *model.BookingModel) error
-	DeleteBooking(bookingID uuid.UUID) error
 }
 
 type bookingRepository struct {
@@ -54,10 +53,6 @@ func (r *bookingRepository) GetAllBookings() ([]*model.BookingModel, error) {
 
 func (r *bookingRepository) UpdateBooking(booking *model.BookingModel) error {
 	return r.db.Save(booking).Error
-}
-
-func (r *bookingRepository) DeleteBooking(bookingID uuid.UUID) error {
-	return r.db.Delete(&model.BookingModel{}, "booking_id=?", bookingID).Error
 }
 
 func (r *bookingRepository) InTransaction(ctx context.Context, fn func(tx BookingTx) error) error {
