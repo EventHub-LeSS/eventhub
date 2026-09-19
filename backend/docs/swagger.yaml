@@ -7,7 +7,11 @@ definitions:
         type: string
       numberOfTickets:
         example: 2
+        minimum: 1
         type: integer
+    required:
+    - eventId
+    - numberOfTickets
     type: object
   handler.CurrentOrganizationResponse:
     properties:
@@ -77,6 +81,8 @@ definitions:
         type: string
       eventId:
         type: string
+      expiresAt:
+        type: string
       numberOfTickets:
         type: integer
       paymentId:
@@ -94,12 +100,14 @@ definitions:
     - confirmed
     - cancelled
     - failed
+    - expired
     type: string
     x-enum-varnames:
     - BookingStatusReserved
     - BookingStatusConfirmed
     - BookingStatusCancelled
     - BookingStatusFailed
+    - BookingStatusExpired
   model.CreateOrganizationRequest:
     properties:
       alias:
@@ -278,7 +286,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Legt eine neue Buchung für ein Event an
+      description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
+        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
       parameters:
       - description: Buchungsdaten
         in: body
@@ -296,21 +305,27 @@ paths:
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/model.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Event nicht veröffentlicht oder Kapazität überschritten
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/model.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Buchung anlegen

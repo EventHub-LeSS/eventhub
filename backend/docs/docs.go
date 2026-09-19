@@ -42,7 +42,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Legt eine neue Buchung für ein Event an",
+                "description": "Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.",
                 "consumes": [
                     "application/json"
                 ],
@@ -74,28 +74,37 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Event nicht veröffentlicht oder Kapazität überschritten",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     }
                 }
@@ -385,6 +394,10 @@ const docTemplate = `{
     "definitions": {
         "handler.CreateBookingRequest": {
             "type": "object",
+            "required": [
+                "eventId",
+                "numberOfTickets"
+            ],
             "properties": {
                 "eventId": {
                     "type": "string",
@@ -392,6 +405,7 @@ const docTemplate = `{
                 },
                 "numberOfTickets": {
                     "type": "integer",
+                    "minimum": 1,
                     "example": 2
                 }
             }
@@ -496,6 +510,9 @@ const docTemplate = `{
                 "eventId": {
                     "type": "string"
                 },
+                "expiresAt": {
+                    "type": "string"
+                },
                 "numberOfTickets": {
                     "type": "integer"
                 },
@@ -519,13 +536,15 @@ const docTemplate = `{
                 "reserved",
                 "confirmed",
                 "cancelled",
-                "failed"
+                "failed",
+                "expired"
             ],
             "x-enum-varnames": [
                 "BookingStatusReserved",
                 "BookingStatusConfirmed",
                 "BookingStatusCancelled",
-                "BookingStatusFailed"
+                "BookingStatusFailed",
+                "BookingStatusExpired"
             ]
         },
         "model.CreateOrganizationRequest": {
