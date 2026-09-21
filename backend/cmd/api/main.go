@@ -74,7 +74,7 @@ func main() {
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
-	eventHandler := handler.NewEventHandler(eventService)
+	eventHandler := handler.NewEventHandler(eventService, keycloakService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)

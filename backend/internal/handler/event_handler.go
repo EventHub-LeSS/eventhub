@@ -5,6 +5,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/service"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,11 +13,12 @@ import (
 )
 
 type EventHandler struct {
-	eventService *service.EventService
+	eventService    *service.EventService
+	keycloakService *service.KeycloakService
 }
 
-func NewEventHandler(eventService *service.EventService) *EventHandler {
-	return &EventHandler{eventService: eventService}
+func NewEventHandler(eventService *service.EventService, keycloakService *service.KeycloakService) *EventHandler {
+	return &EventHandler{eventService: eventService, keycloakService: keycloakService}
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
@@ -171,6 +173,7 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")
+		slog.ErrorContext(c, "Internal Server Error", err)
 	}
 }
 
@@ -178,11 +181,11 @@ func writeEventActionError(c *gin.Context, err error) {
 
 // ListOwnEventsHandler
 // @Summary      Get users organization events
-// @Description  Returns the events posted by the users active organization
+// @Description  Returns the events posted by all organizations where the user has the event_manager role
 // @Tags         events
 // @Security     BearerAuth
-// @Produce      json
-// @Success      200 {object} []model.EventModel
+// @Produce      applcation/json
+// @Success      200 {array} model.EventModel
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.ErrorResponse
 // @Failure      403 {object} model.ErrorResponse
@@ -194,13 +197,22 @@ func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
 		c.AbortWithStatusJSON(rsp.Status, rsp)
 		return
 	}
-
-	events, err := h.eventService.ListByOrganization(*principal.ActiveOrganization)
-	if err != nil {
-		writeEventActionError(c, err)
+	allEvents := make([]*model.EventModel, 0)
+	for _, orgAlias := range principal.OrganizationIDsWithRole(middleware.RoleEventManager) {
+		orgId, err := h.keycloakService.GetOrganizationIDBySlug(c, principal.AccessToken, orgAlias)
+		if err != nil {
+			writeEventActionError(c, err)
+			return
+		}
+		events, err := h.eventService.ListByOrganization(orgId)
+		if err != nil {
+			writeEventActionError(c, err)
+			return
+		}
+		allEvents = append(allEvents, events...)
 	}
 
-	c.JSON(http.StatusOK, events)
+	c.JSON(http.StatusOK, allEvents)
 }
 
 func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
@@ -211,14 +223,6 @@ func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*midd
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusUnauthorized),
 			Detail: "Authentication is required!",
-		}
-	}
-	if principal.ActiveOrganization == nil {
-		return principal, &model.ErrorResponse{
-			Status: 401,
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusUnauthorized),
-			Detail: "No active organization found!",
 		}
 	}
 

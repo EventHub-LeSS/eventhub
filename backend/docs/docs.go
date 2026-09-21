@@ -424,6 +424,52 @@ const docTemplate = `{
                 }
             }
         },
+		"/events/self": {
+		  "get": {
+		    "summary": "List own organization events",
+		    "description": "Returns events from all organizations where the user has the event_manager role.",
+		    "tags": ["events"],
+		    "security": [
+		      { "BearerAuth": [] }
+		    ],
+		    "produces": ["application/json"],
+		    "responses": {
+		      "200": {
+		        "description": "Organization events; an empty array if none exist",
+		        "schema": {
+		          "type": "array",
+		          "items": {
+		            "$ref": "#/definitions/model.EventModel"
+		          }
+		        }
+		      },
+		      "400": {
+		        "description": "Bad Request",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "401": {
+		        "description": "Authentication required",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "403": {
+		        "description": "Insufficient organization role",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "500": {
+		        "description": "Internal Server Error",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      }
+		    }
+		  }
+		},
         "/organizations/": {
             "post": {
                 "security": [

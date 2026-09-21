@@ -121,7 +121,7 @@ func principalManaging(keycloakOrgIDs ...string) *middleware.Principal {
 func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	gin.SetMode(gin.TestMode)
 	eventService := service.NewEventService(repository.NewEventRepository(db), repository.NewOrganizationRepository(db))
-	h := NewEventHandler(eventService)
+	h := NewEventHandler(eventService, nil)
 
 	setPrincipal := func(c *gin.Context) {
 		if principal != nil {
