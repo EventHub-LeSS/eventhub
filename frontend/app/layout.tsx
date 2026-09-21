@@ -5,6 +5,7 @@ import { Navbar } from "@/features/app"
 import { getCurrentUser } from "@/features/auth"
 import { QueryProvider } from "@/features/shared/components/query-provider"
 import { ThemeProvider } from "@/features/shared/components/theme-provider"
+import { Toaster } from "@/features/shared/components/ui/toast"
 import { cn } from "@/features/shared/lib/utils"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
@@ -38,6 +39,7 @@ export default async function RootLayout({
               <Navbar user={user} />
               {children}
             </div>
+            <Toaster />
           </ThemeProvider>
         </QueryProvider>
       </body>

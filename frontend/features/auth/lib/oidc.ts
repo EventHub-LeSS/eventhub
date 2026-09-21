@@ -76,7 +76,25 @@ export async function exchangeCode(
     expectedNonce: checks.nonce,
   })
 
-  return { claims: tokens.claims(), accessToken: tokens.access_token }
+  return {
+    claims: tokens.claims(),
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresIn: tokens.expiresIn(),
+  }
+}
+
+export async function refreshAccessToken(refreshToken: string) {
+  const config = await getOidcConfig()
+
+  const tokens = await client.refreshTokenGrant(config, refreshToken)
+
+  return {
+    claims: tokens.claims(),
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token ?? refreshToken,
+    expiresIn: tokens.expiresIn(),
+  }
 }
 
 /**
