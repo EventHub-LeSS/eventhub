@@ -105,10 +105,11 @@ func main() {
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}
 
-	// EVENTHUB-188: organization admins configure the roles of their members
+	// EVENTHUB-188: organization admins configure the roles of their members. The handler checks
+	// the org_admin role itself after resolving the organization, which the path may address by
+	// ID or alias while tokens only carry the alias.
 	orgRoles := v1.Group("/organizations")
-	orgRoles.Use(authenticator.Middleware(),
-		middleware.RequireOrganizationRole("organizationID", middleware.RoleOrganizationAdmin))
+	orgRoles.Use(authenticator.Middleware())
 	{
 		orgRoles.PUT("/:organizationID/members/:username/roles", orgHandler.ConfigureMemberRoles)
 	}

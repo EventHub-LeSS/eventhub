@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"backend/internal/service"
 )
@@ -31,6 +32,11 @@ type Fake struct {
 	// FailAdminRequest, when set, makes matching admin requests fail with 500.
 	// It is consulted under Mu and may be mutated between requests.
 	FailAdminRequest func(method, path string) bool
+	// RejectAdminRequests makes the next n admin requests fail with 401, as Keycloak does for a
+	// service-account token it no longer accepts.
+	RejectAdminRequests int
+	// AdminDelay delays every admin response, e.g. to exercise timeouts.
+	AdminDelay time.Duration
 }
 
 // New returns a fake with two members: alice (org_admin of org-1) and bob
@@ -81,7 +87,23 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			f.Mu.Lock()
 			f.AdminRequests = append(f.AdminRequests, r.Method+" "+r.URL.Path)
 			fail := f.FailAdminRequest != nil && f.FailAdminRequest(r.Method, r.URL.Path)
+			reject := f.RejectAdminRequests > 0
+			if reject {
+				f.RejectAdminRequests--
+			}
+			delay := f.AdminDelay
 			f.Mu.Unlock()
+			if delay > 0 {
+				select {
+				case <-time.After(delay):
+				case <-r.Context().Done():
+					return
+				}
+			}
+			if reject {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			if fail {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
@@ -113,8 +135,14 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		org := map[string]any{"id": orgID}
+		for alias, id := range f.OrgAliases {
+			if id == orgID {
+				org["alias"] = alias
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": orgID})
+		_ = json.NewEncoder(w).Encode(org)
 	}))
 
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations", admin(func(w http.ResponseWriter, r *http.Request) {

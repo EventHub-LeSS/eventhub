@@ -3,7 +3,7 @@ package handler
 import (
 	"reflect"
 
-	"backend/internal/middleware"
+	"backend/internal/model"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
@@ -25,6 +25,6 @@ func init() {
 		return nil
 	}, decimal.Decimal{})
 	v.RegisterValidation("org_role", func(fl validator.FieldLevel) bool {
-		return middleware.IsValidOrganizationRole(fl.Field().String())
+		return model.IsValidOrganizationRole(fl.Field().String())
 	})
 }

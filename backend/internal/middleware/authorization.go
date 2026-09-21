@@ -26,7 +26,7 @@ func RequireGlobalRole(roles ...GlobalRole) gin.HandlerFunc {
 				return
 			}
 		}
-		abortForbidden(c)
+		AbortForbidden(c)
 	}
 }
 
@@ -49,7 +49,7 @@ func RequireOrganizationRole(organizationParam string, roles ...OrganizationRole
 
 		organizationID := c.Param(organizationParam)
 		if organizationID == "" {
-			abortForbidden(c)
+			AbortForbidden(c)
 			return
 		}
 		for role := range allowed {
@@ -58,11 +58,12 @@ func RequireOrganizationRole(organizationParam string, roles ...OrganizationRole
 				return
 			}
 		}
-		abortForbidden(c)
+		AbortForbidden(c)
 	}
 }
 
-func abortForbidden(c *gin.Context) {
+// AbortForbidden answers 403 in the API error format shared by all authorization checks.
+func AbortForbidden(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusForbidden, model.APIError{
 		Error: model.APIErrorDetail{
 			Code:    "FORBIDDEN",

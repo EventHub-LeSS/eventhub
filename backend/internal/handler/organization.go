@@ -42,6 +42,7 @@ func NewOrganizationHandler(keycloakService *service.KeycloakService, orgRepo re
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
 // @Failure      403 {object} model.APIError
+// @Failure      409 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /organizations/ [post]
 func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
@@ -73,10 +74,14 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 
 	keycloakOrgID, adminKeycloakUserID, err := h.keycloakService.CreateOrganization(c.Request.Context(), principal.AccessToken, org, req.OrgAdmin)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
+		status := http.StatusInternalServerError
+		if errors.Is(err, service.ErrOrganizationExists) {
+			status = http.StatusConflict
+		}
+		c.JSON(status, model.ErrorResponse{
 			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusInternalServerError),
-			Status: http.StatusInternalServerError,
+			Title:  http.StatusText(status),
+			Status: status,
 			Detail: err.Error(),
 		})
 		return
@@ -149,14 +154,14 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 
 // EVENTHUB-188: Rollen innerhalb einer Organisation vergeben und entziehen
 // @Summary      Configure organization member roles
-// @Description  Replaces the complete role set of an organization member. Requires the org_admin role in the given organization (global admins bypass this check). organizationID is the Keycloak organization ID or alias as returned by POST /organizations and GET /users/me. Roles: org_admin (manage members), event_manager (manage events), finance_viewer (view sales and billing). Removing the last org_admin is rejected. The affected user must refresh their token before the new roles take effect.
+// @Description  Replaces the complete role set of an organization member. Requires the org_admin role in the given organization (global admins bypass this check); it is checked against the token and again against Keycloak, so a demoted admin cannot act on an old token. organizationID is the Keycloak organization ID or alias as returned by POST /organizations and GET /users/me. roles is required; an empty array removes all roles. Roles: org_admin (manage members), event_manager (manage events), finance_viewer (view sales and billing). Removing the last org_admin is rejected. The affected user must refresh their token before the new roles take effect.
 // @Tags         organizations
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
 // @Param        organizationID path string true "Keycloak organization ID or Alias"
 // @Param        username path string true "Username of the organization member"
-// @Param        request body model.ConfigureOrgRolesRequest true "Complete role set for the member (empty = no roles)"
+// @Param        request body model.ConfigureOrgRolesRequest true "Complete role set for the member (empty array = no roles)"
 // @Success      200 {object} model.ConfigureOrgRolesResponse
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
@@ -166,17 +171,47 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /organizations/{organizationID}/members/{username}/roles [put]
 func (h *OrganizationHandler) ConfigureMemberRoles(c *gin.Context) {
-	keycloakOrgID := c.Param("organizationID")
+	organizationParam := c.Param("organizationID")
 	username := strings.TrimSpace(c.Param("username"))
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, model.APIError{
+			Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
+		})
+		return
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	// Resolve first, then authorize against exactly this organization: the path may carry the
+	// organization ID or alias, while tokens identify organizations by alias only.
+	org, err := h.keycloakService.ResolveOrganization(c.Request.Context(), organizationParam)
+	if err != nil {
+		if errors.Is(err, service.ErrOrganizationNotFound) && !globalAdmin {
+			// Unknown and foreign organizations look the same to organization admins.
+			middleware.AbortForbidden(c)
+			return
+		}
+		logOrgRoleChangeFailure(c, username, organizationParam, nil, err)
+		writeOrgRolesError(c, err)
+		return
+	}
+	if !globalAdmin &&
+		!principal.HasOrganizationRoleIn(org.ID, middleware.RoleOrganizationAdmin) &&
+		!principal.HasOrganizationRoleIn(org.Alias, middleware.RoleOrganizationAdmin) {
+		middleware.AbortForbidden(c)
+		return
+	}
 
 	var req model.ConfigureOrgRolesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeProblem(c, http.StatusBadRequest, orgRolesBindingMessage(err))
 		return
 	}
-	change, err := h.keycloakService.ConfigureOrganizationMemberRoles(c.Request.Context(), keycloakOrgID, username, req.Roles)
+	actor := service.OrgRoleActor{UserID: principal.Subject, GlobalAdmin: globalAdmin}
+	change, err := h.keycloakService.ConfigureOrganizationMemberRoles(c.Request.Context(), org.ID, username, req.Roles, actor)
 	if err != nil {
-		logOrgRoleChangeFailure(c, username, keycloakOrgID, err)
+		logOrgRoleChangeFailure(c, username, org.ID, change, err)
 		writeOrgRolesError(c, err)
 		return
 	}
@@ -185,16 +220,16 @@ func (h *OrganizationHandler) ConfigureMemberRoles(c *gin.Context) {
 
 	c.JSON(http.StatusOK, model.ConfigureOrgRolesResponse{
 		Username:       username,
-		OrganizationID: keycloakOrgID,
+		OrganizationID: organizationParam,
 		Roles:          change.Applied,
 		Message:        "roles updated successfully",
 	})
 }
 
 // orgRolesBindingMessage turns binding errors of ConfigureOrgRolesRequest into
-// problem details: unknown and duplicate roles are reported explicitly, any
-// other error means a malformed body and gets a sanitized message.
-// middleware.OrganizationRoles is the single source of truth for valid roles.
+// problem details: a missing roles field, unknown and duplicate roles are reported
+// explicitly, any other error means a malformed body and gets a sanitized message.
+// model.OrganizationRoles is the single source of truth for valid roles.
 func orgRolesBindingMessage(err error) string {
 	var valErrs validator.ValidationErrors
 	if !errors.As(err, &valErrs) {
@@ -203,8 +238,10 @@ func orgRolesBindingMessage(err error) string {
 	details := make([]string, 0, len(valErrs))
 	for _, fieldErr := range valErrs {
 		switch fieldErr.Tag() {
+		case "required":
+			details = append(details, "roles is required; send an empty array to remove all roles")
 		case "org_role":
-			details = append(details, fmt.Sprintf("unknown role %q; allowed roles: %s", fieldErr.Value(), strings.Join(middleware.OrganizationRoleNames(), ", ")))
+			details = append(details, fmt.Sprintf("unknown role %q; allowed roles: %s", fieldErr.Value(), strings.Join(model.OrganizationRoleNames(), ", ")))
 		case "unique":
 			details = append(details, "duplicate role: roles must be unique")
 		default:
@@ -215,10 +252,12 @@ func orgRolesBindingMessage(err error) string {
 }
 
 // writeOrgRolesError maps service errors to RFC 9457 problem+json responses
-// (model.ErrorResponse via writeProblem). 401/403 come from the auth middleware
-// and keep the model.APIError shape used across the API.
+// (model.ErrorResponse via writeProblem). 401/403 keep the model.APIError shape
+// used by the auth middleware across the API.
 func writeOrgRolesError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrActorNotOrgAdmin):
+		middleware.AbortForbidden(c)
 	case errors.Is(err, service.ErrUserNotFound),
 		errors.Is(err, service.ErrOrganizationNotFound),
 		errors.Is(err, service.ErrNotAMember):
@@ -249,17 +288,25 @@ func logOrgRoleChange(c *gin.Context, targetUsername string, change *service.Org
 	)
 }
 
-func logOrgRoleChangeFailure(c *gin.Context, targetUsername, organizationID string, err error) {
+// logOrgRoleChangeFailure records a failed role change. change holds what was already applied
+// before the failure, so partial changes stay in the audit trail.
+func logOrgRoleChangeFailure(c *gin.Context, targetUsername, organizationID string, change *service.OrgRoleChange, err error) {
 	principal, _ := middleware.PrincipalFromContext(c)
 	actor := ""
 	if principal != nil {
 		actor = principal.Username
+	}
+	var granted, revoked []string
+	if change != nil {
+		granted, revoked = change.Granted, change.Revoked
 	}
 	slog.Error("organization member roles change failed",
 		"event", "org_member_roles_change_failed",
 		"actor_username", actor,
 		"organization_id", organizationID,
 		"target_username", targetUsername,
+		"granted", strings.Join(granted, ","),
+		"revoked", strings.Join(revoked, ","),
 		"error", err.Error(),
 	)
 }

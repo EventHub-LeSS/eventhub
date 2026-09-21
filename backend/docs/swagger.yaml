@@ -64,8 +64,11 @@ definitions:
     properties:
       roles:
         items:
-          type: string
+          $ref: '#/definitions/model.OrganizationRole'
         type: array
+        uniqueItems: true
+    required:
+    - roles
     type: object
   model.ConfigureOrgRolesResponse:
     properties:
@@ -204,6 +207,16 @@ definitions:
       time:
         type: string
     type: object
+  model.OrganizationRole:
+    enum:
+    - org_admin
+    - event_manager
+    - finance_viewer
+    type: string
+    x-enum-varnames:
+    - RoleOrganizationAdmin
+    - RoleEventManager
+    - RoleFinanceViewer
   model.UpdateEventRequest:
     properties:
       capacity:
@@ -411,6 +424,10 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/model.APIError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -425,9 +442,11 @@ paths:
       consumes:
       - application/json
       description: 'Replaces the complete role set of an organization member. Requires
-        the org_admin role in the given organization (global admins bypass this check).
-        organizationID is the Keycloak organization ID or alias as returned by POST
-        /organizations and GET /users/me. Roles: org_admin (manage members), event_manager
+        the org_admin role in the given organization (global admins bypass this check);
+        it is checked against the token and again against Keycloak, so a demoted admin
+        cannot act on an old token. organizationID is the Keycloak organization ID
+        or alias as returned by POST /organizations and GET /users/me. roles is required;
+        an empty array removes all roles. Roles: org_admin (manage members), event_manager
         (manage events), finance_viewer (view sales and billing). Removing the last
         org_admin is rejected. The affected user must refresh their token before the
         new roles take effect.'
@@ -442,7 +461,7 @@ paths:
         name: username
         required: true
         type: string
-      - description: Complete role set for the member (empty = no roles)
+      - description: Complete role set for the member (empty array = no roles)
         in: body
         name: request
         required: true

@@ -7,17 +7,24 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"backend/internal/keycloakmock"
+	"backend/internal/model"
 	"backend/internal/service"
+
+	"github.com/henning-kln/gocloak"
 )
+
+// globalAdmin is the actor of tests that are not about the actor check.
+var globalAdmin = service.OrgRoleActor{GlobalAdmin: true}
 
 func TestConfigureOrganizationMemberRoles_GrantsAndRevokesRoles(t *testing.T) {
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
 	// bob currently holds event_manager only.
-	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []string{"org_admin", "finance_viewer"})
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"org_admin", "finance_viewer"}, globalAdmin)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,7 +53,7 @@ func TestConfigureOrganizationMemberRoles_IsIdempotentForUnchangedRoles(t *testi
 	kc := fake.KeycloakService(t)
 
 	// alice currently holds org_admin only.
-	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []string{"org_admin"})
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"org_admin"}, globalAdmin)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +70,7 @@ func TestConfigureOrganizationMemberRoles_RejectsRemovingLastAdmin(t *testing.T)
 	kc := fake.KeycloakService(t)
 
 	// alice is the only org_admin of org-1.
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if !errors.Is(err, service.ErrLastAdmin) {
 		t.Fatalf("err = %v, want ErrLastAdmin", err)
 	}
@@ -80,7 +87,7 @@ func TestConfigureOrganizationMemberRoles_AllowsRemovingAdminWithSecondAdmin(t *
 	fake.GroupMembers["g-admin"]["u-bob"] = true
 	kc := fake.KeycloakService(t)
 
-	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []string{"event_manager"})
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +107,7 @@ func TestConfigureOrganizationMemberRoles_ResolvesCurrentRolesThroughGroupMember
 	kc := fake.KeycloakService(t)
 
 	// bob holds event_manager only and no admin is demoted.
-	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []string{"finance_viewer"}); err != nil {
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"finance_viewer"}, globalAdmin); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	scanned := make(map[string]bool)
@@ -126,7 +133,7 @@ func TestConfigureOrganizationMemberRoles_EmptyRoleSetStripsAllRoles(t *testing.
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
-	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", nil)
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", nil, globalAdmin)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +150,7 @@ func TestConfigureOrganizationMemberRoles_ResolvesOrganizationAlias(t *testing.T
 	kc := fake.KeycloakService(t)
 
 	// Tokens may identify organizations by alias when the claim carries no ID.
-	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "alias-1", "bob", []string{"finance_viewer"})
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "alias-1", "bob", []model.OrganizationRole{"finance_viewer"}, globalAdmin)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +172,7 @@ func TestConfigureOrganizationMemberRoles_UserNotFound(t *testing.T) {
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "dave", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "dave", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if !errors.Is(err, service.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
@@ -176,7 +183,7 @@ func TestConfigureOrganizationMemberRoles_UserNotAMember(t *testing.T) {
 	kc := fake.KeycloakService(t)
 
 	// carol exists in the realm but is not a member of org-1.
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "carol", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "carol", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if !errors.Is(err, service.ErrNotAMember) {
 		t.Fatalf("err = %v, want ErrNotAMember", err)
 	}
@@ -186,7 +193,7 @@ func TestConfigureOrganizationMemberRoles_UnknownOrganization(t *testing.T) {
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-x", "bob", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-x", "bob", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if !errors.Is(err, service.ErrOrganizationNotFound) {
 		t.Fatalf("err = %v, want ErrOrganizationNotFound", err)
 	}
@@ -198,7 +205,7 @@ func TestConfigureOrganizationMemberRoles_IncompleteRoleGroups(t *testing.T) {
 	fake.OrgMembers["org-2"] = map[string]bool{"u-bob": true}
 	kc := fake.KeycloakService(t)
 
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-2", "bob", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-2", "bob", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if !errors.Is(err, service.ErrOrgGroupsMissing) {
 		t.Fatalf("err = %v, want ErrOrgGroupsMissing", err)
 	}
@@ -213,9 +220,13 @@ func TestConfigureOrganizationMemberRoles_FailsClosedWhenGrantFailsAfterRevoke(t
 	kc := fake.KeycloakService(t)
 
 	// bob holds event_manager and requests org_admin + finance_viewer.
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []string{"org_admin", "finance_viewer"})
+	change, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"org_admin", "finance_viewer"}, globalAdmin)
 	if err == nil {
 		t.Fatal("expected an error when the grant fails")
+	}
+	// The changes applied before the failure are reported for the audit log.
+	if change == nil || strings.Join(change.Revoked, ",") != "event_manager" || len(change.Granted) != 0 {
+		t.Errorf("partial change = %+v, want revoked=[event_manager] and nothing granted", change)
 	}
 	if errors.Is(err, service.ErrLastAdmin) || errors.Is(err, service.ErrOrgGroupsMissing) {
 		t.Fatalf("unexpected sentinel error: %v", err)
@@ -242,7 +253,7 @@ func TestConfigureOrganizationMemberRoles_OutageDuringAliasLookupIsNotOrganizati
 	}
 	kc := fake.KeycloakService(t)
 
-	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-x", "bob", []string{"event_manager"})
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-x", "bob", []model.OrganizationRole{"event_manager"}, globalAdmin)
 	if err == nil {
 		t.Fatal("expected an error when the organization listing fails")
 	}
@@ -266,7 +277,7 @@ func TestConfigureOrganizationMemberRoles_ConcurrentDemotionsLeaveOneAdmin(t *te
 		wg.Add(1)
 		go func(i int, target string) {
 			defer wg.Done()
-			_, errs[i] = kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", target, []string{"event_manager"})
+			_, errs[i] = kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", target, []model.OrganizationRole{"event_manager"}, globalAdmin)
 		}(i, target)
 	}
 	wg.Wait()
@@ -296,11 +307,116 @@ func TestConfigureOrganizationMemberRoles_CachesServiceAccountToken(t *testing.T
 	kc := fake.KeycloakService(t)
 
 	for range 2 {
-		if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []string{"org_admin"}); err != nil {
+		if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"org_admin"}, globalAdmin); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
 	if fake.TokenRequests != 1 {
 		t.Errorf("token requests = %d, want 1 (cached across calls)", fake.TokenRequests)
+	}
+}
+
+func TestConfigureOrganizationMemberRoles_RechecksThatTheActorIsStillOrgAdmin(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	// bob's token may still claim org_admin, but in Keycloak he is only event_manager.
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"org_admin"}, service.OrgRoleActor{UserID: "u-bob"})
+	if !errors.Is(err, service.ErrActorNotOrgAdmin) {
+		t.Fatalf("err = %v, want ErrActorNotOrgAdmin", err)
+	}
+	if len(fake.Grants) != 0 || len(fake.Revokes) != 0 {
+		t.Errorf("no roles may change, got grants=%v revokes=%v", fake.Grants, fake.Revokes)
+	}
+
+	// alice is org_admin in Keycloak and may change roles.
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"finance_viewer"}, service.OrgRoleActor{UserID: "u-alice"}); err != nil {
+		t.Fatalf("unexpected error for an org admin actor: %v", err)
+	}
+}
+
+func TestConfigureOrganizationMemberRoles_RejectsActorWithoutUserID(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"finance_viewer"}, service.OrgRoleActor{})
+	if !errors.Is(err, service.ErrActorNotOrgAdmin) {
+		t.Fatalf("err = %v, want ErrActorNotOrgAdmin", err)
+	}
+}
+
+func TestConfigureOrganizationMemberRoles_DropsRejectedServiceAccountToken(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	// Keycloak no longer accepts the cached token, e.g. after a restart.
+	fake.RejectAdminRequests = 1
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"org_admin"}, globalAdmin); err == nil {
+		t.Fatal("expected the rejected request to fail")
+	}
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "alice", []model.OrganizationRole{"org_admin"}, globalAdmin); err != nil {
+		t.Fatalf("the next request must log in again and succeed: %v", err)
+	}
+	if fake.TokenRequests != 2 {
+		t.Errorf("token requests = %d, want 2 (rejected token dropped from the cache)", fake.TokenRequests)
+	}
+}
+
+func TestConfigureOrganizationMemberRoles_TimesOutAndReleasesTheLock(t *testing.T) {
+	defer service.SetOrgRoleChangeTimeout(100 * time.Millisecond)()
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	fake.Mu.Lock()
+	fake.AdminDelay = time.Second
+	fake.Mu.Unlock()
+	start := time.Now()
+	_, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"finance_viewer"}, globalAdmin)
+	if err == nil {
+		t.Fatal("expected a timeout error")
+	}
+	if elapsed := time.Since(start); elapsed > 900*time.Millisecond {
+		t.Fatalf("call took %v, want it bounded by the timeout", elapsed)
+	}
+
+	fake.Mu.Lock()
+	fake.AdminDelay = 0
+	fake.Mu.Unlock()
+	if _, err := kc.ConfigureOrganizationMemberRoles(context.Background(), "org-1", "bob", []model.OrganizationRole{"finance_viewer"}, globalAdmin); err != nil {
+		t.Fatalf("the organization lock must be released after the timeout: %v", err)
+	}
+}
+
+func TestResolveOrganization_ByIDAndByAlias(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	for _, idOrAlias := range []string{"org-1", "alias-1"} {
+		ref, err := kc.ResolveOrganization(context.Background(), idOrAlias)
+		if err != nil {
+			t.Fatalf("ResolveOrganization(%q): %v", idOrAlias, err)
+		}
+		if ref.ID != "org-1" || ref.Alias != "alias-1" {
+			t.Errorf("ResolveOrganization(%q) = %+v, want ID org-1 and alias alias-1", idOrAlias, ref)
+		}
+	}
+	if _, err := kc.ResolveOrganization(context.Background(), "org-x"); !errors.Is(err, service.ErrOrganizationNotFound) {
+		t.Errorf("unknown organization: err = %v, want ErrOrganizationNotFound", err)
+	}
+}
+
+func TestCreateOrganization_RejectsTakenAlias(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	name, alias := "Another name", "alias-1"
+	_, _, err := kc.CreateOrganization(context.Background(), "svc-token", gocloak.OrganizationRepresentation{Name: &name, Alias: &alias}, "alice")
+	if !errors.Is(err, service.ErrOrganizationExists) {
+		t.Fatalf("err = %v, want ErrOrganizationExists", err)
+	}
+	for _, request := range fake.AdminRequests {
+		if strings.HasPrefix(request, "POST ") {
+			t.Errorf("nothing may be created for a taken alias, got %s", request)
+		}
 	}
 }

@@ -1,13 +1,14 @@
 package service
 
 import (
-	"backend/internal/middleware"
+	"backend/internal/model"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,17 @@ func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
 	k.adminTokenValue = token.AccessToken
 	k.adminTokenExpires = time.Now().Add(time.Duration(token.ExpiresIn)*time.Second - expirySkew)
 	return token.AccessToken, nil
+}
+
+// dropAdminTokenIfRejected discards the cached service-account token when Keycloak rejected it
+// with 401, e.g. after a Keycloak restart, so the next call logs in again instead of failing until
+// the cached token would have expired.
+func (k *KeycloakService) dropAdminTokenIfRejected(err error) {
+	if isKeycloakStatus(err, http.StatusUnauthorized) {
+		k.adminTokenMu.Lock()
+		k.adminTokenValue = ""
+		k.adminTokenMu.Unlock()
+	}
 }
 
 func (k *KeycloakService) LoginUser(ctx context.Context, username, password string) (*gocloak.JWT, error) {
@@ -402,13 +414,21 @@ func (k *KeycloakService) GetOrganizationMembers(ctx context.Context, accessToke
 	return allMembers, nil
 }
 
+// ErrOrganizationExists is returned by CreateOrganization when the alias or the name is taken.
+var ErrOrganizationExists = errors.New("organization already exists")
+
 func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken string, org gocloak.OrganizationRepresentation, orgAdmin string) (string, string, error) {
 	// Only proceed to creation when the organization is known to not exist;
 	// an infrastructure error must not be mistaken for "does not exist".
-	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, *org.Name)
+	// GetOrganizationIDBySlug matches aliases, so the alias is what gets checked.
+	alias := ""
+	if org.Alias != nil {
+		alias = *org.Alias
+	}
+	oid, err := k.GetOrganizationIDBySlug(ctx, accessToken, alias)
 	switch {
 	case err == nil:
-		return oid, "", fmt.Errorf("organization already exists")
+		return oid, "", ErrOrganizationExists
 	case errors.Is(err, ErrOrganizationNotFound):
 	default:
 		return "", "", fmt.Errorf("failed to check whether the organization exists: %w", err)
@@ -416,6 +436,10 @@ func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken st
 
 	oId, err := k.client.CreateOrganization(ctx, accessToken, k.cfg.UserRealm, org)
 	if err != nil {
+		// Keycloak also rejects a name that another organization already uses.
+		if isKeycloakStatus(err, http.StatusConflict) {
+			return "", "", fmt.Errorf("%w: %v", ErrOrganizationExists, err)
+		}
 		return "", "", fmt.Errorf("failed to create organization: %w", err)
 	}
 
@@ -586,6 +610,7 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
 // OrgRoleChange is the outcome of a role configuration: the resolved organization,
@@ -596,6 +621,25 @@ type OrgRoleChange struct {
 	Revoked        []string
 	Applied        []string
 }
+
+// OrgRoleActor is the caller of ConfigureOrganizationMemberRoles. An organization admin is
+// checked again against Keycloak inside the organization lock, so an admin who was demoted in
+// the meantime cannot act on a token that still carries the old role. Global admins are not
+// checked; an actor without user ID that is no global admin is always rejected.
+type OrgRoleActor struct {
+	UserID      string
+	GlobalAdmin bool
+}
+
+// OrganizationRef identifies a Keycloak organization by ID and alias.
+type OrganizationRef struct {
+	ID    string
+	Alias string
+}
+
+// orgRoleChangeTimeout bounds a role change including the time the organization lock is held,
+// so an unresponsive Keycloak cannot block further changes of the organization.
+var orgRoleChangeTimeout = 15 * time.Second
 
 // orgMutexes serializes role changes per organization so that concurrent calls
 // cannot interleave (e.g. two admins demoting each other between the last-admin
@@ -611,24 +655,40 @@ func lockOrganization(orgID string) func() {
 	return mu.Unlock
 }
 
+// ResolveOrganization accepts a Keycloak organization ID or alias and returns both, using the
+// backend service account. Tokens identify organizations by alias while API paths may carry
+// either, so callers resolve first and then authorize against the result (EVENTHUB-188).
+func (k *KeycloakService) ResolveOrganization(ctx context.Context, organizationIDOrAlias string) (ref OrganizationRef, err error) {
+	token, err := k.adminToken(ctx)
+	if err != nil {
+		return OrganizationRef{}, err
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	return k.resolveOrganization(ctx, token, organizationIDOrAlias)
+}
+
 // ConfigureOrganizationMemberRoles replaces the organization roles of a user with the requested
 // set; an empty set strips all roles. It refuses to remove the last organization admin so an
-// organization cannot lock itself out. The member's current roles are resolved by scanning the
-// member lists of the organization's role groups: Keycloak hides organization groups from the
-// per-user groups endpoint (GET /users/{id}/groups filters them out by group type), so the admin
-// API offers no per-user view of org group membership. The admin guard is only evaluated, capped
-// at two entries, when an admin is actually demoted. Revokes run before grants so a failure
+// organization cannot lock itself out, and it re-checks that an actor who is no global admin is
+// still an organization admin. The member's current roles are resolved by scanning the member
+// lists of the organization's role groups: Keycloak hides organization groups from the per-user
+// groups endpoint (GET /users/{id}/groups filters them out by group type), so the admin API
+// offers no per-user view of org group membership. The admin guard is only evaluated, capped at
+// two entries, when an admin is actually demoted. Revokes run before grants so a failure
 // mid-sequence can only leave the member with fewer roles than intended, never with the union of
-// old and new roles; the request is idempotent and safe to retry. Keycloak calls run with the
-// backend service account; callers must enforce that only organization admins may use it
-// (EVENTHUB-188).
-func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, keycloakOrgID, username string, requestedRoles []string) (*OrgRoleChange, error) {
-	orgAdminRole := string(middleware.RoleOrganizationAdmin)
+// old and new roles; on such a failure the changes already applied are returned together with
+// the error, and the request is idempotent and safe to retry. Keycloak calls run with the backend
+// service account and are bounded by orgRoleChangeTimeout (EVENTHUB-188).
+func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, organizationIDOrAlias, username string, requestedRoles []model.OrganizationRole, actor OrgRoleActor) (change *OrgRoleChange, err error) {
+	ctx, cancel := context.WithTimeout(ctx, orgRoleChangeTimeout)
+	defer cancel()
+	orgAdminRole := string(model.RoleOrganizationAdmin)
 
 	token, err := k.adminToken(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
 
 	user, err := k.GetUserByUsername(ctx, token, k.cfg.UserRealm, username)
 	if err != nil {
@@ -639,13 +699,11 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 	}
 	userID := *user.ID
 
-	// Tokens may identify organizations by alias when the organization claim
-	// carries no ID, so the parameter is resolved to the Keycloak org ID.
-	// Authorization happened on the raw parameter before this point.
-	keycloakOrgID, err = k.resolveOrganizationID(ctx, token, keycloakOrgID)
+	org, err := k.resolveOrganization(ctx, token, organizationIDOrAlias)
 	if err != nil {
 		return nil, err
 	}
+	keycloakOrgID := org.ID
 
 	unlock := lockOrganization(keycloakOrgID)
 	defer unlock()
@@ -653,6 +711,16 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 	groupIDByName, err := k.organizationRoleGroupIDs(ctx, token, keycloakOrgID)
 	if err != nil {
 		return nil, err
+	}
+
+	if !actor.GlobalAdmin {
+		isAdmin, err := k.isOrganizationGroupMember(ctx, token, keycloakOrgID, groupIDByName[orgAdminRole], actor.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if !isAdmin {
+			return nil, ErrActorNotOrgAdmin
+		}
 	}
 
 	if _, err := k.client.GetOrganizationMemberByID(ctx, token, k.cfg.UserRealm, keycloakOrgID, userID); err != nil {
@@ -669,7 +737,7 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 
 	requested := make(map[string]bool, len(requestedRoles))
 	for _, role := range requestedRoles {
-		requested[role] = true
+		requested[string(role)] = true
 	}
 
 	if currentRoles[orgAdminRole] && !requested[orgAdminRole] {
@@ -682,30 +750,30 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		}
 	}
 
-	change := &OrgRoleChange{OrganizationID: keycloakOrgID}
+	change = &OrgRoleChange{OrganizationID: keycloakOrgID}
 	// Two separate loops on purpose: all revokes complete before the first
 	// grant, so a failure can never leave the union of old and new roles.
-	for _, role := range middleware.OrganizationRoles {
+	for _, role := range model.OrganizationRoles {
 		name := string(role)
 		if !requested[name] && currentRoles[name] {
 			if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return nil, fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
+				return change, fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
 			}
 			change.Revoked = append(change.Revoked, name)
 		}
 	}
-	for _, role := range middleware.OrganizationRoles {
+	for _, role := range model.OrganizationRoles {
 		name := string(role)
 		if requested[name] && !currentRoles[name] {
 			if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return nil, fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
+				return change, fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
 			}
 			change.Granted = append(change.Granted, name)
 		}
 	}
 
-	change.Applied = make([]string, 0, len(middleware.OrganizationRoles))
-	for _, role := range middleware.OrganizationRoles {
+	change.Applied = make([]string, 0, len(model.OrganizationRoles))
+	for _, role := range model.OrganizationRoles {
 		if requested[string(role)] {
 			change.Applied = append(change.Applied, string(role))
 		}
@@ -720,20 +788,29 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 // the only view the admin API offers, and the gocloak fork has no per-user function for it
 // either (EVENTHUB-188).
 func (k *KeycloakService) currentUserRoles(ctx context.Context, accessToken, keycloakOrgID, userID string, groupIDByName map[string]string) (map[string]bool, error) {
-	current := make(map[string]bool, len(middleware.OrganizationRoles))
-	for _, role := range middleware.OrganizationRoles {
+	current := make(map[string]bool, len(model.OrganizationRoles))
+	for _, role := range model.OrganizationRoles {
 		name := string(role)
-		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, accessToken, keycloakOrgID, groupIDByName[name])
+		isMember, err := k.isOrganizationGroupMember(ctx, accessToken, keycloakOrgID, groupIDByName[name], userID)
 		if err != nil {
 			return nil, err
 		}
-		for _, memberID := range memberIDs {
-			if memberID == userID {
-				current[name] = true
-			}
-		}
+		current[name] = isMember
 	}
 	return current, nil
+}
+
+// isOrganizationGroupMember reports whether userID belongs to the organization group by scanning
+// its member list; an empty userID never does.
+func (k *KeycloakService) isOrganizationGroupMember(ctx context.Context, accessToken, keycloakOrgID, groupID, userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+	memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, accessToken, keycloakOrgID, groupID)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(memberIDs, userID), nil
 }
 
 // getOrganizationGroupMemberIDs returns the IDs of all members of an organization group.
@@ -782,24 +859,28 @@ func (k *KeycloakService) hasOtherAdmin(ctx context.Context, accessToken, keyclo
 	return false, nil
 }
 
-// resolveOrganizationID accepts a Keycloak organization ID or alias and returns the ID.
-func (k *KeycloakService) resolveOrganizationID(ctx context.Context, accessToken, organizationIDOrAlias string) (string, error) {
+// resolveOrganization accepts a Keycloak organization ID or alias and returns ID and alias.
+func (k *KeycloakService) resolveOrganization(ctx context.Context, accessToken, organizationIDOrAlias string) (OrganizationRef, error) {
 	org, err := k.client.GetOrganizationByID(ctx, accessToken, k.cfg.UserRealm, organizationIDOrAlias)
 	if err == nil {
 		if org != nil && org.ID != nil {
-			return *org.ID, nil
+			ref := OrganizationRef{ID: *org.ID}
+			if org.Alias != nil {
+				ref.Alias = *org.Alias
+			}
+			return ref, nil
 		}
 	} else if !isKeycloakNotFound(err) {
-		return "", fmt.Errorf("failed to look up organization: %w", err)
+		return OrganizationRef{}, fmt.Errorf("failed to look up organization: %w", err)
 	}
 	id, err := k.GetOrganizationIDBySlug(ctx, accessToken, organizationIDOrAlias)
 	if err != nil {
 		if errors.Is(err, ErrOrganizationNotFound) {
-			return "", ErrOrganizationNotFound
+			return OrganizationRef{}, ErrOrganizationNotFound
 		}
-		return "", fmt.Errorf("failed to look up organization by alias: %w", err)
+		return OrganizationRef{}, fmt.Errorf("failed to look up organization by alias: %w", err)
 	}
-	return id, nil
+	return OrganizationRef{ID: id, Alias: organizationIDOrAlias}, nil
 }
 
 // organizationRoleGroupIDs maps the canonical role group names to their Keycloak group IDs.
@@ -811,19 +892,25 @@ func (k *KeycloakService) organizationRoleGroupIDs(ctx context.Context, accessTo
 		}
 		return nil, err
 	}
-	groupIDByName := make(map[string]string, len(middleware.OrganizationRoles))
+	groupIDByName := make(map[string]string, len(model.OrganizationRoles))
 	for _, g := range groups {
 		if g.Name == nil || g.ID == nil {
 			continue
 		}
 		groupIDByName[*g.Name] = *g.ID
 	}
-	for _, role := range middleware.OrganizationRoles {
+	for _, role := range model.OrganizationRoles {
 		if _, ok := groupIDByName[string(role)]; !ok {
 			return nil, fmt.Errorf("%w: missing group %q", ErrOrgGroupsMissing, role)
 		}
 	}
 	return groupIDByName, nil
+}
+
+// isKeycloakStatus reports whether err is a Keycloak API error with the given HTTP status.
+func isKeycloakStatus(err error, status int) bool {
+	var apiErr *gocloak.APIError
+	return errors.As(err, &apiErr) && apiErr.Code == status
 }
 
 func isKeycloakNotFound(err error) bool {

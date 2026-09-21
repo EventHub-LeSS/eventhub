@@ -16,8 +16,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// newOrgRolesRouter mirrors the route registration of cmd/api: only organization
-// admins of the addressed organization (or global admins) reach the handler.
+// newOrgRolesRouter mirrors the route registration of cmd/api: the handler itself checks that
+// the caller is an organization admin of the addressed organization (or a global admin).
 func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Handler, *keycloakmock.Fake) {
 	t.Helper()
 	fake := keycloakmock.New()
@@ -32,16 +32,17 @@ func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Hand
 		c.Next()
 	})
 	orgs := r.Group("/api/v1/organizations")
-	orgs.Use(middleware.RequireOrganizationRole("organizationID", middleware.RoleOrganizationAdmin))
 	{
+		orgs.POST("/", h.CreateOrganization)
 		orgs.PUT("/:organizationID/members/:username/roles", h.ConfigureMemberRoles)
 	}
 	return r, fake
 }
 
+// orgRolesPrincipal is alice (org_admin of org-1 in the fake) with the given role in orgID.
 func orgRolesPrincipal(orgID string, role middleware.OrganizationRole) *middleware.Principal {
 	return &middleware.Principal{
-		Subject:     "u-caller",
+		Subject:     "u-alice",
 		Username:    "caller",
 		GlobalRoles: map[middleware.GlobalRole]struct{}{},
 		Organizations: []*middleware.OrganizationAccess{{
@@ -233,7 +234,7 @@ func TestConfigureMemberRoles_UserNotFound(t *testing.T) {
 func TestConfigureMemberRoles_ConflictWhenRemovingLastAdmin(t *testing.T) {
 	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
 
-	rec := putOrgRoles(t, router, "org-1", "alice", nil)
+	rec := putOrgRoles(t, router, "org-1", "alice", []string{})
 	wantProblem(t, rec, http.StatusConflict)
 	if !strings.Contains(rec.Body.String(), "last organization admin") {
 		t.Errorf("body = %s, want last-admin conflict detail", rec.Body.String())
@@ -312,4 +313,107 @@ func TestConfigureMemberRoles_WritesAuditLog(t *testing.T) {
 			t.Errorf("audit log missing %q, got: %s", want, logged)
 		}
 	}
+}
+
+func TestConfigureMemberRoles_RejectsMissingRolesField(t *testing.T) {
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+
+	// A missing or misspelled field must not strip all roles.
+	for _, body := range []string{`{}`, `{"roles":null}`, `{"role":["org_admin"]}`} {
+		rec := putOrgRolesBody(t, router, "org-1", "bob", body)
+		wantProblem(t, rec, http.StatusBadRequest)
+		if !strings.Contains(rec.Body.String(), "roles is required") {
+			t.Errorf("body %s: response = %s, want the required-field message", body, rec.Body.String())
+		}
+	}
+	if len(fake.Grants) != 0 || len(fake.Revokes) != 0 {
+		t.Errorf("no roles may change, got grants=%v revokes=%v", fake.Grants, fake.Revokes)
+	}
+}
+
+func TestConfigureMemberRoles_EmptyArrayStripsAllRoles(t *testing.T) {
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+
+	rec := putOrgRolesBody(t, router, "org-1", "bob", `{"roles":[]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if fake.GroupMembers["g-manager"]["u-bob"] {
+		t.Error("bob must have lost event_manager")
+	}
+}
+
+func TestConfigureMemberRoles_AcceptsOrganizationIDWhenTokenOnlyCarriesAlias(t *testing.T) {
+	// Real tokens identify organizations by alias only; the path may still carry the ID.
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("alias-1", middleware.RoleOrganizationAdmin))
+
+	rec := putOrgRoles(t, router, "org-1", "bob", []string{"event_manager", "finance_viewer"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if !fake.GroupMembers["g-finance"]["u-bob"] {
+		t.Error("expected finance_viewer to be granted")
+	}
+}
+
+func TestConfigureMemberRoles_UnknownOrganization(t *testing.T) {
+	// Organization admins cannot tell unknown from foreign organizations.
+	router, _ := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+	wantAPIError(t, putOrgRoles(t, router, "org-x", "bob", []string{"event_manager"}), http.StatusForbidden, "FORBIDDEN")
+
+	// Global admins get a 404.
+	router, _ = newOrgRolesRouter(t, globalAdminPrincipal())
+	wantProblem(t, putOrgRoles(t, router, "org-x", "bob", []string{"event_manager"}), http.StatusNotFound)
+}
+
+func TestConfigureMemberRoles_DemotedAdminWithOldTokenIsForbidden(t *testing.T) {
+	// bob's token still claims org_admin of org-1, but in Keycloak he is only event_manager.
+	principal := orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin)
+	principal.Subject = "u-bob"
+	router, fake := newOrgRolesRouter(t, principal)
+
+	rec := putOrgRoles(t, router, "org-1", "bob", []string{"org_admin", "event_manager"})
+	wantAPIError(t, rec, http.StatusForbidden, "FORBIDDEN")
+	if len(fake.Grants) != 0 || len(fake.Revokes) != 0 {
+		t.Errorf("no roles may change, got grants=%v revokes=%v", fake.Grants, fake.Revokes)
+	}
+}
+
+func TestConfigureMemberRoles_AuditLogKeepsPartialChangeOnFailure(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("alias-1", middleware.RoleOrganizationAdmin))
+	fake.FailAdminRequest = func(method, path string) bool {
+		return method == http.MethodPut && strings.HasSuffix(path, "/groups/g-admin/members/u-bob")
+	}
+
+	rec := putOrgRoles(t, router, "alias-1", "bob", []string{"org_admin"})
+	wantProblem(t, rec, http.StatusInternalServerError)
+
+	logged := buf.String()
+	for _, want := range []string{
+		"org_member_roles_change_failed",
+		"revoked=event_manager",
+		// Failures are logged with the resolved organization ID like successful changes.
+		"organization_id=org-1",
+	} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("failure log missing %q, got: %s", want, logged)
+		}
+	}
+}
+
+func TestCreateOrganization_ConflictForTakenAlias(t *testing.T) {
+	principal := globalAdminPrincipal()
+	principal.AccessToken = "svc-token"
+	router, _ := newOrgRolesRouter(t, principal)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/organizations/", strings.NewReader(`{"name":"Another name","alias":"alias-1","orgAdmin":"alice"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	wantProblem(t, rec, http.StatusConflict)
 }
