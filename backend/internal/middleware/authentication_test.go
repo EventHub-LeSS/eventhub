@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -149,6 +150,43 @@ func TestAuthenticateAcceptsMultipleOrganizations(t *testing.T) {
 	}
 }
 
+// arrayOrganizationClaims mimics a realm whose organization scope lacks the organization groups
+// mapper: Keycloak then emits the claim as a plain list of aliases.
+func arrayOrganizationClaims() *accessClaims {
+	claims := validClaims()
+	claims.Organizations = nil
+	claims.RawOrganizations = json.RawMessage(`["acme"]`)
+	return claims
+}
+
+func TestAuthenticateDecodesRawOrganizationClaim(t *testing.T) {
+	claims := validClaims()
+	claims.Organizations = nil
+	claims.RawOrganizations = json.RawMessage(`{"acme":{"groups":["/org_admin"]}}`)
+	client := &fakeKeycloakClient{active: true, claims: claims}
+	principal, err := newAuthenticator(testConfig(), client).Authenticate(context.Background(), "token")
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if principal.ActiveOrganization == nil || principal.ActiveOrganization.Alias != "acme" || principal.ActiveOrganization.ID != "acme" {
+		t.Fatalf("unexpected organization: %#v", principal.ActiveOrganization)
+	}
+	if !principal.HasOrganizationRoleIn("acme", RoleOrganizationAdmin) {
+		t.Fatalf("unexpected organization roles: %#v", principal.ActiveOrganization.Roles)
+	}
+}
+
+func TestAuthenticateReportsArrayOrganizationClaimAsUnsupported(t *testing.T) {
+	client := &fakeKeycloakClient{active: true, claims: arrayOrganizationClaims()}
+	_, err := newAuthenticator(testConfig(), client).Authenticate(context.Background(), "token")
+	if !errors.Is(err, ErrUnsupportedOrganizationClaim) {
+		t.Fatalf("Authenticate() error = %v, want ErrUnsupportedOrganizationClaim", err)
+	}
+	if errors.Is(err, ErrIdentityProviderUnavailable) {
+		t.Fatalf("Authenticate() error = %v must not claim that Keycloak is unavailable", err)
+	}
+}
+
 func TestAuthenticateAllowsRequiredAudienceAmongMultipleAudiences(t *testing.T) {
 	claims := validClaims()
 	claims.Audience = jwt.ClaimStrings{"account", "backend"}
@@ -209,6 +247,7 @@ func TestAuthenticationMiddlewareResponses(t *testing.T) {
 		{name: "inactive token", header: "Bearer token", client: &fakeKeycloakClient{active: false}, wantStatus: http.StatusUnauthorized, wantCode: "UNAUTHENTICATED"},
 		{name: "keycloak unavailable", header: "Bearer token", client: &fakeKeycloakClient{introspectErr: errors.New("timeout")}, wantStatus: http.StatusServiceUnavailable, wantCode: "IDENTITY_PROVIDER_UNAVAILABLE"},
 		{name: "JWKS unavailable", header: "Bearer token", client: &fakeKeycloakClient{active: true, decodeErr: errors.New("timeout")}, wantStatus: http.StatusServiceUnavailable, wantCode: "IDENTITY_PROVIDER_UNAVAILABLE"},
+		{name: "organization claim without groups mapper", header: "Bearer token", client: &fakeKeycloakClient{active: true, claims: arrayOrganizationClaims()}, wantStatus: http.StatusInternalServerError, wantCode: "UNSUPPORTED_ORGANIZATION_CLAIM"},
 		{name: "valid token", header: "Bearer token", client: &fakeKeycloakClient{active: true, claims: validClaims()}, wantStatus: http.StatusNoContent},
 	}
 	for _, tt := range tests {

@@ -3,8 +3,10 @@ package middleware
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,6 +31,10 @@ const (
 var (
 	ErrInvalidToken                = errors.New("invalid access token")
 	ErrIdentityProviderUnavailable = errors.New("identity provider unavailable")
+	// ErrUnsupportedOrganizationClaim means Keycloak issued a valid token whose organization claim
+	// is not an object keyed by alias. That happens when the realm's organization client scope lacks
+	// the organization groups mapper, e.g. a realm imported before the mapper was added.
+	ErrUnsupportedOrganizationClaim = errors.New("unsupported organization claim")
 )
 
 type AuthenticationConfig struct {
@@ -158,7 +164,11 @@ type accessClaims struct {
 	PreferredUsername string                       `json:"preferred_username"`
 	AuthorizedParty   string                       `json:"azp"`
 	ResourceAccess    map[string]resourceRoles     `json:"resource_access"`
-	Organizations     map[string]organizationClaim `json:"organization"`
+	Organizations     map[string]organizationClaim `json:"-"`
+	// RawOrganizations holds the organization claim while the token is decoded; it is parsed into
+	// Organizations only after verification, so a claim of the wrong shape is reported as such
+	// instead of failing token decoding as a whole.
+	RawOrganizations json.RawMessage `json:"organization"`
 }
 
 func (a *Authenticator) Authenticate(ctx context.Context, rawToken string) (*Principal, error) {
@@ -191,6 +201,11 @@ func (a *Authenticator) Authenticate(ctx context.Context, rawToken string) (*Pri
 	)
 	if err := validator.Validate(claims); err != nil {
 		return nil, ErrInvalidToken
+	}
+	if len(claims.RawOrganizations) > 0 {
+		if err := json.Unmarshal(claims.RawOrganizations, &claims.Organizations); err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedOrganizationClaim, claims.RawOrganizations)
+		}
 	}
 
 	principal, err := a.principalFromClaims(claims)
@@ -268,6 +283,13 @@ func (a *Authenticator) Middleware() gin.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, ErrIdentityProviderUnavailable) {
 				abortAuthentication(c, http.StatusServiceUnavailable, "IDENTITY_PROVIDER_UNAVAILABLE", "Authentication service is temporarily unavailable")
+				return
+			}
+			if errors.Is(err, ErrUnsupportedOrganizationClaim) {
+				slog.Error("access token has an organization claim of unsupported shape",
+					"error", err.Error(),
+					"hint", "the organization client scope of the realm lacks the organization groups mapper; run the seeder (docker compose up api-seed) to repair it")
+				abortAuthentication(c, http.StatusInternalServerError, "UNSUPPORTED_ORGANIZATION_CLAIM", "The organization claim of the access token has an unsupported format")
 				return
 			}
 			abortAuthentication(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Authentication is required")

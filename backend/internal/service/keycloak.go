@@ -95,35 +95,11 @@ const organizationMembershipMapper = "oidc-organization-membership-mapper"
 // Reports whether a mapper was updated.
 func (k *KeycloakService) EnsureOrganizationClaimName(ctx context.Context, accessToken, realm string) (bool, error) {
 	scopesURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + realm + "/client-scopes"
-
-	var scopes []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	if err := k.adminGetJSON(ctx, accessToken, scopesURL, &scopes); err != nil {
-		return false, fmt.Errorf("list client scopes: %w", err)
-	}
-	scopeID := ""
-	for _, scope := range scopes {
-		if scope.Name == "organization" {
-			scopeID = scope.ID
-			break
-		}
-	}
-	if scopeID == "" {
-		return false, nil
-	}
-
-	// Read the scope itself: the .../protocol-mappers/models endpoints fill in claim.name as a
-	// default even when it is not stored, which would hide exactly the broken mapper.
-	var scope struct {
-		ProtocolMappers []map[string]any `json:"protocolMappers"`
-	}
-	if err := k.adminGetJSON(ctx, accessToken, scopesURL+"/"+scopeID, &scope); err != nil {
-		return false, fmt.Errorf("read organization client scope: %w", err)
+	scopeID, mappers, err := k.organizationClientScope(ctx, accessToken, scopesURL)
+	if err != nil || scopeID == "" {
+		return false, err
 	}
 	mappersURL := scopesURL + "/" + scopeID + "/protocol-mappers/models"
-	mappers := scope.ProtocolMappers
 
 	updated := false
 	for _, mapper := range mappers {
@@ -149,6 +125,79 @@ func (k *KeycloakService) EnsureOrganizationClaimName(ctx context.Context, acces
 		updated = true
 	}
 	return updated, nil
+}
+
+const organizationGroupsMapper = "oidc-organization-group-membership-mapper"
+
+// EnsureOrganizationGroupsMapper adds the organization groups mapper to the "organization" client
+// scope if it is missing. Without it Keycloak emits the organization claim as a plain list of
+// aliases that carries no groups, so members would get no organization roles, and the backend
+// rejects such tokens. Realms imported before the mapper was added to the realm file keep the old
+// scope, because --import-realm skips existing realms. The mapper config matches
+// core/realms/eventhub-realm.json; addOrganizationId is deliberately left alone so repaired realms
+// issue the same claim as freshly imported ones (EVENTHUB-188). Reports whether it was added.
+func (k *KeycloakService) EnsureOrganizationGroupsMapper(ctx context.Context, accessToken, realm string) (bool, error) {
+	scopesURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + realm + "/client-scopes"
+	scopeID, mappers, err := k.organizationClientScope(ctx, accessToken, scopesURL)
+	if err != nil || scopeID == "" {
+		return false, err
+	}
+	for _, mapper := range mappers {
+		if mapper["protocolMapper"] == organizationGroupsMapper {
+			return false, nil
+		}
+	}
+	mapper := map[string]any{
+		"name":           "organization groups",
+		"protocol":       "openid-connect",
+		"protocolMapper": organizationGroupsMapper,
+		"config": map[string]any{
+			"claim.name":                "organization",
+			"id.token.claim":            "false",
+			"access.token.claim":        "true",
+			"userinfo.token.claim":      "false",
+			"introspection.token.claim": "true",
+		},
+	}
+	resp, err := k.client.GetRequestWithBearerAuth(ctx, accessToken).
+		SetBody(mapper).
+		Post(scopesURL + "/" + scopeID + "/protocol-mappers/models")
+	if err := adminResponseError(resp, err); err != nil {
+		return false, fmt.Errorf("add organization groups mapper: %w", err)
+	}
+	return true, nil
+}
+
+// organizationClientScope returns the ID and the stored protocol mappers of the "organization"
+// client scope, or an empty ID if the realm has no such scope.
+func (k *KeycloakService) organizationClientScope(ctx context.Context, accessToken, scopesURL string) (string, []map[string]any, error) {
+	var scopes []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := k.adminGetJSON(ctx, accessToken, scopesURL, &scopes); err != nil {
+		return "", nil, fmt.Errorf("list client scopes: %w", err)
+	}
+	scopeID := ""
+	for _, scope := range scopes {
+		if scope.Name == "organization" {
+			scopeID = scope.ID
+			break
+		}
+	}
+	if scopeID == "" {
+		return "", nil, nil
+	}
+
+	// Read the scope itself: the .../protocol-mappers/models endpoints fill in claim.name as a
+	// default even when it is not stored, which would hide exactly the broken mapper.
+	var scope struct {
+		ProtocolMappers []map[string]any `json:"protocolMappers"`
+	}
+	if err := k.adminGetJSON(ctx, accessToken, scopesURL+"/"+scopeID, &scope); err != nil {
+		return "", nil, fmt.Errorf("read organization client scope: %w", err)
+	}
+	return scopeID, scope.ProtocolMappers, nil
 }
 
 func (k *KeycloakService) adminGetJSON(ctx context.Context, accessToken, url string, target any) error {

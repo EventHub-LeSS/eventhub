@@ -18,6 +18,7 @@ type fakeKeycloakAdmin struct {
 	scopes  []map[string]any
 	mappers []map[string]any
 	puts    []map[string]any
+	posts   []map[string]any
 }
 
 func (f *fakeKeycloakAdmin) server(t *testing.T) *httptest.Server {
@@ -31,6 +32,17 @@ func (f *fakeKeycloakAdmin) server(t *testing.T) *httptest.Server {
 	})
 	mux.HandleFunc("GET /admin/realms/eventhub/client-scopes/scope-org/protocol-mappers/models", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(withDefaultClaimName(f.mappers))
+	})
+	mux.HandleFunc("POST /admin/realms/eventhub/client-scopes/scope-org/protocol-mappers/models", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		f.posts = append(f.posts, body)
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
 	})
 	mux.HandleFunc("PUT /admin/realms/eventhub/client-scopes/scope-org/protocol-mappers/models/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer admin-token" {
@@ -164,6 +176,58 @@ func TestEnsureOrganizationClaimName_WithoutOrganizationScope(t *testing.T) {
 	updated, err := kc.EnsureOrganizationClaimName(context.Background(), "admin-token", "eventhub")
 	if err != nil || updated {
 		t.Fatalf("expected no error and no update, got updated=%v err=%v", updated, err)
+	}
+}
+
+func TestEnsureOrganizationGroupsMapper_AddsMissingMapper(t *testing.T) {
+	// Keycloak's default organization scope only has the membership mapper, which emits the
+	// claim as a list of aliases without groups.
+	fake := &fakeKeycloakAdmin{
+		scopes:  organizationScopes(),
+		mappers: []map[string]any{membershipMapper(map[string]any{"claim.name": "organization"})},
+	}
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
+
+	added, err := kc.EnsureOrganizationGroupsMapper(context.Background(), "admin-token", "eventhub")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !added || len(fake.posts) != 1 {
+		t.Fatalf("expected the groups mapper to be added once, got added=%v posts=%d", added, len(fake.posts))
+	}
+	post := fake.posts[0]
+	if post["protocolMapper"] != "oidc-organization-group-membership-mapper" {
+		t.Errorf("added wrong mapper type: %v", post["protocolMapper"])
+	}
+	config, _ := post["config"].(map[string]any)
+	if config["claim.name"] != "organization" || config["access.token.claim"] != "true" || config["introspection.token.claim"] != "true" {
+		t.Errorf("unexpected mapper config: %v", config)
+	}
+	if len(fake.puts) != 0 {
+		t.Errorf("the membership mapper must not be changed, got puts: %v", fake.puts)
+	}
+}
+
+func TestEnsureOrganizationGroupsMapper_LeavesExistingMapperAlone(t *testing.T) {
+	fake := &fakeKeycloakAdmin{
+		scopes:  organizationScopes(),
+		mappers: []map[string]any{membershipMapper(map[string]any{"claim.name": "organization"}), groupsMapper()},
+	}
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
+
+	added, err := kc.EnsureOrganizationGroupsMapper(context.Background(), "admin-token", "eventhub")
+	if err != nil || added || len(fake.posts) != 0 {
+		t.Fatalf("expected no change, got added=%v posts=%d err=%v", added, len(fake.posts), err)
+	}
+}
+
+func TestEnsureOrganizationGroupsMapper_WithoutOrganizationScope(t *testing.T) {
+	fake := &fakeKeycloakAdmin{scopes: []map[string]any{{"id": "scope-profile", "name": "profile"}}}
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
+
+	added, err := kc.EnsureOrganizationGroupsMapper(context.Background(), "admin-token", "eventhub")
+	if err != nil || added || len(fake.posts) != 0 {
+		t.Fatalf("expected no error and no change, got added=%v posts=%d err=%v", added, len(fake.posts), err)
 	}
 }
 

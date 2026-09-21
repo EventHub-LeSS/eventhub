@@ -30,6 +30,9 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 	if err := s.ensureOrganizationClaimName(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureOrganizationGroupsMapper(ctx); err != nil {
+		return err
+	}
 	if err := s.ensureServiceAccount(ctx); err != nil {
 		return err
 	}
@@ -51,6 +54,19 @@ func (s *KeycloakSeeder) ensureOrganizationClaimName(ctx context.Context) error 
 	}
 	if updated {
 		log.Println("keycloak: set claim.name on the organization membership mapper")
+	}
+	return nil
+}
+
+// ensureOrganizationGroupsMapper repairs realms that were imported before the organization groups
+// mapper was added; without it tokens carry no organization roles (EVENTHUB-188).
+func (s *KeycloakSeeder) ensureOrganizationGroupsMapper(ctx context.Context) error {
+	added, err := s.kc.EnsureOrganizationGroupsMapper(ctx, s.token, s.realm)
+	if err != nil {
+		return fmt.Errorf("ensure organization groups mapper: %w", err)
+	}
+	if added {
+		log.Println("keycloak: added the organization groups mapper to the organization client scope")
 	}
 	return nil
 }
