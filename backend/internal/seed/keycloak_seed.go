@@ -30,6 +30,9 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 	if err := s.ensureOrganizationClaimName(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureServiceAccount(ctx); err != nil {
+		return err
+	}
 	if err := s.seedUsers(ctx); err != nil {
 		return err
 	}
@@ -48,6 +51,19 @@ func (s *KeycloakSeeder) ensureOrganizationClaimName(ctx context.Context) error 
 	}
 	if updated {
 		log.Println("keycloak: set claim.name on the organization membership mapper")
+	}
+	return nil
+}
+
+// ensureServiceAccount repairs realms that were imported before the backend client got its
+// service account (EVENTHUB-188); --import-realm never updates an existing realm.
+func (s *KeycloakSeeder) ensureServiceAccount(ctx context.Context) error {
+	updated, err := s.kc.EnsureServiceAccount(ctx, s.token, s.realm)
+	if err != nil {
+		return fmt.Errorf("ensure backend service account: %w", err)
+	}
+	if updated {
+		log.Println("keycloak: enabled the backend service account and granted its roles")
 	}
 	return nil
 }

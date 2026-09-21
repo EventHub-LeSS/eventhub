@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -166,6 +167,127 @@ func adminResponseError(resp *resty.Response, err error) error {
 		return fmt.Errorf("%s: %s", resp.Status(), resp.String())
 	}
 	return nil
+}
+
+// ServiceAccountRoles are the realm-management roles the backend service account needs to
+// configure organization member roles (EVENTHUB-188): manage-organizations to change org group
+// memberships, manage-users to look up users and write the memberships. realm-admin is not needed.
+var ServiceAccountRoles = []string{"manage-organizations", "manage-users"}
+
+// EnsureServiceAccount enables the service account of the configured backend client and grants it
+// ServiceAccountRoles, both as role mapping and as scope mapping: the client has
+// fullScopeAllowed=false, so without the scope mapping the roles never reach the token. Realms
+// imported before the service account was added stay without it, because --import-realm skips
+// existing realms. Clients are read and written as raw JSON so that no attributes get lost.
+// Reports whether anything was changed.
+func (k *KeycloakService) EnsureServiceAccount(ctx context.Context, accessToken, realm string) (bool, error) {
+	adminURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + realm
+
+	client, err := k.adminFindClient(ctx, accessToken, adminURL, k.cfg.ClientID)
+	if err != nil {
+		return false, err
+	}
+	if client == nil {
+		return false, fmt.Errorf("client %q not found", k.cfg.ClientID)
+	}
+	clientID, _ := client["id"].(string)
+
+	updated := false
+	if enabled, _ := client["serviceAccountsEnabled"].(bool); !enabled {
+		client["serviceAccountsEnabled"] = true
+		resp, err := k.client.GetRequestWithBearerAuth(ctx, accessToken).SetBody(client).Put(adminURL + "/clients/" + clientID)
+		if err := adminResponseError(resp, err); err != nil {
+			return false, fmt.Errorf("enable service account: %w", err)
+		}
+		updated = true
+	}
+
+	realmManagement, err := k.adminFindClient(ctx, accessToken, adminURL, "realm-management")
+	if err != nil {
+		return updated, err
+	}
+	if realmManagement == nil {
+		return updated, fmt.Errorf("client %q not found", "realm-management")
+	}
+	realmManagementID, _ := realmManagement["id"].(string)
+
+	var serviceAccountUser struct {
+		ID string `json:"id"`
+	}
+	if err := k.adminGetJSON(ctx, accessToken, adminURL+"/clients/"+clientID+"/service-account-user", &serviceAccountUser); err != nil {
+		return updated, fmt.Errorf("read service account user: %w", err)
+	}
+
+	var roles []map[string]any
+	if err := k.adminGetJSON(ctx, accessToken, adminURL+"/clients/"+realmManagementID+"/roles", &roles); err != nil {
+		return updated, fmt.Errorf("list realm-management roles: %w", err)
+	}
+
+	for _, mapping := range []struct{ name, url string }{
+		{"role mapping", adminURL + "/users/" + serviceAccountUser.ID + "/role-mappings/clients/" + realmManagementID},
+		{"scope mapping", adminURL + "/clients/" + clientID + "/scope-mappings/clients/" + realmManagementID},
+	} {
+		added, err := k.adminAddMissingRoles(ctx, accessToken, mapping.url, roles, ServiceAccountRoles)
+		if err != nil {
+			return updated, fmt.Errorf("service account %s: %w", mapping.name, err)
+		}
+		updated = updated || added
+	}
+	return updated, nil
+}
+
+// adminFindClient returns the raw representation of the client with the given clientId, or nil.
+func (k *KeycloakService) adminFindClient(ctx context.Context, accessToken, adminURL, clientID string) (map[string]any, error) {
+	var clients []map[string]any
+	if err := k.adminGetJSON(ctx, accessToken, adminURL+"/clients?clientId="+url.QueryEscape(clientID), &clients); err != nil {
+		return nil, fmt.Errorf("look up client %q: %w", clientID, err)
+	}
+	for _, client := range clients {
+		if client["clientId"] == clientID {
+			return client, nil
+		}
+	}
+	return nil, nil
+}
+
+// adminAddMissingRoles adds the wanted roles to a role or scope mapping endpoint unless they are
+// already mapped. available are the client's role representations the wanted names refer to.
+func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken, mappingURL string, available []map[string]any, wanted []string) (bool, error) {
+	var mapped []map[string]any
+	if err := k.adminGetJSON(ctx, accessToken, mappingURL, &mapped); err != nil {
+		return false, err
+	}
+	have := make(map[string]bool, len(mapped))
+	for _, role := range mapped {
+		if name, ok := role["name"].(string); ok {
+			have[name] = true
+		}
+	}
+	byName := make(map[string]map[string]any, len(available))
+	for _, role := range available {
+		if name, ok := role["name"].(string); ok {
+			byName[name] = role
+		}
+	}
+	var missing []map[string]any
+	for _, name := range wanted {
+		if have[name] {
+			continue
+		}
+		role, ok := byName[name]
+		if !ok {
+			return false, fmt.Errorf("role %q not found", name)
+		}
+		missing = append(missing, role)
+	}
+	if len(missing) == 0 {
+		return false, nil
+	}
+	resp, err := k.client.GetRequestWithBearerAuth(ctx, accessToken).SetBody(missing).Post(mappingURL)
+	if err := adminResponseError(resp, err); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
