@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getSession, requireSession } from "@/features/auth"
+import {
+  createSessionCookie,
+  getSession,
+  organizationsFromClaims,
+  refreshAccessToken,
+  requireSession,
+  setActiveOrganizationCookie,
+} from "@/features/auth"
 import type { OrganizationPayload } from "@/features/organizations"
 
 export async function POST(request: NextRequest) {
@@ -36,5 +43,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(body, { status: response.status })
+  const selfAdmin = payload.orgAdmin.trim().toLowerCase() === session.email.trim().toLowerCase()
+  const alias = (body as { alias?: unknown } | null)?.alias
+
+  if (response.ok && selfAdmin && typeof alias === "string") {
+    try {
+      const refreshed = await refreshAccessToken(session.refreshToken)
+
+      if (refreshed.accessToken) {
+        await createSessionCookie({
+          ...session,
+          organizations: refreshed.claims
+            ? organizationsFromClaims(refreshed.claims.organization)
+            : session.organizations,
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken,
+          accessTokenExpiresAt: Date.now() + (refreshed.expiresIn ?? 0) * 1000,
+        })
+      }
+    } catch {
+    }
+
+    await setActiveOrganizationCookie(alias)
+  }
+
+  return NextResponse.json(
+    response.ok ? { ...(body as object), selfAdmin } : body,
+    { status: response.status }
+  )
 }

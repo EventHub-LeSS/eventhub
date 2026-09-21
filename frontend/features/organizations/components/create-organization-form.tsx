@@ -13,6 +13,7 @@ import {
 } from "@/features/organizations/lib/organization";
 import slugify from "slugify";
 import { Button } from "@/features/shared/components/ui/button";
+import { toast } from "@/features/shared/components/ui/toast";
 import {
   Field,
   FieldDescription,
@@ -58,8 +59,21 @@ export function CreateOrganizationForm({
     }
 
     createOrganization.mutate(toOrganizationPayload(draft), {
-      onSuccess: () => {
-        router.push("/organizations");
+      onSuccess: (data) => {
+        if (data.selfAdmin) {
+          toast.add({
+            type: "success",
+            title: "Successfully created organization",
+            description: `You're now managing ${data.name}.`,
+          });
+          router.push("/organization");
+        } else {
+          toast.add({
+            title: "Organization created",
+            description: `${data.name} was created and assigned to ${draft.orgAdmin}.`,
+          });
+          router.push("/organizations");
+        }
       },
     });
   }

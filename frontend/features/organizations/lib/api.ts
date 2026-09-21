@@ -12,6 +12,8 @@ export interface CreateOrganizationResponse {
   id: string;
   name: string;
   alias: string;
+  /** Whether the creator made themselves the organization's admin */
+  selfAdmin: boolean;
 }
 
 export function useCreateOrganization() {
@@ -40,7 +42,15 @@ async function createOrganization(
 
 function errorMessage(body: unknown, status: number): string {
   if (body && typeof body === "object") {
-    const { error, message } = body as { error?: unknown; message?: unknown };
+    const { error, message, detail } = body as {
+      error?: unknown;
+      message?: unknown;
+      detail?: unknown;
+    };
+
+    if (typeof detail === "string" && detail) {
+      return detail;
+    }
 
     if (typeof error === "string" && error) {
       return error;
