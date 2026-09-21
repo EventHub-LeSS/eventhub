@@ -77,7 +77,7 @@ func main() {
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
-	eventHandler := handler.NewEventHandler(eventService)
+	eventHandler := handler.NewEventHandler(eventService, keycloakService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
