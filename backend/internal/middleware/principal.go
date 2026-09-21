@@ -1,6 +1,10 @@
 package middleware
 
-import "time"
+import (
+	"time"
+
+	"backend/internal/model"
+)
 
 type GlobalRole string
 
@@ -10,13 +14,16 @@ const (
 	RoleVisitor   GlobalRole = "visitor"
 )
 
-type OrganizationRole string
+// Organization roles are defined in model (EVENTHUB-188); the aliases keep the middleware API.
+type OrganizationRole = model.OrganizationRole
 
 const (
-	RoleOrganizationAdmin OrganizationRole = "org_admin"
-	RoleEventManager      OrganizationRole = "event_manager"
-	RoleFinanceViewer     OrganizationRole = "finance_viewer"
+	RoleOrganizationAdmin = model.RoleOrganizationAdmin
+	RoleEventManager      = model.RoleEventManager
+	RoleFinanceViewer     = model.RoleFinanceViewer
 )
+
+var OrganizationRoles = model.OrganizationRoles
 
 type OrganizationAccess struct {
 	ID    string

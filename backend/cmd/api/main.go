@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 
 	_ "backend/docs"
@@ -29,6 +30,9 @@ import (
 // @description Enter "Bearer {token}" where {token} is a Keycloak access token
 func main() {
 	godotenv.Load()
+
+	// Structured logs for audit events (EVENTHUB-188); plain text like the rest of the app.
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
@@ -99,6 +103,15 @@ func main() {
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
+	}
+
+	// EVENTHUB-188: organization admins configure the roles of their members. The handler checks
+	// the org_admin role itself after resolving the organization, which the path may address by
+	// ID or alias while tokens only carry the alias.
+	orgRoles := v1.Group("/organizations")
+	orgRoles.Use(authenticator.Middleware())
+	{
+		orgRoles.PUT("/:organizationID/members/:username/roles", orgHandler.ConfigureMemberRoles)
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))
