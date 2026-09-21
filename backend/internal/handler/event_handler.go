@@ -5,7 +5,6 @@ import (
 	"backend/internal/model"
 	"backend/internal/service"
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -173,7 +172,6 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")
-		slog.ErrorContext(c, "Internal Server Error", err)
 	}
 }
 

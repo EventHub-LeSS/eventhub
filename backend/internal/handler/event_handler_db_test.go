@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/keycloakmock"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
@@ -118,10 +119,16 @@ func principalManaging(keycloakOrgIDs ...string) *middleware.Principal {
 	return p
 }
 
-func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
+func newEventRouter(db *gorm.DB, principal *middleware.Principal, t *testing.T, fakes ...*keycloakmock.Fake) http.Handler {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	eventService := service.NewEventService(repository.NewEventRepository(db), repository.NewOrganizationRepository(db))
-	h := NewEventHandler(eventService, nil)
+	fake := keycloakmock.New()
+	if len(fakes) > 0 {
+		fake = fakes[0]
+	}
+	kc := fake.KeycloakService(t)
+	h := NewEventHandler(eventService, kc)
 
 	setPrincipal := func(c *gin.Context) {
 		if principal != nil {
@@ -131,6 +138,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	}
 
 	r := gin.New()
+	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, h.PublishEventHandler)
 	return r
@@ -157,6 +165,164 @@ func postPublish(t *testing.T, router http.Handler, eventID string) *httptest.Re
 	return rec
 }
 
+func getOwnEvents(router http.Handler) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/self", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func assertOwnEventsProblem(t *testing.T, rec *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("expected %d, got %d: %s", status, rec.Code, rec.Body.String())
+	}
+	var problem model.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v; body: %s", err, rec.Body.String())
+	}
+	if problem.Status != status || problem.Type != "about:blank" || problem.Title != http.StatusText(status) || problem.Detail == "" {
+		t.Errorf("unexpected problem response: %+v", problem)
+	}
+}
+
+func TestListOwnEventsHandler_AggregatesManagedOrganizations(t *testing.T) {
+	db := setupHandlerDB(t)
+	want := map[uuid.UUID]seededEvent{}
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		event := seedEventForOrg(t, db, "kc-org-a", status)
+		want[event.eventID] = event
+	}
+	event := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	want[event.eventID] = event
+	seedEventForOrg(t, db, "kc-org-finance", model.EventStatusPublished)
+	seedEventForOrg(t, db, "kc-org-foreign", model.EventStatusPublished)
+
+	fake := keycloakmock.New()
+	fake.OrgAliases = map[string]string{"alias-a": "kc-org-a", "alias-b": "kc-org-b", "alias-finance": "kc-org-finance"}
+	principal := principalManaging("alias-a", "alias-b")
+	principal.AccessToken = "svc-token"
+	principal.ActiveOrganization = principal.Organizations[0]
+	principal.Organizations = append(principal.Organizations, &middleware.OrganizationAccess{
+		ID: "alias-finance", Alias: "alias-finance",
+		Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleFinanceViewer: {}},
+	})
+
+	rec := getOwnEvents(newEventRouter(db, principal, t, fake))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var events []model.EventModel
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
+	if len(events) != len(want) {
+		t.Fatalf("expected %d events, got %d: %s", len(want), len(events), rec.Body.String())
+	}
+	for _, event := range events {
+		seeded, ok := want[event.EventID]
+		if !ok {
+			t.Fatalf("unexpected or duplicate event %s", event.EventID)
+		}
+		if event.OrganizerID == nil || *event.OrganizerID != seeded.ownerOrgID {
+			t.Errorf("event %s has unexpected organizer %v", event.EventID, event.OrganizerID)
+		}
+		delete(want, event.EventID)
+	}
+}
+
+func TestListOwnEventsHandler_EmptyArray(t *testing.T) {
+	db := setupHandlerDB(t)
+	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", uuid.New(), "org-1", "Empty organization").Error; err != nil {
+		t.Fatalf("seed organization: %v", err)
+	}
+	seedEventForOrg(t, db, "foreign-org", model.EventStatusPublished)
+	principal := principalManaging("alias-1")
+	principal.AccessToken = "svc-token"
+	rec := getOwnEvents(newEventRouter(db, principal, t))
+	if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+		t.Fatalf("expected 200 with [], got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListOwnEventsHandler_AccessChecks(t *testing.T) {
+	tests := []struct {
+		name      string
+		principal *middleware.Principal
+		want      int
+	}{
+		{name: "unauthenticated", want: http.StatusUnauthorized},
+		{name: "no organization role", principal: &middleware.Principal{Subject: "u"}, want: http.StatusForbidden},
+		{name: "finance role only", principal: &middleware.Principal{Subject: "u", Organizations: []*middleware.OrganizationAccess{
+			{ID: "alias-1", Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleFinanceViewer: {}}},
+		}}, want: http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := keycloakmock.New()
+			rec := getOwnEvents(newEventRouter(nil, tt.principal, t, fake))
+			assertOwnEventsProblem(t, rec, tt.want)
+			fake.Mu.Lock()
+			defer fake.Mu.Unlock()
+			if len(fake.AdminRequests) != 0 || fake.TokenRequests != 0 {
+				t.Error("access rejection should not contact Keycloak")
+			}
+		})
+	}
+}
+
+func TestListOwnEventsHandler_KeycloakFailure(t *testing.T) {
+	fake := keycloakmock.New()
+	fake.FailAdminRequest = func(method, path string) bool { return true }
+	principal := principalManaging("alias-1")
+	principal.AccessToken = "svc-token"
+	rec := getOwnEvents(newEventRouter(nil, principal, t, fake))
+	assertOwnEventsProblem(t, rec, http.StatusInternalServerError)
+}
+
+func TestListOwnEventsHandler_DoesNotReturnPartialResults(t *testing.T) {
+	db := setupHandlerDB(t)
+	seedEventForOrg(t, db, "org-1", model.EventStatusPublished)
+	fake := keycloakmock.New()
+	fake.OrgAliases["alias-2"] = "org-2"
+	requests := 0
+	fake.FailAdminRequest = func(method, path string) bool {
+		requests++
+		return requests > 1
+	}
+	principal := principalManaging("alias-1", "alias-2")
+	principal.AccessToken = "svc-token"
+	rec := getOwnEvents(newEventRouter(db, principal, t, fake))
+	assertOwnEventsProblem(t, rec, http.StatusInternalServerError)
+	fake.Mu.Lock()
+	defer fake.Mu.Unlock()
+	if requests < 2 {
+		t.Fatal("expected lookup of the second organization after loading the first")
+	}
+}
+
+func TestListOwnEventsHandler_DatabaseFailure(t *testing.T) {
+	db := setupHandlerDB(t)
+	seedEventForOrg(t, db, "org-1", model.EventStatusPublished)
+	// Fail only the event query, after the organization lookup succeeds.
+	const callback = "test:list_own_events_failure"
+	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Table == "events" {
+			err := tx.AddError(errors.New("event query failed"))
+			if err != nil {
+				t.Fatalf("issue mocking callback: %v", err)
+			}
+		}
+	}); err != nil {
+		t.Fatalf("register query failure: %v", err)
+	}
+	t.Cleanup(func() { db.Callback().Query().Remove(callback) })
+	principal := principalManaging("alias-1")
+	principal.AccessToken = "svc-token"
+	rec := getOwnEvents(newEventRouter(db, principal, t))
+	assertOwnEventsProblem(t, rec, http.StatusInternalServerError)
+}
+
 func validBody(s seededEvent) map[string]any {
 	return map[string]any{
 		"title":      "Neues Konzert",
@@ -172,7 +338,7 @@ func validBody(s seededEvent) map[string]any {
 func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := putEvent(t, router, seeded.eventID.String(), validBody(seeded))
 	if rec.Code != http.StatusOK {
@@ -197,7 +363,7 @@ func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 func TestUpdateEventHandler_RejectsForeignEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a"))
+	router := newEventRouter(db, principalManaging("kc-org-a"), t)
 
 	rec := putEvent(t, router, seeded.eventID.String(), validBody(seeded))
 	if rec.Code != http.StatusForbidden {
@@ -235,7 +401,7 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := putEvent(t, newEventRouter(db, tt.principal), tt.eventID, tt.body)
+			rec := putEvent(t, newEventRouter(db, tt.principal, t), tt.eventID, tt.body)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
@@ -246,7 +412,7 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 func TestPublishEventHandler_PublishesOwnDraftEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := postPublish(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusOK {
@@ -273,7 +439,7 @@ func TestPublishEventHandler_RejectsIncompleteEvent(t *testing.T) {
 	if err := db.Exec("UPDATE events SET category_id = NULL WHERE event_id = ?", seeded.eventID).Error; err != nil {
 		t.Fatalf("break event: %v", err)
 	}
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	rec := postPublish(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusBadRequest {
@@ -307,7 +473,7 @@ func TestPublishEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postPublish(t, newEventRouter(db, tt.principal), tt.eventID)
+			rec := postPublish(t, newEventRouter(db, tt.principal, t), tt.eventID)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
