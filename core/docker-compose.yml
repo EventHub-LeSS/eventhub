@@ -137,8 +137,10 @@ services:
       context: ./keycloak-swagger
       dockerfile: Dockerfile
     container_name: keycloak_swagger
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
     ports:
-      - "8080:8080"
+      - "8088:8080"
 
 volumes:
   keycloak_postgres_data:
