@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +24,13 @@ type userPageKeycloak struct {
 	roles    http.HandlerFunc
 }
 
+func writeUserPageResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := io.WriteString(w, body); err != nil {
+		t.Errorf("write Keycloak test response: %v", err)
+	}
+}
+
 func (f *userPageKeycloak) service(t *testing.T) *KeycloakService {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -41,7 +47,7 @@ func (f *userPageKeycloak) service(t *testing.T) *KeycloakService {
 			f.login(w, r)
 			return
 		}
-		fmt.Fprint(w, `{"access_token":"test-service-token","expires_in":300}`)
+		writeUserPageResponse(t, w, `{"access_token":"test-service-token","expires_in":300}`)
 	})
 	mux.HandleFunc("GET /admin/realms/eventhub/clients", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -56,7 +62,7 @@ func (f *userPageKeycloak) service(t *testing.T) *KeycloakService {
 			f.client(w, r)
 			return
 		}
-		fmt.Fprint(w, `[{"id":"client-backend","clientId":"backend"}]`)
+		writeUserPageResponse(t, w, `[{"id":"client-backend","clientId":"backend"}]`)
 	})
 	mux.HandleFunc("GET /admin/realms/eventhub/users/{id}/role-mappings/clients/client-backend", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -67,7 +73,7 @@ func (f *userPageKeycloak) service(t *testing.T) *KeycloakService {
 			f.roles(w, r)
 			return
 		}
-		fmt.Fprint(w, `[{"name":"visitor"}]`)
+		writeUserPageResponse(t, w, `[{"name":"visitor"}]`)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -108,12 +114,12 @@ func TestGetUsersGlobalRolesBoundedAndOrdered(t *testing.T) {
 			case <-r.Context().Done():
 				return
 			}
-			fmt.Fprint(w, `[{"name":"visitor"},{"name":"ignored"},{"name":"admin"}]`)
+			writeUserPageResponse(t, w, `[{"name":"visitor"},{"name":"ignored"},{"name":"admin"}]`)
 		case ids[1]:
 			secondOnce.Do(func() { close(secondDone) })
-			fmt.Fprint(w, `[{"name":"moderator"}]`)
+			writeUserPageResponse(t, w, `[{"name":"moderator"}]`)
 		default:
-			fmt.Fprint(w, `[]`)
+			writeUserPageResponse(t, w, `[]`)
 		}
 	}}
 	kc := fake.service(t)
@@ -244,9 +250,9 @@ func TestGetUsersGlobalRolesInvalidatesRejectedToken(t *testing.T) {
 					return
 				}
 				if stage == "client" {
-					fmt.Fprint(w, `[{"id":"client-backend","clientId":"backend"}]`)
+					writeUserPageResponse(t, w, `[{"id":"client-backend","clientId":"backend"}]`)
 				} else {
-					fmt.Fprint(w, `[{"name":"visitor"}]`)
+					writeUserPageResponse(t, w, `[{"name":"visitor"}]`)
 				}
 			}
 			fake := &userPageKeycloak{}
@@ -316,10 +322,10 @@ func TestGetUsersGlobalRolesCancelsWhileWaitingForLogin(t *testing.T) {
 	kc := fake.service(t)
 	firstCtx, firstCancel := context.WithCancel(context.Background())
 	defer firstCancel()
-	firstDone := make(chan struct{})
+	firstDone := make(chan error, 1)
 	go func() {
-		defer close(firstDone)
-		kc.GetUsersGlobalRoles(firstCtx, []string{"a"})
+		_, err := kc.GetUsersGlobalRoles(firstCtx, []string{"a"})
+		firstDone <- err
 	}()
 	select {
 	case <-loginStarted:
@@ -333,7 +339,10 @@ func TestGetUsersGlobalRolesCancelsWhileWaitingForLogin(t *testing.T) {
 	}
 	firstCancel()
 	select {
-	case <-firstDone:
+	case err := <-firstDone:
+		if err == nil {
+			t.Fatal("canceled login unexpectedly succeeded")
+		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("first request did not cancel")
 	}
@@ -345,7 +354,7 @@ func TestGetUsersGlobalRolesDoesNotRequestOffPageUsers(t *testing.T) {
 			http.Error(w, `{"error":"off-page user is broken"}`, http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode([]map[string]string{{"name": "visitor"}})
+		writeUserPageResponse(t, w, `[{"name":"visitor"}]`)
 	}}
 	roles, err := fake.service(t).GetUsersGlobalRoles(context.Background(), []string{"on-page"})
 	if err != nil || !reflect.DeepEqual(roles, [][]string{{"visitor"}}) {

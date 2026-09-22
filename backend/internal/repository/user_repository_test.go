@@ -41,6 +41,8 @@ func TestGetPageQueries(t *testing.T) {
 				switch dest := tx.Statement.Dest.(type) {
 				case *int64:
 					counts++
+					// DryRun assertions intentionally do not use an IDE data source.
+					//noinspection SqlNoDataSourceInspection
 					if got := tx.Statement.SQL.String(); got != `SELECT count(*) FROM "users"` {
 						t.Fatalf("count SQL = %s", got)
 					}
@@ -48,6 +50,7 @@ func TestGetPageQueries(t *testing.T) {
 					tx.RowsAffected = 1
 				case *[]*model.UserModel:
 					pages++
+					//noinspection SqlNoDataSourceInspection
 					wantSQL := `SELECT * FROM "users" ORDER BY user_id ASC LIMIT $1`
 					wantVars := []any{tt.limit}
 					if tt.wantOffset > 0 {
@@ -88,7 +91,9 @@ func TestGetPageErrors(t *testing.T) {
 					*count = 100
 					tx.RowsAffected = 1
 				} else {
-					tx.AddError(wantErr)
+					if err := tx.AddError(wantErr); !errors.Is(err, wantErr) {
+						t.Fatalf("inject query error: %v", err)
+					}
 				}
 			})
 			users, _, err := NewUserRepository(db).GetPage(context.Background(), 1, 10)
@@ -124,7 +129,11 @@ func userPageDryRunDB(t *testing.T, afterQuery func(*gorm.DB)) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { sqlDB.Close() })
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close test database: %v", err)
+		}
+	})
 	if err := db.Callback().Query().After("gorm:query").Register("test:page-results", afterQuery); err != nil {
 		t.Fatal(err)
 	}
