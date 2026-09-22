@@ -457,14 +457,14 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 			removeRoles = append(removeRoles, *role)
 		}
 	}
+if len(removeRoles) > 0 {
+		if err := k.client.DeleteClientRoleFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
+			return nil, fmt.Errorf("remove roles from user: %w", err)
+		}
+	}
 	if len(addRoles) > 0 {
 		if err := k.client.AddClientRoleToUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, addRoles); err != nil {
 			return nil, fmt.Errorf("add roles to user: %w", err)
-		}
-	}
-	if len(removeRoles) > 0 {
-		if err := k.client.DeleteClientRoleFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
-			return nil, fmt.Errorf("remove roles from user: %w", err)
 		}
 	}
 	ordered := make([]string, 0, len(desired))
