@@ -32,30 +32,46 @@ type KeycloakService struct {
 
 	// Cached service-account token for admin operations (EVENTHUB-188).
 	adminTokenMu      sync.Mutex
+	adminLoginGate    chan struct{}
 	adminTokenValue   string
 	adminTokenExpires time.Time
 }
 
 func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 	return &KeycloakService{
-		cfg:    cfg,
-		client: gocloak.NewClient(cfg.Host),
+		cfg:            cfg,
+		client:         gocloak.NewClient(cfg.Host),
+		adminLoginGate: make(chan struct{}, 1),
 	}
 }
 
 // adminToken returns the service-account token for admin operations, caching it
 // until shortly before it expires instead of logging in on every call.
 func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
-	k.adminTokenMu.Lock()
-	defer k.adminTokenMu.Unlock()
-	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
-		return k.adminTokenValue, nil
+	// Waiting for another request's login must respect this request's deadline too.
+	select {
+	case k.adminLoginGate <- struct{}{}:
+		defer func() { <-k.adminLoginGate }()
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	k.adminTokenMu.Lock()
+	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
+		value := k.adminTokenValue
+		k.adminTokenMu.Unlock()
+		return value, nil
+	}
+	k.adminTokenMu.Unlock()
 	token, err := k.client.LoginClient(ctx, k.cfg.ClientID, k.cfg.ClientSecret, k.cfg.AdminRealm)
 	if err != nil {
 		return "", fmt.Errorf("keycloak admin login failed: %w", err)
 	}
 	const expirySkew = 30 * time.Second
+	k.adminTokenMu.Lock()
+	defer k.adminTokenMu.Unlock()
 	k.adminTokenValue = token.AccessToken
 	k.adminTokenExpires = time.Now().Add(time.Duration(token.ExpiresIn)*time.Second - expirySkew)
 	return token.AccessToken, nil
@@ -351,6 +367,162 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 	return true, nil
 }
 
+func (k *KeycloakService) backendClientID(ctx context.Context, accessToken string) (string, error) {
+	clients, err := k.client.GetClients(ctx, accessToken, k.cfg.UserRealm, gocloak.GetClientsParams{
+		ClientID: &k.cfg.ClientID,
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, client := range clients {
+		if client != nil && client.ClientID != nil && *client.ClientID == k.cfg.ClientID {
+			if client.ID == nil || *client.ID == "" {
+				return "", fmt.Errorf("client %q missing id", k.cfg.ClientID)
+			}
+			return *client.ID, nil
+		}
+	}
+	return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
+}
+
+func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) (result []string, err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	return k.userGlobalRoles(ctx, accessToken, clientID, keycloakUserID)
+}
+
+func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clientID, keycloakUserID string) ([]string, error) {
+	roles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch global roles for %s: %w", keycloakUserID, err)
+	}
+	selected := make([]string, 0, len(roles))
+	for _, role := range roles {
+		if role == nil || role.Name == nil || *role.Name == "" {
+			continue
+		}
+		switch *role.Name {
+		case "admin", "moderator", "visitor":
+			selected = append(selected, *role.Name)
+		}
+	}
+	slices.Sort(selected)
+	return selected, nil
+}
+
+func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) (result []string, err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	unlock := lockGlobalRoleUpdate(k.cfg.UserRealm, clientID)
+	defer unlock()
+
+	allowed := map[string]struct{}{"admin": {}, "moderator": {}, "visitor": {}}
+	for _, name := range desired {
+		if _, ok := allowed[name]; !ok {
+			return nil, fmt.Errorf("unsupported role %q", name)
+		}
+	}
+	currentRoles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("read existing roles for %s: %w", keycloakUserID, err)
+	}
+	current := make(map[string]*gocloak.Role, len(currentRoles))
+	for _, role := range currentRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			current[*role.Name] = role
+		}
+	}
+	availableRoles, err := k.client.GetClientRoles(ctx, accessToken, k.cfg.UserRealm, clientID, gocloak.GetRoleParams{})
+	if err != nil {
+		return nil, fmt.Errorf("list available global roles: %w", err)
+	}
+	byName := make(map[string]*gocloak.Role, len(availableRoles))
+	for _, role := range availableRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			byName[*role.Name] = role
+		}
+	}
+
+	desiredSet := make(map[string]struct{}, len(desired))
+	for _, name := range desired {
+		desiredSet[name] = struct{}{}
+	}
+	if _, isAdmin := current["admin"]; isAdmin {
+		if _, keepAdmin := desiredSet["admin"]; !keepAdmin {
+			maxAdmins := 2
+			otherAdmins, err := k.client.GetUsersByClientRoleName(ctx, accessToken, k.cfg.UserRealm, clientID, "admin", gocloak.GetUsersByRoleParams{
+				Max: &maxAdmins,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("check remaining global admins: %w", err)
+			}
+			hasOtherAdmin := false
+			for _, admin := range otherAdmins {
+				if admin != nil && admin.ID != nil && *admin.ID != keycloakUserID {
+					hasOtherAdmin = true
+					break
+				}
+			}
+			if !hasOtherAdmin {
+				return nil, ErrLastGlobalAdmin
+			}
+		}
+	}
+	var addRoles []gocloak.Role
+	var removeRoles []gocloak.Role
+	for name := range allowed {
+		if _, ok := desiredSet[name]; ok {
+			if _, exists := current[name]; !exists {
+				role, ok := byName[name]
+				if !ok {
+					return nil, fmt.Errorf("role %q is missing in Keycloak", name)
+				}
+				addRoles = append(addRoles, *role)
+			}
+			continue
+		}
+		if role, exists := current[name]; exists {
+			removeRoles = append(removeRoles, *role)
+		}
+	}
+	if len(removeRoles) > 0 {
+		if err := k.client.DeleteClientRolesFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
+			return nil, fmt.Errorf("remove roles from user: %w", err)
+		}
+	}
+	if len(addRoles) > 0 {
+		if err := k.client.AddClientRolesToUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, addRoles); err != nil {
+			return nil, fmt.Errorf("add roles to user: %w", err)
+		}
+	}
+	result = make([]string, 0, len(desired))
+	for _, name := range desired {
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result, nil
+}
+
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
 	maxResults := 100
 	page := 0
@@ -610,6 +782,7 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
 	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
@@ -650,6 +823,16 @@ var orgMutexes sync.Map // map[string]*sync.Mutex
 
 func lockOrganization(orgID string) func() {
 	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+var globalRoleMutexes sync.Map // map[string]*sync.Mutex
+
+func lockGlobalRoleUpdate(realm, clientID string) func() {
+	key := realm + "/" + clientID
+	value, _ := globalRoleMutexes.LoadOrStore(key, &sync.Mutex{})
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock

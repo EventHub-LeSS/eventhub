@@ -72,6 +72,7 @@ func main() {
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 
 	r := gin.Default()
@@ -97,6 +98,13 @@ func main() {
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+		}
+		adminUsers := v1.Group("/admin/users")
+		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+		{
+			adminUsers.GET("", userAdminHandler.ListUsers)
+			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
+			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
 		}
 	}
 	orgs := v1.Group("/organizations")
