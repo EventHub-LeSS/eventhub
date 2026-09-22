@@ -5,6 +5,7 @@ import (
 	"backend/internal/repository"
 	"backend/internal/service"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -79,6 +80,7 @@ func writeBookingError(c *gin.Context, err error) {
 	case errors.As(err, &capacityErr):
 		writeProblem(c, http.StatusConflict, err.Error())
 	default:
+		log.Printf("unexpected booking error: %V", err)
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }
