@@ -417,15 +417,19 @@ func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clie
 	return selected, nil
 }
 
-func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) ([]string, error) {
+func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) (result []string, err error) {
 	accessToken, err := k.adminToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetch admin token: %w", err)
 	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
 	clientID, err := k.backendClientID(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("resolve backend client id: %w", err)
 	}
+	unlock := lockGlobalRoleUpdate(k.cfg.UserRealm, clientID)
+	defer unlock()
+
 	allowed := map[string]struct{}{"admin": {}, "moderator": {}, "visitor": {}}
 	for _, name := range desired {
 		if _, ok := allowed[name]; !ok {
@@ -511,12 +515,12 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 			return nil, fmt.Errorf("add roles to user: %w", err)
 		}
 	}
-	ordered := make([]string, 0, len(desired))
+	result = make([]string, 0, len(desired))
 	for _, name := range desired {
-		ordered = append(ordered, name)
+		result = append(result, name)
 	}
-	slices.Sort(ordered)
-	return ordered, nil
+	slices.Sort(result)
+	return result, nil
 }
 
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
@@ -819,6 +823,16 @@ var orgMutexes sync.Map // map[string]*sync.Mutex
 
 func lockOrganization(orgID string) func() {
 	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+var globalRoleMutexes sync.Map // map[string]*sync.Mutex
+
+func lockGlobalRoleUpdate(realm, clientID string) func() {
+	key := realm + "/" + clientID
+	value, _ := globalRoleMutexes.LoadOrStore(key, &sync.Mutex{})
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock

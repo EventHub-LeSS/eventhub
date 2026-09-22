@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"backend/internal/service"
 	"backend/internal/middleware"
 	"backend/internal/model"
+	"backend/internal/service"
 	"context"
 	"errors"
 	"fmt"
@@ -102,11 +102,12 @@ func (h *UserAdminHandler) ListUsers(c *gin.Context) {
 
 	users, total, err := h.userRepo.GetPage(c.Request.Context(), page, limit)
 	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "failed to load admin user page", "page", page, "limit", limit, "error", err)
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "failed to load users: " + err.Error(),
+			Detail: "failed to load users",
 		})
 		return
 	}
@@ -184,11 +185,12 @@ func (h *UserAdminHandler) GetUserRoles(c *gin.Context) {
 
 	user, err := h.userRepo.GetByID(userID)
 	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "failed to load user by id", "user_id", userID, "error", err)
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "failed to load user: " + err.Error(),
+			Detail: "failed to load user",
 		})
 		return
 	}
@@ -204,11 +206,12 @@ func (h *UserAdminHandler) GetUserRoles(c *gin.Context) {
 
 	roles, err := h.keycloakService.GetUserGlobalRoles(c.Request.Context(), user.KeycloakUserID)
 	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "failed to load user global roles", "user_id", userID, "keycloak_user_id", user.KeycloakUserID, "error", err)
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "failed to load roles: " + err.Error(),
+			Detail: "failed to load roles",
 		})
 		return
 	}
@@ -260,11 +263,12 @@ func (h *UserAdminHandler) UpdateUserRoles(c *gin.Context) {
 
 	user, err := h.userRepo.GetByID(userID)
 	if err != nil {
+		slog.ErrorContext(c.Request.Context(), "failed to load user by id", "user_id", userID, "error", err)
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "failed to load user: " + err.Error(),
+			Detail: "failed to load user",
 		})
 		return
 	}
@@ -300,11 +304,12 @@ func (h *UserAdminHandler) UpdateUserRoles(c *gin.Context) {
 			})
 			return
 		}
+		slog.ErrorContext(c.Request.Context(), "failed to update user global roles", "user_id", userID, "keycloak_user_id", user.KeycloakUserID, "error", err)
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "failed to update user roles: " + err.Error(),
+			Detail: "failed to update user roles",
 		})
 		return
 	}
@@ -342,7 +347,7 @@ func parsePageLimit(c *gin.Context) (int, int, error) {
 
 func normalizeGlobalRoleNames(input []string) ([]string, error) {
 	if len(input) == 0 {
-		return nil, nil
+		return []string{}, nil
 	}
 	seen := make(map[string]struct{}, len(input))
 	ordered := make([]string, 0, len(input))

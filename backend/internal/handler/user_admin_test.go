@@ -91,7 +91,7 @@ func TestUpdateUserRolesReturnsConflictForLastGlobalAdmin(t *testing.T) {
 		KeycloakUserID: "kc-user-1",
 	}}
 	router := gin.New()
-	router.PUT("/admin/users/:id/roles", NewUserAdminHandler(updateUserRolesStub{}, repo).UpdateUserRoles)
+	router.PUT("/admin/users/:userID/roles", NewUserAdminHandler(updateUserRolesStub{}, repo).UpdateUserRoles)
 	body, _ := json.Marshal(UserAdminRolesRequest{Roles: []string{"visitor"}})
 	req := httptest.NewRequest(http.MethodPut, "/admin/users/"+userID.String()+"/roles", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

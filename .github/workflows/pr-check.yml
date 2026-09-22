@@ -50,6 +50,18 @@ jobs:
             backend:
               - 'backend/**'
 
+      - name: Set up Go
+        if: steps.filter.outputs.backend == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./backend/go.mod
+          cache-dependency-path: ./backend/go.sum
+
+      - name: Run backend tests
+        if: steps.filter.outputs.backend == 'true'
+        working-directory: ./backend
+        run: go test -race ./...
+
       - name: Set up Docker Buildx
         if: steps.filter.outputs.backend == 'true'
         uses: docker/setup-buildx-action@v3
