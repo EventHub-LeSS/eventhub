@@ -123,7 +123,12 @@ func (h *UserAdminHandler) ListUsers(c *gin.Context) {
 			Roles:          roles,
 		})
 	}
-	start := (page - 1) * limit
+start := 0
+	if page > 1 && page-1 > len(items)/limit {
+		start = len(items)
+	} else {
+		start = (page - 1) * limit
+	}
 	if start > len(items) {
 		start = len(items)
 	}
