@@ -28,6 +28,58 @@ definitions:
       username:
         type: string
     type: object
+  handler.UserAdminListItem:
+    properties:
+      email:
+        type: string
+      firstName:
+        type: string
+      keycloakUserId:
+        type: string
+      lastName:
+        type: string
+      phoneNumber:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+    type: object
+  handler.UserAdminListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handler.UserAdminListItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.UserAdminRolesRequest:
+    properties:
+      roles:
+        items:
+          type: string
+        type: array
+    required:
+    - roles
+    type: object
+  handler.UserAdminRolesResponse:
+    properties:
+      keycloakUserId:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+    type: object
   middleware.GlobalRole:
     enum:
     - admin
@@ -267,6 +319,140 @@ paths:
       summary: Health check
       tags:
       - system
+  /admin/users:
+    get:
+      description: Returns the shared users with their current global roles. Available
+        only to global admins and supports pagination via the page and limit query
+        parameters.
+      parameters:
+      - description: Page number (1-indexed)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (1-100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
+  /admin/users/{userID}/roles:
+    get:
+      description: Returns the effective global roles for a user. Available only to
+        global admins.
+      parameters:
+      - description: Database user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminRolesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user roles
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Replaces the user's global roles with the submitted set. Only global
+        admins may perform this change; the change is applied in Keycloak and takes
+        effect after a fresh token or login.
+      parameters:
+      - description: Database user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Roles to assign
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UserAdminRolesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminRolesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user roles
+      tags:
+      - users
   /debug/token:
     post:
       consumes:

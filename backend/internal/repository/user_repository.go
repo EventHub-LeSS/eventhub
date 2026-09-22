@@ -3,10 +3,12 @@ package repository
 import (
 	"backend/internal/model"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type UserRepository interface {
+	GetByID(userID uuid.UUID) (*model.UserModel, error)
 	GetByKeycloakUserID(keycloakUserID string) (*model.UserModel, error)
 	Create(user *model.UserModel) error
 	GetAll() ([]*model.UserModel, error)
@@ -18,6 +20,18 @@ type userRepository struct {
 
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) GetByID(userID uuid.UUID) (*model.UserModel, error) {
+	user := &model.UserModel{}
+	err := r.db.Where("user_id = ?", userID).First(user).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (r *userRepository) GetByKeycloakUserID(keycloakUserID string) (*model.UserModel, error) {

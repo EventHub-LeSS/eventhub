@@ -351,6 +351,130 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 	return true, nil
 }
 
+func (k *KeycloakService) backendClientID(ctx context.Context, accessToken string) (string, error) {
+	adminURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + k.cfg.UserRealm
+	client, err := k.adminFindClient(ctx, accessToken, adminURL, k.cfg.ClientID)
+	if err != nil {
+		return "", err
+	}
+	if client == nil {
+		return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
+	}
+	clientID, _ := client["id"].(string)
+	if clientID == "" {
+		return "", fmt.Errorf("client %q missing id", k.cfg.ClientID)
+	}
+	return clientID, nil
+}
+
+func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) ([]string, error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	roles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch global roles for %s: %w", keycloakUserID, err)
+	}
+	selected := make([]string, 0, len(roles))
+	for _, role := range roles {
+		if role == nil || role.Name == nil || *role.Name == "" {
+			continue
+		}
+		switch *role.Name {
+		case "admin", "moderator", "visitor":
+			selected = append(selected, *role.Name)
+		}
+	}
+	slices.Sort(selected)
+	return selected, nil
+}
+
+func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) ([]string, error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	allowed := map[string]struct{}{"admin": {}, "moderator": {}, "visitor": {}}
+	for _, name := range desired {
+		if _, ok := allowed[name]; !ok {
+			return nil, fmt.Errorf("unsupported role %q", name)
+		}
+	}
+	currentRoles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("read existing roles for %s: %w", keycloakUserID, err)
+	}
+	current := make(map[string]*gocloak.Role, len(currentRoles))
+	for _, role := range currentRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			current[*role.Name] = role
+		}
+	}
+	availableRoles, err := k.client.GetClientRoles(ctx, accessToken, k.cfg.UserRealm, clientID, gocloak.GetRoleParams{})
+	if err != nil {
+		return nil, fmt.Errorf("list available global roles: %w", err)
+	}
+	byName := make(map[string]*gocloak.Role, len(availableRoles))
+	for _, role := range availableRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			byName[*role.Name] = role
+		}
+	}
+
+	desiredSet := make(map[string]struct{}, len(desired))
+	for _, name := range desired {
+		desiredSet[name] = struct{}{}
+	}
+	var addRoles []gocloak.Role
+	var removeRoles []gocloak.Role
+	for name := range allowed {
+		if _, ok := desiredSet[name]; ok {
+			if _, exists := current[name]; !exists {
+				role, ok := byName[name]
+				if !ok {
+					return nil, fmt.Errorf("role %q is missing in Keycloak", name)
+				}
+				addRoles = append(addRoles, *role)
+			}
+			continue
+		}
+		if role, exists := current[name]; exists {
+			removeRoles = append(removeRoles, *role)
+		}
+	}
+	if len(addRoles) > 0 {
+		if err := k.client.AddClientRoleToUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, addRoles); err != nil {
+			return nil, fmt.Errorf("add roles to user: %w", err)
+		}
+	}
+	if len(removeRoles) > 0 {
+		if err := k.client.DeleteClientRoleFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
+			return nil, fmt.Errorf("remove roles from user: %w", err)
+		}
+	}
+	ordered := make([]string, 0, len(desired))
+	for _, name := range desired {
+		ordered = append(ordered, name)
+	}
+	slices.Sort(ordered)
+	return ordered, nil
+}
+
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
 	maxResults := 100
 	page := 0
