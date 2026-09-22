@@ -328,7 +328,7 @@ func normalizeGlobalRoleNames(input []string) ([]string, error) {
 	for _, raw := range input {
 		name := strings.TrimSpace(raw)
 		if name == "" {
-			continue
+			return nil, fmt.Errorf("unsupported role %q; allowed roles: admin, moderator, visitor", name)
 		}
 		if _, ok := allowedAdminRoleNames[name]; !ok {
 			return nil, fmt.Errorf("unsupported role %q; allowed roles: admin, moderator, visitor", name)
