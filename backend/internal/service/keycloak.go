@@ -32,30 +32,46 @@ type KeycloakService struct {
 
 	// Cached service-account token for admin operations (EVENTHUB-188).
 	adminTokenMu      sync.Mutex
+	adminLoginGate    chan struct{}
 	adminTokenValue   string
 	adminTokenExpires time.Time
 }
 
 func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 	return &KeycloakService{
-		cfg:    cfg,
-		client: gocloak.NewClient(cfg.Host),
+		cfg:            cfg,
+		client:         gocloak.NewClient(cfg.Host),
+		adminLoginGate: make(chan struct{}, 1),
 	}
 }
 
 // adminToken returns the service-account token for admin operations, caching it
 // until shortly before it expires instead of logging in on every call.
 func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
-	k.adminTokenMu.Lock()
-	defer k.adminTokenMu.Unlock()
-	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
-		return k.adminTokenValue, nil
+	// Waiting for another request's login must respect this request's deadline too.
+	select {
+	case k.adminLoginGate <- struct{}{}:
+		defer func() { <-k.adminLoginGate }()
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	k.adminTokenMu.Lock()
+	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
+		value := k.adminTokenValue
+		k.adminTokenMu.Unlock()
+		return value, nil
+	}
+	k.adminTokenMu.Unlock()
 	token, err := k.client.LoginClient(ctx, k.cfg.ClientID, k.cfg.ClientSecret, k.cfg.AdminRealm)
 	if err != nil {
 		return "", fmt.Errorf("keycloak admin login failed: %w", err)
 	}
 	const expirySkew = 30 * time.Second
+	k.adminTokenMu.Lock()
+	defer k.adminTokenMu.Unlock()
 	k.adminTokenValue = token.AccessToken
 	k.adminTokenExpires = time.Now().Add(time.Duration(token.ExpiresIn)*time.Second - expirySkew)
 	return token.AccessToken, nil
@@ -352,19 +368,21 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 }
 
 func (k *KeycloakService) backendClientID(ctx context.Context, accessToken string) (string, error) {
-	adminURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + k.cfg.UserRealm
-	client, err := k.adminFindClient(ctx, accessToken, adminURL, k.cfg.ClientID)
+	clients, err := k.client.GetClients(ctx, accessToken, k.cfg.UserRealm, gocloak.GetClientsParams{
+		ClientID: &k.cfg.ClientID,
+	})
 	if err != nil {
 		return "", err
 	}
-	if client == nil {
-		return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
+	for _, client := range clients {
+		if client != nil && client.ClientID != nil && *client.ClientID == k.cfg.ClientID {
+			if client.ID == nil || *client.ID == "" {
+				return "", fmt.Errorf("client %q missing id", k.cfg.ClientID)
+			}
+			return *client.ID, nil
+		}
 	}
-	clientID, _ := client["id"].(string)
-	if clientID == "" {
-		return "", fmt.Errorf("client %q missing id", k.cfg.ClientID)
-	}
-	return clientID, nil
+	return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
 }
 
 func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) (result []string, err error) {
@@ -377,6 +395,10 @@ func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID
 	if err != nil {
 		return nil, fmt.Errorf("resolve backend client id: %w", err)
 	}
+	return k.userGlobalRoles(ctx, accessToken, clientID, keycloakUserID)
+}
+
+func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clientID, keycloakUserID string) ([]string, error) {
 	roles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch global roles for %s: %w", keycloakUserID, err)
@@ -458,7 +480,7 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 			removeRoles = append(removeRoles, *role)
 		}
 	}
-if len(removeRoles) > 0 {
+	if len(removeRoles) > 0 {
 		if err := k.client.DeleteClientRoleFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
 			return nil, fmt.Errorf("remove roles from user: %w", err)
 		}

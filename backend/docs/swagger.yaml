@@ -321,16 +321,23 @@ paths:
       - system
   /admin/users:
     get:
-      description: Returns the shared users with their current global roles. Available
-        only to global admins and supports pagination via the page and limit query
-        parameters.
+      description: Returns a database page of shared users ordered by userId ascending,
+        with their current global roles. Only users on this page are looked up in
+        Keycloak, with at most four concurrent lookups and a 15-second total role-lookup
+        timeout. Available only to global admins. total counts all database users;
+        concurrent user creation or deletion can cause count/page differences.
       parameters:
-      - description: Page number (1-indexed)
+      - default: 1
+        description: Page number (1-indexed)
         in: query
+        minimum: 1
         name: page
         type: integer
-      - description: Page size (1-100)
+      - default: 50
+        description: Page size (1-100)
         in: query
+        maximum: 100
+        minimum: 1
         name: limit
         type: integer
       produces:

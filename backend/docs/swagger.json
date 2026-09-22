@@ -35,7 +35,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the shared users with their current global roles. Available only to global admins and supports pagination via the page and limit query parameters.",
+                "description": "Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.",
                 "produces": [
                     "application/json"
                 ],
@@ -45,13 +45,18 @@
                 "summary": "List users",
                 "parameters": [
                     {
+                        "minimum": 1,
                         "type": "integer",
+                        "default": 1,
                         "description": "Page number (1-indexed)",
                         "name": "page",
                         "in": "query"
                     },
                     {
+                        "maximum": 100,
+                        "minimum": 1,
                         "type": "integer",
+                        "default": 50,
                         "description": "Page size (1-100)",
                         "name": "limit",
                         "in": "query"

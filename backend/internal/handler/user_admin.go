@@ -3,9 +3,9 @@ package handler
 import (
 	"backend/internal/middleware"
 	"backend/internal/model"
-	"backend/internal/repository"
-	"backend/internal/service"
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -23,11 +23,22 @@ var allowedAdminRoleNames = map[string]struct{}{
 
 // UserAdminHandler manages backend user administration endpoints for global admins.
 type UserAdminHandler struct {
-	userRepo        repository.UserRepository
-	keycloakService *service.KeycloakService
+	userRepo        adminUserRepository
+	keycloakService adminUserRoles
 }
 
-func NewUserAdminHandler(keycloakService *service.KeycloakService, userRepo repository.UserRepository) *UserAdminHandler {
+type adminUserRepository interface {
+	GetPage(context.Context, int, int) ([]*model.UserModel, int64, error)
+	GetByID(uuid.UUID) (*model.UserModel, error)
+}
+
+type adminUserRoles interface {
+	GetUsersGlobalRoles(context.Context, []string) ([][]string, error)
+	GetUserGlobalRoles(context.Context, string) ([]string, error)
+	SetUserGlobalRoles(context.Context, string, []string) ([]string, error)
+}
+
+func NewUserAdminHandler(keycloakService adminUserRoles, userRepo adminUserRepository) *UserAdminHandler {
 	return &UserAdminHandler{keycloakService: keycloakService, userRepo: userRepo}
 }
 
@@ -54,7 +65,7 @@ type UserAdminListResponse struct {
 	Items []UserAdminListItem `json:"items"`
 	Page  int                 `json:"page"`
 	Limit int                 `json:"limit"`
-	Total int                 `json:"total"`
+	Total int64               `json:"total"`
 }
 
 // UserAdminRolesRequest sets the complete global role set for a user.
@@ -63,12 +74,12 @@ type UserAdminRolesRequest struct {
 }
 
 // @Summary      List users
-// @Description  Returns the shared users with their current global roles. Available only to global admins and supports pagination via the page and limit query parameters.
+// @Description  Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.
 // @Tags         users
 // @Security     BearerAuth
 // @Produce      json
-// @Param        page query int false "Page number (1-indexed)"
-// @Param        limit query int false "Page size (1-100)"
+// @Param        page query int false "Page number (1-indexed)" default(1) minimum(1)
+// @Param        limit query int false "Page size (1-100)" default(50) minimum(1) maximum(100)
 // @Success      200 {object} UserAdminListResponse
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
@@ -87,7 +98,7 @@ func (h *UserAdminHandler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	users, err := h.userRepo.GetAll()
+	users, total, err := h.userRepo.GetPage(c.Request.Context(), page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
@@ -99,49 +110,48 @@ func (h *UserAdminHandler) ListUsers(c *gin.Context) {
 	}
 
 	items := make([]UserAdminListItem, 0, len(users))
-	for _, user := range users {
+	ids := make([]string, len(users))
+	for i, user := range users {
 		if user == nil {
-			continue
+			writeProblem(c, http.StatusInternalServerError, "invalid user returned by database")
+			return
 		}
-		roles, err := h.keycloakService.GetUserGlobalRoles(c.Request.Context(), user.KeycloakUserID)
+		ids[i] = user.KeycloakUserID
+	}
+	if len(users) > 0 {
+		roles, err := h.keycloakService.GetUsersGlobalRoles(c.Request.Context(), ids)
 		if err != nil {
+			slog.ErrorContext(c.Request.Context(), "failed to load admin user page roles", "page", page, "limit", limit, "error", err)
 			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 				Type:   "about:blank",
 				Title:  http.StatusText(http.StatusInternalServerError),
 				Status: http.StatusInternalServerError,
-				Detail: fmt.Sprintf("failed to load roles for user %s: %v", user.Email, err),
+				Detail: "failed to load user roles",
 			})
 			return
 		}
-		items = append(items, UserAdminListItem{
-			UserID:         user.UserID,
-			KeycloakUserID: user.KeycloakUserID,
-			FirstName:      user.FirstName,
-			LastName:       user.LastName,
-			Email:          user.Email,
-			PhoneNumber:    user.PhoneNumber,
-			Roles:          roles,
-		})
-	}
-start := 0
-	if page > 1 && page-1 > len(items)/limit {
-		start = len(items)
-	} else {
-		start = (page - 1) * limit
-	}
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + limit
-	if end > len(items) {
-		end = len(items)
+		if len(roles) != len(users) {
+			writeProblem(c, http.StatusInternalServerError, "incomplete user roles response")
+			return
+		}
+		for i, user := range users {
+			items = append(items, UserAdminListItem{
+				UserID:         user.UserID,
+				KeycloakUserID: user.KeycloakUserID,
+				FirstName:      user.FirstName,
+				LastName:       user.LastName,
+				Email:          user.Email,
+				PhoneNumber:    user.PhoneNumber,
+				Roles:          roles[i],
+			})
+		}
 	}
 
 	c.JSON(http.StatusOK, UserAdminListResponse{
-		Items: items[start:end],
+		Items: items,
 		Page:  page,
 		Limit: limit,
-		Total: len(items),
+		Total: total,
 	})
 }
 
