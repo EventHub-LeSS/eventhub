@@ -21,12 +21,10 @@ func NewEventHandler(eventService *service.EventService) *EventHandler {
 
 // EVENTHUB-75: Veranstaltung anlegen
 func CreateEventHandler(c *gin.Context) {
-
 }
 
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
 func SaveEventAsDraftHandler(c *gin.Context) {
-
 }
 
 // EVENTHUB-78: Veranstaltung bearbeiten
@@ -57,6 +55,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
+
 	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
 	if len(managedOrgIDs) == 0 {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
@@ -84,7 +83,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
-// @Param        id   path   string                     true  "Event ID"
+// @Param        id   path   string                  true  "Event ID"
 // @Success      200  {object} model.EventActionResponse
 // @Failure      400  {object} model.ErrorResponse
 // @Failure      401  {object} model.APIError
@@ -177,7 +176,6 @@ func writeEventActionError(c *gin.Context, err error) {
 
 // EVENTHUB-79: Eigene Veranstaltungen anzeigen
 func ListOwnEventsHandler(c *gin.Context) {
-
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
@@ -219,19 +217,15 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 		return nil, false
 	}
 
-	if principal.ActiveOrganization == nil {
-		writeProblem(c, http.StatusForbidden, "no active organization")
-		return nil, false
-	}
-
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
+	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
 		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return nil, false
 	}
 
 	statistics, err := h.eventService.GetEventStatistics(
 		eventID,
-		principal.ActiveOrganization.ID,
+		managedOrgIDs,
 	)
 	if err != nil {
 		writeEventActionError(c, err)

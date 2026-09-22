@@ -15,11 +15,30 @@ type fakeEventRepo struct {
 	saved *model.EventModel
 }
 
-func (f *fakeEventRepo) CreateEvent(*model.EventModel) error                       { return nil }
-func (f *fakeEventRepo) GetEventByID(uuid.UUID) (*model.EventModel, error)         { return f.event, nil }
-func (f *fakeEventRepo) GetAllEvents() ([]*model.EventModel, error)                { return nil, nil }
-func (f *fakeEventRepo) DeleteEvent(uuid.UUID) error                               { return nil }
-func (f *fakeEventRepo) ListByOrganization(uuid.UUID) ([]*model.EventModel, error) { return nil, nil }
+func (f *fakeEventRepo) CreateEvent(*model.EventModel) error {
+	return nil
+}
+
+func (f *fakeEventRepo) GetEventByID(uuid.UUID) (*model.EventModel, error) {
+	return f.event, nil
+}
+
+func (f *fakeEventRepo) GetAllEvents() ([]*model.EventModel, error) {
+	return nil, nil
+}
+
+func (f *fakeEventRepo) DeleteEvent(uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeEventRepo) ListByOrganization(uuid.UUID) ([]*model.EventModel, error) {
+	return nil, nil
+}
+
+func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 func (f *fakeEventRepo) UpdateEvent(event *model.EventModel) error {
 	f.saved = event
 	return nil
@@ -29,29 +48,42 @@ type fakeOrgRepo struct {
 	orgs map[uuid.UUID]*model.OrganizationModel
 }
 
-func (f *fakeOrgRepo) CreateOrganization(*model.OrganizationModel) error { return nil }
+func (f *fakeOrgRepo) CreateOrganization(*model.OrganizationModel) error {
+	return nil
+}
+
 func (f *fakeOrgRepo) AddMembership(*model.OrganizationMembershipModel) error {
 	return nil
 }
+
 func (f *fakeOrgRepo) GetByKeycloakOrgID(string) (*model.OrganizationModel, error) {
 	return nil, nil
 }
+
 func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	return f.orgs[id], nil
 }
 
 var (
-	orgA = &model.OrganizationModel{OrganizationID: uuid.New(), KeycloakOrgID: "kc-org-a"}
-	orgB = &model.OrganizationModel{OrganizationID: uuid.New(), KeycloakOrgID: "kc-org-b"}
+	orgA = &model.OrganizationModel{
+		OrganizationID: uuid.New(),
+		KeycloakOrgID:  "kc-org-a",
+	}
+	orgB = &model.OrganizationModel{
+		OrganizationID: uuid.New(),
+		KeycloakOrgID:  "kc-org-b",
+	}
 )
 
 func eventOwnedBy(org *model.OrganizationModel, status model.EventStatus) *model.EventModel {
 	category, location := uuid.New(), uuid.New()
+
 	var organizer *uuid.UUID
 	if org != nil {
 		id := org.OrganizationID
 		organizer = &id
 	}
+
 	return &model.EventModel{
 		EventID:     uuid.New(),
 		Title:       "Altes Konzert",
@@ -80,10 +112,13 @@ func updateRequest() model.UpdateEventRequest {
 
 func newTestService(event *model.EventModel) (*EventService, *fakeEventRepo) {
 	eventRepo := &fakeEventRepo{event: event}
-	orgRepo := &fakeOrgRepo{orgs: map[uuid.UUID]*model.OrganizationModel{
-		orgA.OrganizationID: orgA,
-		orgB.OrganizationID: orgB,
-	}}
+	orgRepo := &fakeOrgRepo{
+		orgs: map[uuid.UUID]*model.OrganizationModel{
+			orgA.OrganizationID: orgA,
+			orgB.OrganizationID: orgB,
+		},
+	}
+
 	return NewEventService(eventRepo, orgRepo), eventRepo
 }
 
@@ -94,14 +129,50 @@ func TestUpdateEvent_Ownership(t *testing.T) {
 		managedOrgs []string
 		wantErr     error
 	}{
-		{name: "single organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}},
-		{name: "member of several organizations", event: eventOwnedBy(orgB, model.EventStatusPublished), managedOrgs: []string{"kc-org-a", "kc-org-b"}},
-		{name: "event belongs to another organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a"}, wantErr: ErrForbidden},
-		{name: "no managed organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: nil, wantErr: ErrForbidden},
-		{name: "event without organizer", event: eventOwnedBy(nil, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}, wantErr: ErrForbidden},
-		{name: "unknown event", event: nil, managedOrgs: []string{"kc-org-b"}, wantErr: ErrEventNotFound},
-		{name: "cancelled event", event: eventOwnedBy(orgB, model.EventStatusCancelled), managedOrgs: []string{"kc-org-b"}, wantErr: ErrInvalidStatus},
-		{name: "completed event", event: eventOwnedBy(orgB, model.EventStatusCompleted), managedOrgs: []string{"kc-org-b"}, wantErr: ErrInvalidStatus},
+		{
+			name:        "single organization",
+			event:       eventOwnedBy(orgB, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-b"},
+		},
+		{
+			name:        "member of several organizations",
+			event:       eventOwnedBy(orgB, model.EventStatusPublished),
+			managedOrgs: []string{"kc-org-a", "kc-org-b"},
+		},
+		{
+			name:        "event belongs to another organization",
+			event:       eventOwnedBy(orgB, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-a"},
+			wantErr:     ErrForbidden,
+		},
+		{
+			name:    "no managed organizations",
+			event:   eventOwnedBy(orgB, model.EventStatusDraft),
+			wantErr: ErrForbidden,
+		},
+		{
+			name:        "event without organizer",
+			event:       eventOwnedBy(nil, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrForbidden,
+		},
+		{
+			name:        "unknown event",
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrEventNotFound,
+		},
+		{
+			name:        "cancelled event",
+			event:       eventOwnedBy(orgB, model.EventStatusCancelled),
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrInvalidStatus,
+		},
+		{
+			name:        "completed event",
+			event:       eventOwnedBy(orgB, model.EventStatusCompleted),
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrInvalidStatus,
+		},
 	}
 
 	for _, tt := range tests {
@@ -149,12 +220,38 @@ func TestPublishEvent_Ownership(t *testing.T) {
 		managedOrgs []string
 		wantErr     error
 	}{
-		{name: "own organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}},
-		{name: "member of several organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a", "kc-org-b"}},
-		{name: "event belongs to another organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a"}, wantErr: ErrForbidden},
-		{name: "no managed organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: nil, wantErr: ErrForbidden},
-		{name: "event without organizer", event: eventOwnedBy(nil, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}, wantErr: ErrForbidden},
-		{name: "unknown event", event: nil, managedOrgs: []string{"kc-org-b"}, wantErr: ErrEventNotFound},
+		{
+			name:        "own organization",
+			event:       eventOwnedBy(orgB, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-b"},
+		},
+		{
+			name:        "member of several organizations",
+			event:       eventOwnedBy(orgB, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-a", "kc-org-b"},
+		},
+		{
+			name:        "event belongs to another organization",
+			event:       eventOwnedBy(orgB, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-a"},
+			wantErr:     ErrForbidden,
+		},
+		{
+			name:    "no managed organizations",
+			event:   eventOwnedBy(orgB, model.EventStatusDraft),
+			wantErr: ErrForbidden,
+		},
+		{
+			name:        "event without organizer",
+			event:       eventOwnedBy(nil, model.EventStatusDraft),
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrForbidden,
+		},
+		{
+			name:        "unknown event",
+			managedOrgs: []string{"kc-org-b"},
+			wantErr:     ErrEventNotFound,
+		},
 	}
 
 	for _, tt := range tests {
@@ -189,7 +286,11 @@ func TestPublishEvent_PersistsPublishedStatus(t *testing.T) {
 }
 
 func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
-	for _, status := range []model.EventStatus{model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+	for _, status := range []model.EventStatus{
+		model.EventStatusPublished,
+		model.EventStatusCancelled,
+		model.EventStatusCompleted,
+	} {
 		t.Run(string(status), func(t *testing.T) {
 			event := eventOwnedBy(orgB, status)
 			svc, repo := newTestService(event)
@@ -206,16 +307,16 @@ func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
 
 func TestPublishEvent_RequiresCompleteness(t *testing.T) {
 	mutations := map[string]func(*model.EventModel){
-		"missing title":     func(e *model.EventModel) { e.Title = "" },
-		"zero start time":   func(e *model.EventModel) { e.StartTime = time.Time{} },
-		"zero end time":     func(e *model.EventModel) { e.EndTime = time.Time{} },
-		"end before start":  func(e *model.EventModel) { e.EndTime = e.StartTime.Add(-time.Hour) },
-		"end equals start":  func(e *model.EventModel) { e.EndTime = e.StartTime },
-		"zero capacity":     func(e *model.EventModel) { e.Capacity = 0 },
-		"missing category":  func(e *model.EventModel) { e.CategoryID = nil },
-		"zero category id":  func(e *model.EventModel) { id := uuid.Nil; e.CategoryID = &id },
-		"missing location":  func(e *model.EventModel) { e.LocationID = nil },
-		"zero location id":  func(e *model.EventModel) { id := uuid.Nil; e.LocationID = &id },
+		"missing title":    func(e *model.EventModel) { e.Title = "" },
+		"zero start time":  func(e *model.EventModel) { e.StartTime = time.Time{} },
+		"zero end time":    func(e *model.EventModel) { e.EndTime = time.Time{} },
+		"end before start": func(e *model.EventModel) { e.EndTime = e.StartTime.Add(-time.Hour) },
+		"end equals start": func(e *model.EventModel) { e.EndTime = e.StartTime },
+		"zero capacity":    func(e *model.EventModel) { e.Capacity = 0 },
+		"missing category": func(e *model.EventModel) { e.CategoryID = nil },
+		"zero category id": func(e *model.EventModel) { id := uuid.Nil; e.CategoryID = &id },
+		"missing location": func(e *model.EventModel) { e.LocationID = nil },
+		"zero location id": func(e *model.EventModel) { id := uuid.Nil; e.LocationID = &id },
 	}
 
 	for name, mutate := range mutations {
