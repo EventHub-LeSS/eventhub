@@ -13,6 +13,7 @@ const (
 	BookingStatusConfirmed BookingStatus = "confirmed"
 	BookingStatusCancelled BookingStatus = "cancelled"
 	BookingStatusFailed    BookingStatus = "failed"
+	BookingStatusExpired   BookingStatus = "expired"
 )
 
 type BookingModel struct {
@@ -22,6 +23,7 @@ type BookingModel struct {
 	PaymentID       *uuid.UUID    `json:"paymentId" gorm:"column:payment_id;type:uuid"`
 	NumberOfTickets int           `json:"numberOfTickets" gorm:"column:number_of_tickets"`
 	Status          BookingStatus `json:"status" gorm:"column:status"`
+	ExpiresAt       *time.Time    `json:"expiresAt" gorm:"column:expires_at"`
 	CreatedAt       time.Time     `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt       time.Time     `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
