@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"backend/internal/middleware"
+	"backend/internal/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,8 +34,8 @@ type CurrentOrganizationResponse struct {
 func CurrentUser(c *gin.Context) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error": gin.H{"code": "UNAUTHENTICATED", "message": "Authentication is required"},
+		c.AbortWithStatusJSON(http.StatusUnauthorized, model.APIError{
+			Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
 		})
 		return
 	}

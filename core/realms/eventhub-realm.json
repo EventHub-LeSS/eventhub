@@ -92,7 +92,7 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
+      "serviceAccountsEnabled": true,
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": false,
       "defaultClientScopes": [
@@ -162,6 +162,14 @@
       ],
       "clientRoles": {
         "backend": ["admin"]
+      }
+    },
+    {
+      "username": "service-account-backend",
+      "enabled": true,
+      "serviceAccountClientId": "backend",
+      "clientRoles": {
+        "realm-management": ["manage-organizations", "manage-users"]
       }
     }
   ],
@@ -336,6 +344,12 @@
           "moderator",
           "visitor"
         ]
+      }
+    ],
+    "realm-management": [
+      {
+        "client": "backend",
+        "roles": ["manage-organizations", "manage-users"]
       }
     ]
   }
