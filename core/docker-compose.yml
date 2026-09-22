@@ -127,8 +127,6 @@ services:
       KC_LOG_LEVEL: INFO
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
-    volumes:
-      - ./realms:/opt/keycloak/data/import
     depends_on:
       - keycloak-postgres
 
