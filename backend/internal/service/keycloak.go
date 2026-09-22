@@ -367,11 +367,12 @@ func (k *KeycloakService) backendClientID(ctx context.Context, accessToken strin
 	return clientID, nil
 }
 
-func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) ([]string, error) {
+func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) (result []string, err error) {
 	accessToken, err := k.adminToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetch admin token: %w", err)
 	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
 	clientID, err := k.backendClientID(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("resolve backend client id: %w", err)
