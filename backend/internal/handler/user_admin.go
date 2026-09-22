@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"backend/internal/service"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -289,6 +291,15 @@ func (h *UserAdminHandler) UpdateUserRoles(c *gin.Context) {
 
 	updated, err := h.keycloakService.SetUserGlobalRoles(c.Request.Context(), user.KeycloakUserID, normalized)
 	if err != nil {
+		if errors.Is(err, service.ErrLastGlobalAdmin) {
+			c.JSON(http.StatusConflict, model.ErrorResponse{
+				Type:   "about:blank",
+				Title:  http.StatusText(http.StatusConflict),
+				Status: http.StatusConflict,
+				Detail: err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),

@@ -463,6 +463,27 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 	for _, name := range desired {
 		desiredSet[name] = struct{}{}
 	}
+	if _, isAdmin := current["admin"]; isAdmin {
+		if _, keepAdmin := desiredSet["admin"]; !keepAdmin {
+			maxAdmins := 2
+			otherAdmins, err := k.client.GetUsersByClientRoleName(ctx, accessToken, k.cfg.UserRealm, clientID, "admin", gocloak.GetUsersByRoleParams{
+				Max: &maxAdmins,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("check remaining global admins: %w", err)
+			}
+			hasOtherAdmin := false
+			for _, admin := range otherAdmins {
+				if admin != nil && admin.ID != nil && *admin.ID != keycloakUserID {
+					hasOtherAdmin = true
+					break
+				}
+			}
+			if !hasOtherAdmin {
+				return nil, ErrLastGlobalAdmin
+			}
+		}
+	}
 	var addRoles []gocloak.Role
 	var removeRoles []gocloak.Role
 	for name := range allowed {
@@ -757,6 +778,7 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
 	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
