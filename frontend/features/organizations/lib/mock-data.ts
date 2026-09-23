@@ -86,3 +86,97 @@ export const mockSales: SalesPoint[] = [
   { month: "Aug", revenue: 1180 },
   { month: "Sep", revenue: 2340 },
 ]
+
+export type AuditCategory = "member" | "event" | "settings" | "finance"
+
+export interface AuditLogEntry {
+  id: string
+  timestamp: string
+  actor: string
+  action: string
+  target: string
+  category: AuditCategory
+}
+
+export const mockAuditLog: AuditLogEntry[] = [
+  {
+    id: "1",
+    timestamp: "2026-09-23T09:14:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Granted right",
+    target: "event_manager to lars.hoff@uni.example",
+    category: "member",
+  },
+  {
+    id: "2",
+    timestamp: "2026-09-22T16:48:00Z",
+    actor: "lars.hoff@uni.example",
+    action: "Published event",
+    target: "Welcome Week Kickoff",
+    category: "event",
+  },
+  {
+    id: "3",
+    timestamp: "2026-09-22T11:05:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Updated settings",
+    target: "Organization name",
+    category: "settings",
+  },
+  {
+    id: "4",
+    timestamp: "2026-09-21T14:30:00Z",
+    actor: "maria.koch@uni.example",
+    action: "Exported report",
+    target: "Sales report Q3",
+    category: "finance",
+  },
+  {
+    id: "5",
+    timestamp: "2026-09-20T08:22:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Invited member",
+    target: "maria.koch@uni.example",
+    category: "member",
+  },
+  {
+    id: "6",
+    timestamp: "2026-09-18T19:02:00Z",
+    actor: "lars.hoff@uni.example",
+    action: "Created event",
+    target: "Winter Hackathon",
+    category: "event",
+  },
+  {
+    id: "7",
+    timestamp: "2026-09-17T10:41:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Revoked right",
+    target: "finance_viewer from tom.berg@uni.example",
+    category: "member",
+  },
+  {
+    id: "8",
+    timestamp: "2026-09-15T13:57:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Removed member",
+    target: "tom.berg@uni.example",
+    category: "member",
+  },
+  {
+    id: "9",
+    timestamp: "2026-09-14T07:35:00Z",
+    actor: "lars.hoff@uni.example",
+    action: "Cancelled event",
+    target: "Alumni Brunch",
+    category: "event",
+  },
+  {
+    id: "10",
+    timestamp: "2026-09-12T15:19:00Z",
+    actor: "anna.weber@uni.example",
+    action: "Enabled organization",
+    target: "Organization status",
+    category: "settings",
+  },
+]

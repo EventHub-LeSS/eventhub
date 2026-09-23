@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
+import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
 import { EventsTable } from "@/features/organizations/components/events-table"
 import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
@@ -14,6 +15,7 @@ import {
 } from "@/features/organizations/lib/api"
 import {
   mockActivity,
+  mockAuditLog,
   mockEvents,
   mockSales,
 } from "@/features/organizations/lib/mock-data"
@@ -106,6 +108,7 @@ export function OrganizationOverview({
   const canViewMembers = hasRight("org_admin")
   const canViewEvents = hasRight("event_manager")
   const canViewSales = hasRight("finance_viewer")
+  const canViewAuditLog = hasRight("org_admin")
 
   if (membersQuery.isError) {
     return (
@@ -141,6 +144,9 @@ export function OrganizationOverview({
           )}
           {canViewSales && <TabsTrigger value="sales">Sales</TabsTrigger>}
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          {canViewAuditLog && (
+            <TabsTrigger value="audit-log">Audit log</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-4">
@@ -176,6 +182,19 @@ export function OrganizationOverview({
         {canViewSales && (
           <TabsContent value="sales" className="flex flex-col gap-4">
             <SalesChart data={mockSales} />
+          </TabsContent>
+        )}
+
+        {canViewAuditLog && (
+          <TabsContent value="audit-log">
+            <Card>
+              <CardHeader>
+                <CardTitle>Audit log</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AuditLogTable entries={mockAuditLog} />
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
 
