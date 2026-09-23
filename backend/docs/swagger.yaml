@@ -1,5 +1,18 @@
 basePath: /api/v1
 definitions:
+  handler.CreateBookingRequest:
+    properties:
+      eventId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      numberOfTickets:
+        example: 2
+        minimum: 1
+        type: integer
+    required:
+    - eventId
+    - numberOfTickets
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -58,6 +71,71 @@ definitions:
       code:
         type: string
       message:
+        type: string
+    type: object
+  model.AvailableSeatsResponse:
+    properties:
+      availableSeats:
+        type: integer
+      eventId:
+        type: string
+    type: object
+  model.BookingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      eventId:
+        type: string
+      expiresAt:
+        type: string
+      numberOfTickets:
+        type: integer
+      paymentId:
+        type: string
+      status:
+        $ref: '#/definitions/model.BookingStatus'
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  model.BookingStatus:
+    enum:
+    - reserved
+    - confirmed
+    - cancelled
+    - failed
+    - expired
+    type: string
+    x-enum-varnames:
+    - BookingStatusReserved
+    - BookingStatusConfirmed
+    - BookingStatusCancelled
+    - BookingStatusFailed
+    - BookingStatusExpired
+  model.ConfigureOrgRolesRequest:
+    properties:
+      roles:
+        items:
+          $ref: '#/definitions/model.OrganizationRole'
+        type: array
+        uniqueItems: true
+    required:
+    - roles
+    type: object
+  model.ConfigureOrgRolesResponse:
+    properties:
+      message:
+        type: string
+      organizationId:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      username:
         type: string
     type: object
   model.CreateOrganizationRequest:
@@ -184,6 +262,23 @@ definitions:
       time:
         type: string
     type: object
+  model.OrganizationRole:
+    enum:
+    - org_admin
+    - event_manager
+    - finance_viewer
+    type: string
+    x-enum-varnames:
+    - RoleOrganizationAdmin
+    - RoleEventManager
+    - RoleFinanceViewer
+  model.SoldTicketsResponse:
+    properties:
+      eventId:
+        type: string
+      soldTickets:
+        type: integer
+    type: object
   model.UpdateEventRequest:
     properties:
       capacity:
@@ -234,6 +329,55 @@ paths:
       summary: Health check
       tags:
       - system
+  /bookings:
+    post:
+      consumes:
+      - application/json
+      description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
+        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
+      parameters:
+      - description: Buchungsdaten
+        in: body
+        name: booking
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateBookingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Event nicht veröffentlicht oder Kapazität überschritten
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buchung anlegen
+      tags:
+      - bookings
   /debug/token:
     post:
       consumes:
@@ -265,6 +409,90 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events/{eventId}/available-seats:
+    get:
+      description: Returns the remaining available seats for an event. Requires the
+        event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.AvailableSeatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available seats
+      tags:
+      - events
+  /events/{eventId}/sold-tickets:
+    get:
+      description: Returns the number of confirmed tickets sold for an event. Requires
+        the event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SoldTicketsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get sold tickets
+      tags:
+      - events
   /events/{id}:
     put:
       consumes:
@@ -391,6 +619,10 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/model.APIError'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -398,6 +630,72 @@ paths:
       security:
       - BearerAuth: []
       summary: Create organization
+      tags:
+      - organizations
+  /organizations/{organizationID}/members/{username}/roles:
+    put:
+      consumes:
+      - application/json
+      description: 'Replaces the complete role set of an organization member. Requires
+        the org_admin role in the given organization (global admins bypass this check);
+        it is checked against the token and again against Keycloak, so a demoted admin
+        cannot act on an old token. organizationID is the Keycloak organization ID
+        or alias as returned by POST /organizations and GET /users/me. roles is required;
+        an empty array removes all roles. Roles: org_admin (manage members), event_manager
+        (manage events), finance_viewer (view sales and billing). Removing the last
+        org_admin is rejected. The affected user must refresh their token before the
+        new roles take effect.'
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      - description: Username of the organization member
+        in: path
+        name: username
+        required: true
+        type: string
+      - description: Complete role set for the member (empty array = no roles)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.ConfigureOrgRolesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ConfigureOrgRolesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Configure organization member roles
       tags:
       - organizations
   /users/me:

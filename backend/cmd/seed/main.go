@@ -28,6 +28,7 @@ func main() {
 	keycloakCfg := service.KeycloakClientConfig{
 		Host:             os.Getenv("KEYCLOAK_HOST"),
 		UserRealm:        firstNonEmpty(os.Getenv("KEYCLOAK_USER_REALM"), os.Getenv("KEYCLOAK_REALM")),
+		ClientID:         firstNonEmpty(os.Getenv("KEYCLOAK_CLIENT_ID"), "backend"),
 		FrontendClientID: firstNonEmpty(os.Getenv("KEYCLOAK_FRONTEND_CLIENT_ID"), "frontend"),
 	}
 	if keycloakCfg.Host == "" || keycloakCfg.UserRealm == "" {
@@ -35,7 +36,7 @@ func main() {
 	}
 	keycloakService := service.NewKeycloakService(keycloakCfg)
 
-	seedUsername := firstNonEmpty(os.Getenv("SEED_USERNAME"), "großmeister_finn")
+	seedUsername := firstNonEmpty(os.Getenv("SEED_USERNAME"), "finn.betz@grossmeister.de")
 	seedPassword := firstNonEmpty(os.Getenv("SEED_PASSWORD"), "password")
 
 	log.Printf("logging in as %q to realm %q", seedUsername, keycloakCfg.UserRealm)

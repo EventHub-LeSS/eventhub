@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 
 	_ "backend/docs"
@@ -30,12 +31,15 @@ import (
 func main() {
 	godotenv.Load()
 
+	// Structured logs for audit events (EVENTHUB-188); plain text like the rest of the app.
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	db, db_err := db.Connect()
-	if db_err != nil {
-		log.Fatal(db_err)
+	db, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatal(dbErr)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -62,9 +66,11 @@ func main() {
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
+	bookingRepo := repository.NewBookingRepository(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo)
+	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -88,12 +94,19 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
+		// events
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
+
+		// bookings
+		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -101,10 +114,18 @@ func main() {
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}
 
+	// EVENTHUB-188: organization admins configure the roles of their members. The handler checks
+	// the org_admin role itself after resolving the organization, which the path may address by
+	// ID or alias while tokens only carry the alias.
+	orgRoles := v1.Group("/organizations")
+	orgRoles.Use(authenticator.Middleware())
+	{
+		orgRoles.PUT("/:organizationID/members/:username/roles", orgHandler.ConfigureMemberRoles)
+	}
+
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 

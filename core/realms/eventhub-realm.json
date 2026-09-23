@@ -32,7 +32,7 @@
           "username": "organizer@provadis-hochschule.de"
         },
         {
-          "username": "großmeister_finn"
+          "username": "finn.betz@grossmeister.de"
         }
       ]
     },
@@ -46,7 +46,7 @@
           "username": "organizer@telekom.de"
         },
         {
-          "username": "großmeister_finn"
+          "username": "finn.betz@grossmeister.de"
         }
       ]
     }
@@ -92,7 +92,7 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
+      "serviceAccountsEnabled": true,
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": false,
       "defaultClientScopes": [
@@ -147,7 +147,7 @@
       ]
     },
     {
-      "username": "großmeister_finn",
+      "username": "finn.betz@grossmeister.de",
       "email": "finn.betz@grossmeister.de",
       "emailVerified": true,
       "enabled": true,
@@ -162,6 +162,14 @@
       ],
       "clientRoles": {
         "backend": ["admin"]
+      }
+    },
+    {
+      "username": "service-account-backend",
+      "enabled": true,
+      "serviceAccountClientId": "backend",
+      "clientRoles": {
+        "realm-management": ["manage-organizations", "manage-users"]
       }
     }
   ],
@@ -336,6 +344,12 @@
           "moderator",
           "visitor"
         ]
+      }
+    ],
+    "realm-management": [
+      {
+        "client": "backend",
+        "roles": ["manage-organizations", "manage-users"]
       }
     ]
   }

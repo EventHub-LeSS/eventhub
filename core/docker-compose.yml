@@ -72,7 +72,7 @@ services:
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventhub}
       KEYCLOAK_USER_REALM: ${KEYCLOAK_USER_REALM:-eventhub}
       KEYCLOAK_FRONTEND_CLIENT_ID: frontend
-      SEED_USERNAME: ${SEED_USERNAME:-großmeister_finn}
+      SEED_USERNAME: ${SEED_USERNAME:-finn.betz@grossmeister.de}
       SEED_PASSWORD: ${SEED_PASSWORD:-password}
     depends_on:
       api-db:
@@ -127,8 +127,6 @@ services:
       KC_LOG_LEVEL: INFO
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
-    volumes:
-      - ./realms:/opt/keycloak/data/import
     depends_on:
       - keycloak-postgres
 
@@ -137,8 +135,10 @@ services:
       context: ./keycloak-swagger
       dockerfile: Dockerfile
     container_name: keycloak_swagger
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
     ports:
-      - "8080:8080"
+      - "8088:8080"
 
 volumes:
   keycloak_postgres_data:

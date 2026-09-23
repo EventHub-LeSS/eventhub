@@ -1,0 +1,4 @@
+# Keep generated and hand-written sources line-ending stable across platforms.
+*.go text eol=lf
+backend/docs/swagger.json text eol=lf
+backend/docs/swagger.yaml text eol=lf
