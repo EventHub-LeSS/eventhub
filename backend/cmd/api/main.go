@@ -37,9 +37,9 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	db, db_err := db.Connect()
-	if db_err != nil {
-		log.Fatal(db_err)
+	db, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatal(dbErr)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -101,6 +101,8 @@ func main() {
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
 
 		// bookings
@@ -124,7 +126,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 

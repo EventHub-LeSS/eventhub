@@ -73,6 +73,13 @@ definitions:
       message:
         type: string
     type: object
+  model.AvailableSeatsResponse:
+    properties:
+      availableSeats:
+        type: integer
+      eventId:
+        type: string
+    type: object
   model.BookingModel:
     properties:
       bookingId:
@@ -265,6 +272,13 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.SoldTicketsResponse:
+    properties:
+      eventId:
+        type: string
+      soldTickets:
+        type: integer
+    type: object
   model.UpdateEventRequest:
     properties:
       capacity:
@@ -395,6 +409,90 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events/{eventId}/available-seats:
+    get:
+      description: Returns the remaining available seats for an event. Requires the
+        event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.AvailableSeatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available seats
+      tags:
+      - events
+  /events/{eventId}/sold-tickets:
+    get:
+      description: Returns the number of confirmed tickets sold for an event. Requires
+        the event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SoldTicketsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get sold tickets
+      tags:
+      - events
   /events/{id}:
     put:
       consumes:
