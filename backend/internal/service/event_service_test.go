@@ -15,6 +15,7 @@ type fakeEventRepo struct {
 	saved *model.EventModel
 }
 
+<<<<<<< HEAD
 func (f *fakeEventRepo) CreateEvent(*model.EventModel) error {
 	return nil
 }
@@ -39,6 +40,14 @@ func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
 	return 0, nil
 }
 
+=======
+func (f *fakeEventRepo) CreateEvent(*model.EventModel) error                       { return nil }
+func (f *fakeEventRepo) GetEventByID(uuid.UUID) (*model.EventModel, error)         { return f.event, nil }
+func (f *fakeEventRepo) GetAllEvents() ([]*model.EventModel, error)                { return nil, nil }
+func (f *fakeEventRepo) GetAvailableEvents() ([]*model.EventModel, error)          { return nil, nil }
+func (f *fakeEventRepo) DeleteEvent(uuid.UUID) error                               { return nil }
+func (f *fakeEventRepo) ListByOrganization(uuid.UUID) ([]*model.EventModel, error) { return nil, nil }
+>>>>>>> e2e248b (implement recommendationservice)
 func (f *fakeEventRepo) UpdateEvent(event *model.EventModel) error {
 	f.saved = event
 	return nil
