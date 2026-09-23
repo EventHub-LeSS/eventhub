@@ -392,3 +392,80 @@ func TestEnsureServiceAccount_LeavesConfiguredRealmAlone(t *testing.T) {
 		t.Errorf("expected no writes, got puts=%v roles=%v scopes=%v", fake.clientPuts, fake.rolePosts, fake.scopePosts)
 	}
 }
+
+// fakeUserAdmin serves the user admin endpoints used by EnsureEmailUsernames.
+type fakeUserAdmin struct {
+	mu    sync.Mutex
+	users []map[string]any
+	puts  []map[string]any
+}
+
+func (f *fakeUserAdmin) server(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /admin/realms/eventhub/users", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		json.NewEncoder(w).Encode(f.users)
+	})
+	mux.HandleFunc("PUT /admin/realms/eventhub/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer admin-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		f.puts = append(f.puts, body)
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestEnsureEmailUsernames_RenamesLegacyUsernames(t *testing.T) {
+	fake := &fakeUserAdmin{users: []map[string]any{
+		{"id": "user-finn", "username": "großmeister_finn", "email": "finn.betz@grossmeister.de", "firstName": "Großmeister", "lastName": "Finn"},
+		{"id": "user-visitor", "username": "visitor@eventhub.de", "email": "visitor@eventhub.de"},
+		{"id": "user-sa", "username": "service-account-backend"},
+	}}
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
+
+	renamed, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if renamed != 1 || len(fake.puts) != 1 {
+		t.Fatalf("expected exactly one rename, got renamed=%d puts=%d", renamed, len(fake.puts))
+	}
+	put := fake.puts[0]
+	if put["id"] != "user-finn" {
+		t.Errorf("renamed wrong user: %v", put["id"])
+	}
+	if put["username"] != "finn.betz@grossmeister.de" {
+		t.Errorf("username = %v, want finn.betz@grossmeister.de", put["username"])
+	}
+	if put["email"] != "finn.betz@grossmeister.de" || put["firstName"] != "Großmeister" {
+		t.Errorf("user attributes were lost or changed: %v", put)
+	}
+}
+
+func TestEnsureEmailUsernames_LeavesEmailUsernamesAlone(t *testing.T) {
+	fake := &fakeUserAdmin{users: []map[string]any{
+		{"id": "user-finn", "username": "finn.betz@grossmeister.de", "email": "finn.betz@grossmeister.de"},
+		{"id": "user-visitor", "username": "visitor@eventhub.de", "email": "visitor@eventhub.de"},
+		{"id": "user-sa", "username": "service-account-backend"},
+	}}
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
+
+	renamed, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
+	if err != nil || renamed != 0 || len(fake.puts) != 0 {
+		t.Fatalf("expected no error and no rename, got renamed=%d puts=%d err=%v", renamed, len(fake.puts), err)
+	}
+}

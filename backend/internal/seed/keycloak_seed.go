@@ -36,6 +36,9 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 	if err := s.ensureServiceAccount(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureEmailUsernames(ctx); err != nil {
+		return err
+	}
 	if err := s.seedUsers(ctx); err != nil {
 		return err
 	}
@@ -80,6 +83,22 @@ func (s *KeycloakSeeder) ensureServiceAccount(ctx context.Context) error {
 	}
 	if updated {
 		log.Println("keycloak: enabled the backend service account and granted its roles")
+	}
+	return nil
+}
+
+// ensureEmailUsernames repairs realms seeded before usernames were unified to email addresses:
+// the realm registers with registrationEmailAsUsername, but --import-realm never updates an
+// existing realm, so users like the legacy "großmeister_finn" keep their plain username until
+// renamed. Without the rename the seed could not even create the email-named user, because the
+// email is already taken. Service accounts have no email and are skipped by the repair.
+func (s *KeycloakSeeder) ensureEmailUsernames(ctx context.Context) error {
+	renamed, err := s.kc.EnsureEmailUsernames(ctx, s.token, s.realm)
+	if err != nil {
+		return fmt.Errorf("ensure email usernames: %w", err)
+	}
+	if renamed > 0 {
+		log.Printf("keycloak: renamed %d user(s) to their email address as username", renamed)
 	}
 	return nil
 }

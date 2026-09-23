@@ -31,7 +31,7 @@ type mockOrg struct {
 }
 
 var mockUsers = []mockUser{
-	{Username: "großmeister_finn", Email: "finn.betz@grossmeister.de", FirstName: "Großmeister", LastName: "Finn", Phone: "+49 151 12345678"},
+	{Username: "finn.betz@grossmeister.de", Email: "finn.betz@grossmeister.de", FirstName: "Großmeister", LastName: "Finn", Phone: "+49 151 12345678"},
 	{Username: "organizer@provadis-hochschule.de", Email: "organizer@provadis-hochschule.de", FirstName: "Merz", LastName: "Leck Eier2", Phone: "+49 69 12345679"},
 	{Username: "organizer@telekom.de", Email: "organizer@telekom.de", FirstName: "Merz", LastName: "Leck Eier3", Phone: "+49 30 12345680"},
 	{Username: "eva.manager@provadis-hochschule.de", Email: "eva.manager@provadis-hochschule.de", FirstName: "Eva", LastName: "Manager", Phone: "+49 69 12345681"},
@@ -47,31 +47,31 @@ var mockUsers = []mockUser{
 }
 
 var mockOrgs = []mockOrg{
-	{Name: "Provadis Hochschule", Alias: "provadis-hochschule", Description: "Demo organization", AdminUser: "großmeister_finn",
+	{Name: "Provadis Hochschule", Alias: "provadis-hochschule", Description: "Demo organization", AdminUser: "finn.betz@grossmeister.de",
 		ContactEmail: "info@provadis-hochschule.de", ContactPhone: "+49 69 98980", Street: "Ginnheimer Landstraße", HouseNumber: "133", PostalCode: "65760", City: "Frankfurt", CountryCode: "DE"},
-	{Name: "Telekom", Alias: "telekom", Description: "Demo organization", AdminUser: "großmeister_finn",
+	{Name: "Telekom", Alias: "telekom", Description: "Demo organization", AdminUser: "finn.betz@grossmeister.de",
 		ContactEmail: "events@telekom.de", ContactPhone: "+49 228 1810", Street: "Friedrich-Ebert-Allee", HouseNumber: "140", PostalCode: "53113", City: "Bonn", CountryCode: "DE"},
-	{Name: "ACME Events", Alias: "acme-events", Description: "Mock organization for demos", AdminUser: "großmeister_finn",
+	{Name: "ACME Events", Alias: "acme-events", Description: "Mock organization for demos", AdminUser: "finn.betz@grossmeister.de",
 		ContactEmail: "hello@acme-events.de", ContactPhone: "+49 40 227090", Street: "Große Freiheit", HouseNumber: "7", PostalCode: "22767", City: "Hamburg", CountryCode: "DE"},
-	{Name: "Stadthalle Bremen", Alias: "stadthalle-bremen", Description: "Mock organization for demos", AdminUser: "großmeister_finn",
+	{Name: "Stadthalle Bremen", Alias: "stadthalle-bremen", Description: "Mock organization for demos", AdminUser: "finn.betz@grossmeister.de",
 		ContactEmail: "tickets@stadthalle-bremen.de", ContactPhone: "+49 421 98980", Street: "Findorffstraße", HouseNumber: "105", PostalCode: "28215", City: "Bremen", CountryCode: "DE"},
 }
 
 var mockMemberships = []mockMembership{
-	{"großmeister_finn", "provadis-hochschule", "org_admin"},
+	{"finn.betz@grossmeister.de", "provadis-hochschule", "org_admin"},
 	{"organizer@provadis-hochschule.de", "provadis-hochschule", "event_manager"},
 	{"eva.manager@provadis-hochschule.de", "provadis-hochschule", "event_manager"},
 	{"tom.finance@provadis-hochschule.de", "provadis-hochschule", "finance_viewer"},
 	{"max.multi@eventhub.de", "provadis-hochschule", "org_admin"},
 
-	{"großmeister_finn", "telekom", "org_admin"},
+	{"finn.betz@grossmeister.de", "telekom", "org_admin"},
 	{"organizer@telekom.de", "telekom", "event_manager"},
 	{"lena.admin@telekom.de", "telekom", "org_admin"},
 	{"max.multi@eventhub.de", "telekom", "event_manager"},
 
-	{"großmeister_finn", "acme-events", "org_admin"},
+	{"finn.betz@grossmeister.de", "acme-events", "org_admin"},
 	{"eva.manager@provadis-hochschule.de", "acme-events", "event_manager"},
 
-	{"großmeister_finn", "stadthalle-bremen", "org_admin"},
+	{"finn.betz@grossmeister.de", "stadthalle-bremen", "org_admin"},
 	{"lena.admin@telekom.de", "stadthalle-bremen", "event_manager"},
 }

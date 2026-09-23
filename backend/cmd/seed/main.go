@@ -36,7 +36,7 @@ func main() {
 	}
 	keycloakService := service.NewKeycloakService(keycloakCfg)
 
-	seedUsername := firstNonEmpty(os.Getenv("SEED_USERNAME"), "großmeister_finn")
+	seedUsername := firstNonEmpty(os.Getenv("SEED_USERNAME"), "finn.betz@grossmeister.de")
 	seedPassword := firstNonEmpty(os.Getenv("SEED_PASSWORD"), "password")
 
 	log.Printf("logging in as %q to realm %q", seedUsername, keycloakCfg.UserRealm)
