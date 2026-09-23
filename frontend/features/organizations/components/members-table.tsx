@@ -3,6 +3,7 @@
 import { PencilIcon } from "lucide-react"
 import { useState } from "react"
 
+import { useUpdateMemberRoles } from "@/features/organizations/lib/api"
 import type {
   OrganizationMember,
   OrganizationRight,
@@ -65,17 +66,22 @@ function formatDate(value: string | null) {
 }
 
 export function MembersTable({
-  members: initialMembers,
+  members,
+  alias,
 }: {
   members: OrganizationMember[]
+  alias: string
 }) {
-  const [members, setMembers] = useState(initialMembers)
   const [editingMember, setEditingMember] = useState<OrganizationMember | null>(
     null
   )
   const [draftRights, setDraftRights] = useState<OrganizationRight[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const updateMemberRoles = useUpdateMemberRoles(alias)
 
   function openEditDialog(member: OrganizationMember) {
+    setError(null)
     setEditingMember(member)
     setDraftRights(member.rights)
   }
@@ -83,6 +89,7 @@ export function MembersTable({
   function closeEditDialog(open: boolean) {
     if (!open) {
       setEditingMember(null)
+      setError(null)
     }
   }
 
@@ -94,14 +101,14 @@ export function MembersTable({
 
   function handleSaveRights() {
     if (!editingMember) return
-    setMembers((prev) =>
-      prev.map((member) =>
-        member.id === editingMember.id
-          ? { ...member, rights: draftRights }
-          : member
-      )
+    setError(null)
+    updateMemberRoles.mutate(
+      { username: editingMember.username, roles: draftRights },
+      {
+        onSuccess: () => setEditingMember(null),
+        onError: (mutationError) => setError(mutationError.message),
+      }
     )
-    setEditingMember(null)
   }
 
   return (
@@ -196,11 +203,24 @@ export function MembersTable({
             ))}
           </FieldGroup>
 
+          {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : null}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingMember(null)}>
+            <Button
+              variant="outline"
+              onClick={() => setEditingMember(null)}
+              disabled={updateMemberRoles.isPending}
+            >
               Cancel
             </Button>
-            <Button onClick={handleSaveRights}>Save changes</Button>
+            <Button
+              onClick={handleSaveRights}
+              disabled={updateMemberRoles.isPending}
+            >
+              {updateMemberRoles.isPending ? "Saving…" : "Save changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

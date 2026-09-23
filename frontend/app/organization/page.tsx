@@ -7,7 +7,11 @@ export default async function OrganizationPage() {
   return (
     <div className="flex flex-1 justify-center p-6">
       <div className="w-full max-w-6xl">
-        <OrganizationOverview alias={user.activeOrganization as string} />
+        <OrganizationOverview
+          alias={user.activeOrganization as string}
+          currentUserEmail={user.email}
+          isAdmin={user.isAdmin}
+        />
       </div>
     </div>
   );
