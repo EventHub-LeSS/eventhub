@@ -3,6 +3,7 @@ package repository
 import (
 	"backend/internal/model"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -20,6 +21,8 @@ type BookingRepository interface {
 	GetBookingByID(bookingID uuid.UUID) (*model.BookingModel, error)
 	GetAllBookings() ([]*model.BookingModel, error)
 	UpdateBooking(booking *model.BookingModel) error
+	ListEventsByUser(userID uuid.UUID) ([]*model.EventModel, error)
+	CountBookedTickets(EventID uuid.UUID) (int64, error)
 }
 
 type bookingRepository struct {
@@ -89,4 +92,31 @@ func (t *bookingTx) CountOccupiedTickets(eventID uuid.UUID) (int64, error) {
 
 func (t *bookingTx) CreateBooking(booking *model.BookingModel) error {
 	return t.db.Create(booking).Error
+}
+
+func (r *bookingRepository) ListEventsByUser(userID uuid.UUID) ([]*model.EventModel, error) {
+	var events []*model.EventModel
+
+	err := r.db.Table("bookings AS b").
+		Select("e.*").
+		Joins("JOIN events AS e ON e.event_id = b.event_id").
+		Where("b.user_id = ?", userID).
+		Where("b.status = ?", model.BookingStatusConfirmed).
+		Where("e.end_time < ?", time.Now()).
+		Scan(&events).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+func (r *bookingRepository) CountBookedTickets(eventID uuid.UUID) (int64, error) {
+	var booked int64
+	err := r.db.Table("booking AS b").
+		Select("COALESCE(SUM(number_of_tickets), 0)").
+		Where("event_id = ? AND status = ?", eventID, model.BookingStatusConfirmed).
+		Scan(&booked).Error
+	return booked, err
 }
