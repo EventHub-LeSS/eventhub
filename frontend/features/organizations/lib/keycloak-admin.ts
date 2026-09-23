@@ -163,6 +163,7 @@ export async function getOrganizationMembersWithRights(
 
   return members.map((member) => ({
     id: member.id,
+    username: member.username ?? "",
     name: memberName(member),
     email: member.email ?? "",
     joinedAt: member.createdTimestamp

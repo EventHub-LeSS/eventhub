@@ -40,6 +40,7 @@ export const organizationRights: OrganizationRightOption[] = [
 
 export interface OrganizationMember {
   id: string;
+  username: string;
   name: string;
   email: string;
   joinedAt: string | null;

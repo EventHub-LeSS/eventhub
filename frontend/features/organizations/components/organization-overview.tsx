@@ -7,12 +7,20 @@ import { EventsTable } from "@/features/organizations/components/events-table"
 import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import { OrganizationStats } from "@/features/organizations/components/organization-stats"
+import { SalesChart } from "@/features/organizations/components/sales-chart"
 import {
   useOrganization,
   useOrganizationMembers,
 } from "@/features/organizations/lib/api"
-import { mockActivity, mockEvents } from "@/features/organizations/lib/mock-data"
-import type { Organization } from "@/features/organizations/lib/types"
+import {
+  mockActivity,
+  mockEvents,
+  mockSales,
+} from "@/features/organizations/lib/mock-data"
+import type {
+  Organization,
+  OrganizationRight,
+} from "@/features/organizations/lib/types"
 import {
   Card,
   CardContent,
@@ -28,7 +36,15 @@ import {
   TabsTrigger,
 } from "@/features/shared/components/ui/tabs"
 
-export function OrganizationOverview({ alias }: { alias: string }) {
+export function OrganizationOverview({
+  alias,
+  currentUserEmail,
+  isAdmin = false,
+}: {
+  alias: string
+  currentUserEmail: string
+  isAdmin?: boolean
+}) {
   const organizationQuery = useOrganization(alias)
   const membersQuery = useOrganizationMembers(alias)
 
@@ -83,6 +99,14 @@ export function OrganizationOverview({ alias }: { alias: string }) {
   const organization = organizationQuery.data
   const members = membersQuery.data ?? []
 
+  const myRights =
+    members.find((member) => member.email === currentUserEmail)?.rights ?? []
+  const hasRight = (right: OrganizationRight) =>
+    isAdmin || myRights.includes(right)
+  const canViewMembers = hasRight("org_admin")
+  const canViewEvents = hasRight("event_manager")
+  const canViewSales = hasRight("finance_viewer")
+
   if (membersQuery.isError) {
     return (
       <Card>
@@ -109,8 +133,13 @@ export function OrganizationOverview({ alias }: { alias: string }) {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
-          <TabsTrigger value="events">Events ({mockEvents.length})</TabsTrigger>
+          {canViewMembers && (
+            <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
+          )}
+          {canViewEvents && (
+            <TabsTrigger value="events">Events ({mockEvents.length})</TabsTrigger>
+          )}
+          {canViewSales && <TabsTrigger value="sales">Sales</TabsTrigger>}
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
@@ -118,27 +147,37 @@ export function OrganizationOverview({ alias }: { alias: string }) {
           <ActivityChart data={mockActivity} />
         </TabsContent>
 
-        <TabsContent value="members">
-          <Card>
-            <CardHeader>
-              <CardTitle>Members</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MembersTable members={members} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {canViewMembers && (
+          <TabsContent value="members">
+            <Card>
+              <CardHeader>
+                <CardTitle>Members</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MembersTable members={members} alias={alias} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
-        <TabsContent value="events">
-          <Card>
-            <CardHeader>
-              <CardTitle>Events</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EventsTable events={mockEvents} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {canViewEvents && (
+          <TabsContent value="events">
+            <Card>
+              <CardHeader>
+                <CardTitle>Events</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EventsTable events={mockEvents} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canViewSales && (
+          <TabsContent value="sales" className="flex flex-col gap-4">
+            <SalesChart data={mockSales} />
+          </TabsContent>
+        )}
 
         <TabsContent value="settings">
           <Card>

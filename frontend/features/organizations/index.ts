@@ -15,6 +15,11 @@ export type {
 export {
   useOrganization,
   useOrganizationMembers,
+  useUpdateMemberRoles,
+} from "@/features/organizations/lib/api";
+export type {
+  UpdateMemberRolesResponse,
+  UpdateMemberRolesVariables,
 } from "@/features/organizations/lib/api";
 export {
   KeycloakAdminError,
