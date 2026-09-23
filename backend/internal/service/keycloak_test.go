@@ -393,7 +393,9 @@ func TestEnsureServiceAccount_LeavesConfiguredRealmAlone(t *testing.T) {
 	}
 }
 
-// fakeUserAdmin serves the user admin endpoints used by EnsureEmailUsernames.
+// fakeUserAdmin serves the user admin endpoints used by EnsureEmailUsernames. Like the real
+// Keycloak in a realm with registrationEmailAsUsername, the users endpoint reports the email
+// as the username, so the stored username is invisible to the repair.
 type fakeUserAdmin struct {
 	mu    sync.Mutex
 	users []map[string]any
@@ -407,7 +409,7 @@ func (f *fakeUserAdmin) server(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		json.NewEncoder(w).Encode(f.users)
+		json.NewEncoder(w).Encode(emailAsUsername(f.users))
 	})
 	mux.HandleFunc("PUT /admin/realms/eventhub/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer admin-token" {
@@ -429,7 +431,26 @@ func (f *fakeUserAdmin) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func TestEnsureEmailUsernames_RenamesLegacyUsernames(t *testing.T) {
+// emailAsUsername mimics the email-as-username realm: the users endpoint shows the email as
+// the username for every user that has one.
+func emailAsUsername(users []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(users))
+	for _, u := range users {
+		copied := map[string]any{}
+		for k, v := range u {
+			copied[k] = v
+		}
+		if email, ok := u["email"].(string); ok && email != "" {
+			copied["username"] = email
+		}
+		out = append(out, copied)
+	}
+	return out
+}
+
+func TestEnsureEmailUsernames_RewritesEveryUserWithEmail(t *testing.T) {
+	// "großmeister_finn" is a legacy stored username, but the users endpoint reports the
+	// email for both users, so the repair cannot tell them apart and rewrites both.
 	fake := &fakeUserAdmin{users: []map[string]any{
 		{"id": "user-finn", "username": "großmeister_finn", "email": "finn.betz@grossmeister.de", "firstName": "Großmeister", "lastName": "Finn"},
 		{"id": "user-visitor", "username": "visitor@eventhub.de", "email": "visitor@eventhub.de"},
@@ -437,35 +458,32 @@ func TestEnsureEmailUsernames_RenamesLegacyUsernames(t *testing.T) {
 	}}
 	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
 
-	renamed, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
+	updated, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if renamed != 1 || len(fake.puts) != 1 {
-		t.Fatalf("expected exactly one rename, got renamed=%d puts=%d", renamed, len(fake.puts))
+	if updated != 2 || len(fake.puts) != 2 {
+		t.Fatalf("expected both email users to be rewritten, got updated=%d puts=%d", updated, len(fake.puts))
 	}
-	put := fake.puts[0]
-	if put["id"] != "user-finn" {
-		t.Errorf("renamed wrong user: %v", put["id"])
+	for _, put := range fake.puts {
+		if put["username"] != put["email"] {
+			t.Errorf("username = %v, want the email address %v", put["username"], put["email"])
+		}
 	}
-	if put["username"] != "finn.betz@grossmeister.de" {
-		t.Errorf("username = %v, want finn.betz@grossmeister.de", put["username"])
-	}
-	if put["email"] != "finn.betz@grossmeister.de" || put["firstName"] != "Großmeister" {
-		t.Errorf("user attributes were lost or changed: %v", put)
+	finn := fake.puts[0]
+	if finn["id"] != "user-finn" || finn["firstName"] != "Großmeister" {
+		t.Errorf("user attributes were lost or changed: %v", finn)
 	}
 }
 
-func TestEnsureEmailUsernames_LeavesEmailUsernamesAlone(t *testing.T) {
+func TestEnsureEmailUsernames_SkipsUsersWithoutEmail(t *testing.T) {
 	fake := &fakeUserAdmin{users: []map[string]any{
-		{"id": "user-finn", "username": "finn.betz@grossmeister.de", "email": "finn.betz@grossmeister.de"},
-		{"id": "user-visitor", "username": "visitor@eventhub.de", "email": "visitor@eventhub.de"},
 		{"id": "user-sa", "username": "service-account-backend"},
 	}}
 	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL})
 
-	renamed, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
-	if err != nil || renamed != 0 || len(fake.puts) != 0 {
-		t.Fatalf("expected no error and no rename, got renamed=%d puts=%d err=%v", renamed, len(fake.puts), err)
+	updated, err := kc.EnsureEmailUsernames(context.Background(), "admin-token", "eventhub")
+	if err != nil || updated != 0 || len(fake.puts) != 0 {
+		t.Fatalf("expected no error and no writes, got updated=%d puts=%d err=%v", updated, len(fake.puts), err)
 	}
 }

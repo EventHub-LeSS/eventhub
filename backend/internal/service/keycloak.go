@@ -351,11 +351,14 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 	return true, nil
 }
 
-// EnsureEmailUsernames renames every user whose username differs from their email address to
-// the email address. The realm registers users with registrationEmailAsUsername, so usernames
-// are emails; realms seeded before that rule keep plain usernames, because --import-realm
-// skips existing realms. Users without an email address, like the backend service account,
-// are skipped. Reports how many users were renamed.
+// EnsureEmailUsernames makes the stored username of every user their email address. The realm
+// registers users with registrationEmailAsUsername, so usernames are emails; realms seeded
+// before that rule keep plain usernames, because --import-realm skips existing realms. The
+// stored username cannot be detected through the admin API: in email-as-username realms it
+// reports the email as the username, so a legacy username looks already unified. The update
+// is therefore issued for every user with an email address; it is idempotent. Users without
+// an email address, like the backend service account, are skipped. Reports how many users
+// were written.
 func (k *KeycloakService) EnsureEmailUsernames(ctx context.Context, accessToken, realm string) (int, error) {
 	maxResults := 100
 	page := 0
@@ -375,25 +378,18 @@ func (k *KeycloakService) EnsureEmailUsernames(ctx context.Context, accessToken,
 		page += maxResults
 	}
 
-	renamed := 0
+	updated := 0
 	for _, user := range users {
 		if user.ID == nil || user.Email == nil || *user.Email == "" {
 			continue
 		}
-		if user.Username != nil && *user.Username == *user.Email {
-			continue
-		}
-		oldUsername := ""
-		if user.Username != nil {
-			oldUsername = *user.Username
-		}
 		user.Username = user.Email
 		if err := k.client.UpdateUser(ctx, accessToken, realm, *user); err != nil {
-			return renamed, fmt.Errorf("failed to rename user %q to %q: %w", oldUsername, *user.Email, err)
+			return updated, fmt.Errorf("failed to set the username of user %q to their email address: %w", *user.Email, err)
 		}
-		renamed++
+		updated++
 	}
-	return renamed, nil
+	return updated, nil
 }
 
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
