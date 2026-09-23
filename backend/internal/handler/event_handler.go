@@ -179,28 +179,54 @@ func ListOwnEventsHandler(c *gin.Context) {
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
+// @Summary      Get sold tickets
+// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        eventId path string true "Event ID"
+// @Success      200 {object} model.SoldTicketsResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/sold-tickets [get]
 func (h *EventHandler) GetSoldTicketsHandler(c *gin.Context) {
 	statistics, ok := h.getEventStatistics(c)
 	if !ok {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"eventId":     statistics.EventID,
-		"soldTickets": statistics.SoldTickets,
+	c.JSON(http.StatusOK, model.SoldTicketsResponse{
+		EventID:     statistics.EventID,
+		SoldTickets: statistics.SoldTickets,
 	})
 }
 
 // EVENTHUB-81: Freie Plätze pro Veranstaltung anzeigen
+// @Summary      Get available seats
+// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        eventId path string true "Event ID"
+// @Success      200 {object} model.AvailableSeatsResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/available-seats [get]
 func (h *EventHandler) GetAvailableSeatsHandler(c *gin.Context) {
 	statistics, ok := h.getEventStatistics(c)
 	if !ok {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"eventId":        statistics.EventID,
-		"availableSeats": statistics.AvailableSeats,
+	c.JSON(http.StatusOK, model.AvailableSeatsResponse{
+		EventID:        statistics.EventID,
+		AvailableSeats: statistics.AvailableSeats,
 	})
 }
 
