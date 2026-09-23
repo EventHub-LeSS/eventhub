@@ -351,6 +351,51 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 	return true, nil
 }
 
+// EnsureEmailUsernames renames every user whose username differs from their email address to
+// the email address. The realm registers users with registrationEmailAsUsername, so usernames
+// are emails; realms seeded before that rule keep plain usernames, because --import-realm
+// skips existing realms. Users without an email address, like the backend service account,
+// are skipped. Reports how many users were renamed.
+func (k *KeycloakService) EnsureEmailUsernames(ctx context.Context, accessToken, realm string) (int, error) {
+	maxResults := 100
+	page := 0
+	var users []*gocloak.User
+	for {
+		pageUsers, err := k.client.GetUsers(ctx, accessToken, realm, gocloak.GetUsersParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to get users: %w", err)
+		}
+		users = append(users, pageUsers...)
+		if len(pageUsers) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+
+	renamed := 0
+	for _, user := range users {
+		if user.ID == nil || user.Email == nil || *user.Email == "" {
+			continue
+		}
+		if user.Username != nil && *user.Username == *user.Email {
+			continue
+		}
+		oldUsername := ""
+		if user.Username != nil {
+			oldUsername = *user.Username
+		}
+		user.Username = user.Email
+		if err := k.client.UpdateUser(ctx, accessToken, realm, *user); err != nil {
+			return renamed, fmt.Errorf("failed to rename user %q to %q: %w", oldUsername, *user.Email, err)
+		}
+		renamed++
+	}
+	return renamed, nil
+}
+
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
 	maxResults := 100
 	page := 0
