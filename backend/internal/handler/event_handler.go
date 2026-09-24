@@ -146,15 +146,6 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "event withdrawn"})
 }
 
-func writeProblem(c *gin.Context, status int, detail string) {
-	c.JSON(status, model.ErrorResponse{
-		Type:   "about:blank",
-		Title:  http.StatusText(status),
-		Status: status,
-		Detail: detail,
-	})
-}
-
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrEventNotFound):
