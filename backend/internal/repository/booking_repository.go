@@ -22,7 +22,7 @@ type BookingRepository interface {
 	GetAllBookings() ([]*model.BookingModel, error)
 	UpdateBooking(booking *model.BookingModel) error
 	ListEventsByUser(userID uuid.UUID) ([]*model.EventModel, error)
-	CountBookedTickets(EventID uuid.UUID) (int64, error)
+	GetAvgRatingByOrganizer(organizerID *uuid.UUID) (int, error)
 }
 
 type bookingRepository struct {
@@ -112,11 +112,12 @@ func (r *bookingRepository) ListEventsByUser(userID uuid.UUID) ([]*model.EventMo
 	return events, nil
 }
 
-func (r *bookingRepository) CountBookedTickets(eventID uuid.UUID) (int64, error) {
-	var booked int64
-	err := r.db.Table("booking AS b").
-		Select("COALESCE(SUM(number_of_tickets), 0)").
-		Where("event_id = ? AND status = ?", eventID, model.BookingStatusConfirmed).
-		Scan(&booked).Error
-	return booked, err
+func (r *bookingRepository) GetAvgRatingByOrganizer(organizerID *uuid.UUID) (int, error) {
+	var rating int
+
+	err := r.db.Table("events AS e").Select("AVG(r.score)").
+		Joins("JOIN bookings AS b ON e.event_id = b.event_id JOIN rating AS r on b.booking_id = r.booking_id").
+		Where("e.organizer_id = ? AND e.status = ?", organizerID, model.EventStatusCompleted).Scan(&rating).Error
+
+	return rating, err
 }

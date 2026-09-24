@@ -11,6 +11,7 @@ type EventRepository interface {
 	CreateEvent(event *model.EventModel) error
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
 	GetAllEvents() ([]*model.EventModel, error)
+	GetAvailableEvents() ([]*model.EventModel, error)
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
@@ -48,6 +49,15 @@ func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 		return nil, err
 	}
 	return events, nil
+}
+
+func (r *eventRepository) GetAvailableEvents() ([]*model.EventModel, error) {
+	var events []*model.EventModel
+	err := r.db.Table("events AS e").
+		Select("e.*").
+		Where("status = ?", model.EventStatusPublished).
+		Scan(&events).Error
+	return events, err
 }
 
 func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
