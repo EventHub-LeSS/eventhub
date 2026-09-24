@@ -71,10 +71,13 @@ func main() {
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	recommendationsService := service.NewRecommendationsService(eventRepo, bookingRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -95,6 +98,8 @@ func main() {
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
 
+		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
+
 		// events
 		events := protected.Group("/events")
 		{
@@ -106,7 +111,7 @@ func main() {
 		}
 
 		// bookings
-		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
+		protected.POST("/bookings", bookingHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))

@@ -10,13 +10,11 @@ import (
 
 type RecommendationsService struct {
 	eventRepo   repository.EventRepository
-	userRepo    repository.UserRepository
 	bookingRepo repository.BookingRepository
 }
 
-func NewRecommendationsService(eventRepo repository.EventRepository,
-	userRepo repository.UserRepository, bookingRepo repository.BookingRepository) *RecommendationsService {
-	return &RecommendationsService{eventRepo: eventRepo, userRepo: userRepo, bookingRepo: bookingRepo}
+func NewRecommendationsService(eventRepo repository.EventRepository, bookingRepo repository.BookingRepository) *RecommendationsService {
+	return &RecommendationsService{eventRepo: eventRepo, bookingRepo: bookingRepo}
 }
 
 func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]*model.EventModel, error) {
@@ -54,13 +52,22 @@ func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]
 func (s *RecommendationsService) scoreEventForUser(userID uuid.UUID, event model.EventModel) float64 {
 	categoryAffinity := s.computeCategoryAffinity(userID, event.CategoryID)
 	popularityScore := s.computePopularityScore(event.EventID)
-	//organizerScore avg rating of past events of the organizer
+	organizerScore := s.computeOrganizerScore(event.OrganizerID)
 
-	return 0.5*categoryAffinity + 0.5*popularityScore // 0.1*organizerScore
+	return 0.5*categoryAffinity + 0.4*popularityScore + 0.1*organizerScore
+}
+
+func (s *RecommendationsService) computeOrganizerScore(OrganizerID *uuid.UUID) float64 {
+	rating, err := s.bookingRepo.GetAvgRatingByOrganizer(OrganizerID)
+
+	if err != nil {
+		return 0
+	}
+	return (float64(rating) - 1) / 4
 }
 
 func (s *RecommendationsService) computePopularityScore(EventID uuid.UUID) float64 {
-	booked, err := s.bookingRepo.CountBookedTickets(EventID)
+	booked, err := s.eventRepo.GetConfirmedTicketCount(EventID)
 
 	if err != nil {
 		return 0
