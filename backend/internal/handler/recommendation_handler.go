@@ -18,6 +18,15 @@ func NewRecommendationsHandler(recommendationsService *service.RecommendationsSe
 	return &RecommendationsHandler{recommendationsService: recommendationsService, userRepo: userRepo}
 }
 
+// @Summary      Get event recommendations
+// @Description  Returns a ranked list of recommended events for the authenticated user based on their historical bookings, category affinity, organizer affinity, and event popularity.
+// @Tags         recommendations
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {array} model.EventModel
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /recommendations [get]
 func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {

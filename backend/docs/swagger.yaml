@@ -698,6 +698,33 @@ paths:
       summary: Configure organization member roles
       tags:
       - organizations
+  /recommendations:
+    get:
+      description: Returns a ranked list of recommended events for the authenticated
+        user based on their historical bookings, category affinity, organizer affinity,
+        and event popularity.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get event recommendations
+      tags:
+      - recommendations
   /users/me:
     get:
       description: Returns the authenticated user's profile, global roles, active
