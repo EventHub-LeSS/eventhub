@@ -12,11 +12,12 @@ import (
 )
 
 type EventHandler struct {
-	eventService *service.EventService
+	eventService    *service.EventService
+	keycloakService *service.KeycloakService
 }
 
-func NewEventHandler(eventService *service.EventService) *EventHandler {
-	return &EventHandler{eventService: eventService}
+func NewEventHandler(eventService *service.EventService, keycloakService *service.KeycloakService) *EventHandler {
+	return &EventHandler{eventService: eventService, keycloakService: keycloakService}
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
@@ -175,7 +176,63 @@ func writeEventActionError(c *gin.Context, err error) {
 }
 
 // EVENTHUB-79: Eigene Veranstaltungen anzeigen
-func ListOwnEventsHandler(c *gin.Context) {
+
+// ListOwnEventsHandler
+// @Summary      Get users organization events
+// @Description  Returns the events posted by all organizations where the user has the event_manager role
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      applcation/json
+// @Success      200 {array} model.EventModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/self [get]
+func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
+	principal, rsp := checkPreconditions(c, middleware.RoleEventManager)
+	if rsp != nil {
+		c.AbortWithStatusJSON(rsp.Status, rsp)
+		return
+	}
+	allEvents := make([]*model.EventModel, 0)
+	for _, orgAlias := range principal.OrganizationIDsWithRole(middleware.RoleEventManager) {
+		orgId, err := h.keycloakService.GetOrganizationIDBySlug(c, principal.AccessToken, orgAlias)
+		if err != nil {
+			writeEventActionError(c, err)
+			return
+		}
+		events, err := h.eventService.ListByOrganization(orgId)
+		if err != nil {
+			writeEventActionError(c, err)
+			return
+		}
+		allEvents = append(allEvents, events...)
+	}
+
+	c.JSON(http.StatusOK, allEvents)
+}
+
+func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		return nil, &model.ErrorResponse{
+			Status: 401,
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusUnauthorized),
+			Detail: "Authentication is required!",
+		}
+	}
+
+	if !principal.HasOrganizationRole(role) {
+		return principal, &model.ErrorResponse{
+			Status: 403,
+			Type:   "about:blank",
+			Title:  http.StatusText(http.StatusForbidden),
+			Detail: "Insufficient organization role",
+		}
+	}
+	return principal, nil
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
