@@ -304,14 +304,10 @@ func TestListOwnEventsHandler_DoesNotReturnPartialResults(t *testing.T) {
 func TestListOwnEventsHandler_DatabaseFailure(t *testing.T) {
 	db := setupHandlerDB(t)
 	seedEventForOrg(t, db, "org-1", model.EventStatusPublished)
-	// Fail only the event query, after the organization lookup succeeds.
 	const callback = "test:list_own_events_failure"
 	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
 		if tx.Statement.Table == "events" {
-			err := tx.AddError(errors.New("event query failed"))
-			if err != nil {
-				t.Fatalf("issue mocking callback: %v", err)
-			}
+			_ = tx.AddError(errors.New("event query failed"))
 		}
 	}); err != nil {
 		t.Fatalf("register query failure: %v", err)
