@@ -63,7 +63,10 @@ func (s *RecommendationsService) computeOrganizerScore(OrganizerID *uuid.UUID) f
 	if err != nil {
 		return 0
 	}
-	return (float64(rating) - 1) / 4
+	if rating < 1 {
+		return 0
+	}
+	return (rating - 1) / 4
 }
 
 func (s *RecommendationsService) computePopularityScore(EventID uuid.UUID) float64 {
@@ -93,7 +96,7 @@ func (s *RecommendationsService) computeCategoryAffinity(userID uuid.UUID, Categ
 	total := len(events)
 	sameCategory := 0
 	for _, event := range events {
-		if event.CategoryID == CategoryID {
+		if &event.CategoryID == &CategoryID {
 			sameCategory++
 		}
 	}
