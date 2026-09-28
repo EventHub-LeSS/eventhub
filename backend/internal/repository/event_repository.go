@@ -14,9 +14,9 @@ type EventRepository interface {
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
+	// ListByOrganizers returns the events of the given organizations; an empty status matches every status.
+	ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
 	GetConfirmedTicketCount(eventID uuid.UUID) (int64, error)
-	ListByStatus(status model.EventStatus) ([]*model.EventModel, error)
-	ListByOrganizerAndStatus(organizationID uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
 }
 
 type eventRepository struct {
@@ -28,7 +28,7 @@ func NewEventRepository(db *gorm.DB) EventRepository {
 }
 
 func (r *eventRepository) CreateEvent(event *model.EventModel) error {
-	return r.db.Create(event).Error
+	return translateEventWriteError(r.db.Create(event).Error)
 }
 
 func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
@@ -53,7 +53,7 @@ func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 }
 
 func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
-	return r.db.Save(event).Error
+	return translateEventWriteError(r.db.Save(event).Error)
 }
 
 func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
@@ -64,6 +64,21 @@ func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model
 	var events []*model.EventModel
 	err := r.db.Where("organizer_id = ?", organizationID).Find(&events).Error
 	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *eventRepository) ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error) {
+	if len(organizationIDs) == 0 {
+		return nil, nil
+	}
+	query := r.db.Where("organizer_id IN ?", organizationIDs)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var events []*model.EventModel
+	if err := query.Order("start_time ASC").Find(&events).Error; err != nil {
 		return nil, err
 	}
 	return events, nil
@@ -83,23 +98,4 @@ func (r *eventRepository) GetConfirmedTicketCount(eventID uuid.UUID) (int64, err
 	}
 
 	return soldTickets, nil
-}
-
-func (r *eventRepository) ListByStatus(status model.EventStatus) ([]*model.EventModel, error) {
-	var events []*model.EventModel
-	err := r.db.Where("status = ?", status).Order("start_time ASC").Find(&events).Error
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
-}
-
-func (r *eventRepository) ListByOrganizerAndStatus(organizationID uuid.UUID, status model.EventStatus) ([]*model.EventModel, error) {
-	var events []*model.EventModel
-	err := r.db.Where("organizer_id = ? AND status = ?", organizationID, status).
-		Order("start_time ASC").Find(&events).Error
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
 }

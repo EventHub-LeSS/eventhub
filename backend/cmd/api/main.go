@@ -98,13 +98,13 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
+			events.POST("/draft", eventHandler.SaveEventAsDraftHandler)
+			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
-			events.POST("/draft", eventHandler.SaveEventAsDraftHandler)
-			events.GET("/drafts", eventHandler.ListOwnDraftsHandler)
 		}
 
 		// bookings

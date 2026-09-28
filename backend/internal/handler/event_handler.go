@@ -19,28 +19,21 @@ func NewEventHandler(eventService *service.EventService) *EventHandler {
 	return &EventHandler{eventService: eventService}
 }
 
-func organizationFromContext(c *gin.Context) (string, bool) {
+// managedOrganizationIDs returns the organizations in which the caller holds the event_manager
+// role. It writes 401 or 403 and returns false if there are none.
+func managedOrganizationIDs(c *gin.Context) ([]string, bool) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
 		writeProblem(c, http.StatusUnauthorized, "authentication is required")
-		return "", false
+		return nil, false
 	}
-	if principal.ActiveOrganization == nil {
-		writeProblem(c, http.StatusForbidden, "no active organization")
-		return "", false
-	}
-	if !principal.HasOrganizationRole(middleware.RoleEventManager) {
-		writeProblem(c, http.StatusForbidden, "missing organization role")
-		return "", false
-	}
-	return principal.ActiveOrganization.ID, true
-}
 
-func eventsOrEmpty(events []*model.EventModel) []*model.EventModel {
-	if events == nil {
-		return []*model.EventModel{}
+	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
+	if len(managedOrgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return nil, false
 	}
-	return events
+	return managedOrgIDs, true
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
@@ -48,8 +41,22 @@ func CreateEventHandler(c *gin.Context) {
 }
 
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
+// @Summary      Save event as draft
+// @Description  Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.
+// @Tags         events
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        request body   model.CreateDraftRequest true  "Draft event data"
+// @Success      201 {object} model.EventModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      422 {object} model.ErrorResponse "Unknown categoryId or locationId"
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/draft [post]
 func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
-	keycloakOrgID, ok := organizationFromContext(c)
+	managedOrgIDs, ok := managedOrganizationIDs(c)
 	if !ok {
 		return
 	}
@@ -60,28 +67,13 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 		return
 	}
 
-	created, err := h.eventService.CreateDraft(keycloakOrgID, req)
+	created, err := h.eventService.CreateDraft(managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusCreated, created)
-}
-
-func (h *EventHandler) ListOwnDraftsHandler(c *gin.Context) {
-	keycloakOrgID, ok := organizationFromContext(c)
-	if !ok {
-		return
-	}
-
-	drafts, err := h.eventService.ListOwnEventsByStatus(keycloakOrgID, model.EventStatusDraft)
-	if err != nil {
-		writeEventActionError(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, eventsOrEmpty(drafts))
 }
 
 // EVENTHUB-78: Veranstaltung bearbeiten
@@ -107,15 +99,8 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		return
 	}
 
-	principal, ok := middleware.PrincipalFromContext(c)
+	managedOrgIDs, ok := managedOrganizationIDs(c)
 	if !ok {
-		writeProblem(c, http.StatusUnauthorized, "authentication is required")
-		return
-	}
-
-	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
-	if len(managedOrgIDs) == 0 {
-		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
@@ -155,15 +140,8 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	principal, ok := middleware.PrincipalFromContext(c)
+	managedOrgIDs, ok := managedOrganizationIDs(c)
 	if !ok {
-		writeProblem(c, http.StatusUnauthorized, "authentication is required")
-		return
-	}
-
-	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
-	if len(managedOrgIDs) == 0 {
-		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
@@ -183,15 +161,8 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	principal, ok := middleware.PrincipalFromContext(c)
+	managedOrgIDs, ok := managedOrganizationIDs(c)
 	if !ok {
-		writeProblem(c, http.StatusUnauthorized, "authentication is required")
-		return
-	}
-
-	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
-	if len(managedOrgIDs) == 0 {
-		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return
 	}
 
@@ -226,13 +197,51 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotPublished):
 		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrOrganizationRequired):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrUnknownReference):
+		writeProblem(c, http.StatusUnprocessableEntity, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }
 
 // EVENTHUB-79: Eigene Veranstaltungen anzeigen
-func ListOwnEventsHandler(c *gin.Context) {
+// EVENTHUB-77: eigene Entwürfe über ?status=draft
+// @Summary      List own events
+// @Description  Returns the events of all organizations in which the caller holds the event_manager role, ordered by start time. Use status=draft to list the own drafts. Drafts are never visible to other organizations or visitors.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        status query  string false "Only return events in this status" Enums(draft, published, cancelled, completed)
+// @Success      200 {array}  model.EventModel "Own events; an empty array if there are none"
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/self [get]
+func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
+	managedOrgIDs, ok := managedOrganizationIDs(c)
+	if !ok {
+		return
+	}
+
+	status := model.EventStatus(c.Query("status"))
+	if status != "" && !model.IsValidEventStatus(status) {
+		writeProblem(c, http.StatusBadRequest, "invalid status")
+		return
+	}
+
+	events, err := h.eventService.ListOwnEvents(managedOrgIDs, status)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	if events == nil {
+		events = []*model.EventModel{}
+	}
+
+	c.JSON(http.StatusOK, events)
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
@@ -294,15 +303,8 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 		return nil, false
 	}
 
-	principal, ok := middleware.PrincipalFromContext(c)
+	managedOrgIDs, ok := managedOrganizationIDs(c)
 	if !ok {
-		writeProblem(c, http.StatusUnauthorized, "authentication is required")
-		return nil, false
-	}
-
-	managedOrgIDs := principal.OrganizationIDsWithRole(middleware.RoleEventManager)
-	if len(managedOrgIDs) == 0 {
-		writeProblem(c, http.StatusForbidden, "missing organization role")
 		return nil, false
 	}
 

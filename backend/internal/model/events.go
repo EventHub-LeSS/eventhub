@@ -16,6 +16,15 @@ const (
 	EventStatusCompleted EventStatus = "completed"
 )
 
+// IsValidEventStatus reports whether status is one of the event statuses of the event_status enum.
+func IsValidEventStatus(status EventStatus) bool {
+	switch status {
+	case EventStatusDraft, EventStatusPublished, EventStatusCancelled, EventStatusCompleted:
+		return true
+	}
+	return false
+}
+
 type EventModel struct {
 	EventID     uuid.UUID       `json:"eventId" gorm:"column:event_id;type:uuid;primaryKey"`
 	Title       string          `json:"title" gorm:"column:title"`
@@ -51,13 +60,17 @@ type EventActionResponse struct {
 	Message string `json:"message" example:"event published"`
 }
 
+// EVENTHUB-77: Veranstaltung als Entwurf speichern
 type CreateDraftRequest struct {
-	Title       string          `json:"title" binding:"required,min=3,max=200"`
-	Description *string         `json:"description" binding:"omitempty,max=5000"`
-	StartTime   time.Time       `json:"startTime" binding:"required,gt"`
-	EndTime     time.Time       `json:"endTime" binding:"required,gtfield=StartTime"`
-	Capacity    int             `json:"capacity" binding:"required,min=1,max=100000"`
-	Price       decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
-	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+	// Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.
+	// May be omitted when the caller manages events in exactly one organization.
+	OrganizationID string          `json:"organizationId,omitempty" example:"my-org"`
+	Title          string          `json:"title" binding:"required,min=3,max=200"`
+	Description    *string         `json:"description" binding:"omitempty,max=5000"`
+	StartTime      time.Time       `json:"startTime" binding:"required,gt"`
+	EndTime        time.Time       `json:"endTime" binding:"required,gtfield=StartTime"`
+	Capacity       int             `json:"capacity" binding:"required,min=1,max=100000"`
+	Price          decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
+	CategoryID     uuid.UUID       `json:"categoryId" binding:"required"`
+	LocationID     uuid.UUID       `json:"locationId" binding:"required"`
 }
