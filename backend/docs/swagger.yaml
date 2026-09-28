@@ -138,6 +138,45 @@ definitions:
       username:
         type: string
     type: object
+  model.CreateDraftRequest:
+    properties:
+      capacity:
+        maximum: 100000
+        minimum: 1
+        type: integer
+      categoryId:
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      endTime:
+        type: string
+      locationId:
+        type: string
+      organizationId:
+        description: |-
+          Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.
+          May be omitted when the caller manages events in exactly one organization.
+        example: my-org
+        type: string
+      price:
+        maximum: 10000
+        minimum: 0
+        type: number
+      startTime:
+        type: string
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - capacity
+    - categoryId
+    - endTime
+    - locationId
+    - startTime
+    - title
+    type: object
   model.CreateOrganizationRequest:
     properties:
       alias:
@@ -585,6 +624,100 @@ paths:
       security:
       - BearerAuth: []
       summary: Publish event
+      tags:
+      - events
+  /events/draft:
+    post:
+      consumes:
+      - application/json
+      description: Creates an event in status draft. Drafts are only visible to the
+        organization that owns them and can be edited (PUT /events/{id}) and published
+        (POST /events/{id}/publish) later. Requires the event_manager role in the
+        owning organization. organizationId is the Keycloak organization ID or alias
+        as returned by GET /users/me; it may be omitted when the caller manages events
+        in exactly one organization.
+      parameters:
+      - description: Draft event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateDraftRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.EventModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "422":
+          description: Unknown categoryId or locationId
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Save event as draft
+      tags:
+      - events
+  /events/self:
+    get:
+      description: Returns the events of all organizations in which the caller holds
+        the event_manager role, ordered by start time. Use status=draft to list the
+        own drafts. Drafts are never visible to other organizations or visitors.
+      parameters:
+      - description: Only return events in this status
+        enum:
+        - draft
+        - published
+        - cancelled
+        - completed
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Own events; an empty array if there are none
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List own events
       tags:
       - events
   /organizations/:
