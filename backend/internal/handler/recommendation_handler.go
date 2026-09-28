@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/middleware"
+	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
 	"net/http"
@@ -16,6 +17,36 @@ type RecommendationsHandler struct {
 
 func NewRecommendationsHandler(recommendationsService *service.RecommendationsService, userRepo repository.UserRepository) *RecommendationsHandler {
 	return &RecommendationsHandler{recommendationsService: recommendationsService, userRepo: userRepo}
+}
+
+func (h *RecommendationsHandler) resolveUserForPrincipal(principal *middleware.Principal) (*model.UserModel, error) {
+	return resolveUserByPrincipal(h.userRepo, principal)
+}
+
+func resolveUserByPrincipal(userRepo repository.UserRepository, principal *middleware.Principal) (*model.UserModel, error) {
+	if userRepo == nil || principal == nil {
+		return nil, nil
+	}
+
+	user, err := userRepo.GetByKeycloakUserID(principal.Subject)
+	if err != nil || user != nil {
+		return user, err
+	}
+	if principal.Username == "" {
+		return nil, nil
+	}
+
+	user, err = userRepo.GetByEmail(principal.Username)
+	if err != nil || user == nil {
+		return user, err
+	}
+	if user.KeycloakUserID != principal.Subject {
+		if err := userRepo.UpdateKeycloakUserID(user.UserID, principal.Subject); err != nil {
+			return nil, err
+		}
+		user.KeycloakUserID = principal.Subject
+	}
+	return user, nil
 }
 
 // @Summary      Get event recommendations
@@ -34,14 +65,14 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userRepo.GetByKeycloakUserID(principal.Subject)
+	user, err := h.resolveUserForPrincipal(principal)
 	if err != nil {
 		writeProblem(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	if user == nil {
-		writeProblem(c, http.StatusInternalServerError, "user not found")
+		writeProblem(c, http.StatusInternalServerError, "user not found in API database, run sync first")
 		return
 	}
 
