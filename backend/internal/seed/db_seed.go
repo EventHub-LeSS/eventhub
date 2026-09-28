@@ -205,6 +205,21 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 		{"evt-24", "New Year's Eve Gala Hamburg", "Ring in the new year with a gala dinner, live band and fireworks.", 112, 113, 800, model.EventStatusPublished, "75.00", "Music", "Stadthalle Bremen", "Musikhalle Hamburg"},
 		{"evt-25", "Spring Awakening Concert", "A fresh season opener with orchestral and choral pieces.", 120, 121, 1000, model.EventStatusDraft, "22.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
 		{"evt-26", "Vintage Car Exhibition Bremen", "A weekend exhibition of classic cars and restoration workshops.", 8, 9, 600, model.EventStatusCancelled, "18.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
+
+		// Historische Events für Recommendation-Tests (Kategorie-Affinität, Organizer-Rating)
+		{"evt-h1", "Spring Symphony Hamburg", "Orchestral spring concert with works by Vivaldi and Brahms.", -90, -89, 800, model.EventStatusCompleted, "45.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
+		{"evt-h2", "Techno Warehouse Night", "All-night techno event with international DJs.", -75, -74, 1500, model.EventStatusCompleted, "25.00", "Music", "ACME Events", "Treptower Park Berlin"},
+		{"evt-h3", "Jazz Brunch München", "Sunday brunch accompanied by a live jazz trio.", -60, -59, 400, model.EventStatusCompleted, "30.00", "Music", "Telekom", "Olympiahalle München"},
+		{"evt-h4", "Comedy Club Bremen Spring", "Spring edition of the popular Bremen comedy club.", -80, -79, 300, model.EventStatusCompleted, "20.00", "Comedy", "Stadthalle Bremen", "Stadthalle Bremen"},
+		{"evt-h5", "Improv Night Berlin", "Improvised comedy based on audience suggestions.", -45, -44, 250, model.EventStatusCompleted, "15.00", "Comedy", "ACME Events", "Treptower Park Berlin"},
+		{"evt-h6", "Street Food Market Frankfurt", "Street food market with regional and international vendors.", -70, -68, 4000, model.EventStatusCompleted, "10.00", "Food & Drink", "Telekom", "Frankfurt Festplatz"},
+		{"evt-h7", "Craft Beer Weekend Bremen", "Tastings from northern German craft breweries.", -50, -48, 2000, model.EventStatusCompleted, "12.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen"},
+		{"evt-h8", "City Run Frankfurt", "10k city run with finisher party.", -65, -64, 8000, model.EventStatusCompleted, "20.00", "Sports", "Telekom", "Frankfurt Festplatz"},
+		{"evt-h9", "Beach Volleyball Cup Berlin", "Amateur beach volleyball tournament by the river.", -40, -39, 1000, model.EventStatusCompleted, "8.00", "Sports", "ACME Events", "Treptower Park Berlin"},
+		{"evt-h10", "Photography Exhibition Bremen", "Award-winning documentary photography.", -100, -86, 250, model.EventStatusCompleted, "9.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
+		{"evt-h11", "Design Week Frankfurt", "Product and interaction design showcase by students.", -55, -50, 500, model.EventStatusCompleted, "14.00", "Exhibition", "Provadis Hochschule", "Frankfurt Festplatz"},
+		{"evt-h12", "Short Film Night Hamburg", "Selection of award-winning short films.", -85, -84, 300, model.EventStatusCompleted, "7.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg"},
+		{"evt-h13", "Summer Open Air Cinema Berlin", "Open-air screening of summer blockbusters.", -30, -29, 1200, model.EventStatusCompleted, "11.00", "Film", "ACME Events", "Treptower Park Berlin"},
 	}
 	for _, e := range events {
 		id := seedUUID(e.tag)
@@ -242,10 +257,10 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 }
 
 type paymentDef struct {
-	tag         string
-	amount      string
-	status      model.PaymentStatus
-	refundAmt   string
+	tag       string
+	amount    string
+	status    model.PaymentStatus
+	refundAmt string
 }
 
 func (s *DBSeeder) seedPayments(_ context.Context) error {
@@ -281,6 +296,31 @@ func (s *DBSeeder) seedPayments(_ context.Context) error {
 		{"pay-28", "18.00", model.PaymentStatusPaid, "0.00"},
 		{"pay-29", "36.00", model.PaymentStatusFailed, "0.00"},
 		{"pay-30", "65.00", model.PaymentStatusRefunded, "65.00"},
+
+		// Zahlungen für historische Buchungen
+		{"pay-h1", "90.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h2", "25.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h3", "60.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h4", "20.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h5", "40.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h6", "15.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h7", "7.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h8", "45.00", model.PaymentStatusRefunded, "45.00"},
+		{"pay-h9", "30.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h10", "24.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h11", "30.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h12", "20.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h13", "16.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h14", "10.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h15", "9.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h16", "28.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h17", "14.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h18", "11.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h19", "15.00", model.PaymentStatusFailed, "0.00"},
+		{"pay-h20", "130.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h21", "20.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h22", "11.00", model.PaymentStatusPaid, "0.00"},
+		{"pay-h23", "14.00", model.PaymentStatusPaid, "0.00"},
 	}
 	for _, p := range payments {
 		id := seedUUID(p.tag)
@@ -344,6 +384,39 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 		{"bkg-28", "visitor2@eventhub.de", "evt-7", "pay-28", 1, model.BookingStatusConfirmed},
 		{"bkg-29", "visitor3@eventhub.de", "evt-26", "pay-29", 2, model.BookingStatusFailed},
 		{"bkg-30", "visitor4@eventhub.de", "evt-9", "pay-30", 1, model.BookingStatusCancelled},
+
+		// Historische Buchungen mit klaren Kategorie-Profilen pro User
+		// visitor@: Music
+		{"bkg-h1", "visitor@eventhub.de", "evt-h1", "pay-h1", 2, model.BookingStatusConfirmed},
+		{"bkg-h2", "visitor@eventhub.de", "evt-h2", "pay-h2", 1, model.BookingStatusConfirmed},
+		{"bkg-h3", "visitor@eventhub.de", "evt-h3", "pay-h3", 2, model.BookingStatusConfirmed},
+		{"bkg-h4", "visitor@eventhub.de", "evt-h4", "pay-h4", 1, model.BookingStatusConfirmed},
+		// visitor2@: Comedy (stornierte Music-Buchung darf nicht zählen)
+		{"bkg-h5", "visitor2@eventhub.de", "evt-h4", "pay-h5", 2, model.BookingStatusConfirmed},
+		{"bkg-h6", "visitor2@eventhub.de", "evt-h5", "pay-h6", 1, model.BookingStatusConfirmed},
+		{"bkg-h7", "visitor2@eventhub.de", "evt-h12", "pay-h7", 1, model.BookingStatusConfirmed},
+		{"bkg-h8", "visitor2@eventhub.de", "evt-h1", "pay-h8", 1, model.BookingStatusCancelled},
+		// visitor3@: Food & Drink
+		{"bkg-h9", "visitor3@eventhub.de", "evt-h6", "pay-h9", 3, model.BookingStatusConfirmed},
+		{"bkg-h10", "visitor3@eventhub.de", "evt-h7", "pay-h10", 2, model.BookingStatusConfirmed},
+		{"bkg-h11", "visitor3@eventhub.de", "evt-h3", "pay-h11", 1, model.BookingStatusConfirmed},
+		// visitor4@: Sports
+		{"bkg-h12", "visitor4@eventhub.de", "evt-h8", "pay-h12", 1, model.BookingStatusConfirmed},
+		{"bkg-h13", "visitor4@eventhub.de", "evt-h9", "pay-h13", 2, model.BookingStatusConfirmed},
+		{"bkg-h14", "visitor4@eventhub.de", "evt-h6", "pay-h14", 1, model.BookingStatusConfirmed},
+		// visitor5@: Exhibition
+		{"bkg-h15", "visitor5@eventhub.de", "evt-h10", "pay-h15", 1, model.BookingStatusConfirmed},
+		{"bkg-h16", "visitor5@eventhub.de", "evt-h11", "pay-h16", 2, model.BookingStatusConfirmed},
+		// visitor6@: Film (fehlgeschlagene Comedy-Buchung darf nicht zählen)
+		{"bkg-h17", "visitor6@eventhub.de", "evt-h12", "pay-h17", 2, model.BookingStatusConfirmed},
+		{"bkg-h18", "visitor6@eventhub.de", "evt-h13", "pay-h18", 1, model.BookingStatusConfirmed},
+		{"bkg-h19", "visitor6@eventhub.de", "evt-h5", "pay-h19", 1, model.BookingStatusFailed},
+		// max.multi@: gemischt (Music, Sports, Film)
+		{"bkg-h20", "max.multi@eventhub.de", "evt-9", "pay-h20", 2, model.BookingStatusConfirmed},
+		{"bkg-h21", "max.multi@eventhub.de", "evt-h8", "pay-h21", 1, model.BookingStatusConfirmed},
+		{"bkg-h22", "max.multi@eventhub.de", "evt-h13", "pay-h22", 1, model.BookingStatusConfirmed},
+		// eva.manager@: Exhibition
+		{"bkg-h23", "eva.manager@provadis-hochschule.de", "evt-h11", "pay-h23", 1, model.BookingStatusConfirmed},
 	}
 	for _, b := range bookings {
 		id := seedUUID(b.tag)
@@ -396,6 +469,26 @@ func (s *DBSeeder) seedRatings(_ context.Context) error {
 		{"rat-8", "bkg-27", 4, "Comedy night was a blast, highly recommend.", false},
 		{"rat-9", "bkg-23", 3, "Good festival but a bit overcrowded.", true},
 		{"rat-10", "bkg-11", 5, "Well-organized marathon expo, lots of stalls.", true},
+
+		// Bewertungen historischer Events, Ø je Organizer:
+		// Provadis 4.8, Telekom 3.75, Stadthalle Bremen 3.25, ACME 1.75
+		{"rat-h1", "bkg-h1", 5, "Beautiful symphony evening.", true},
+		{"rat-h2", "bkg-h7", 5, "Great selection of short films.", true},
+		{"rat-h3", "bkg-h16", 4, "Inspiring student designs.", true},
+		{"rat-h4", "bkg-h20", 5, "Unforgettable gala concert.", true},
+		{"rat-h5", "bkg-h17", 5, "Loved every single film.", true},
+		{"rat-h6", "bkg-h3", 4, "Tasty brunch, excellent trio.", true},
+		{"rat-h7", "bkg-h9", 4, "Lots of variety, fair prices.", true},
+		{"rat-h8", "bkg-h12", 3, "Nice route, long queues at the start.", true},
+		{"rat-h9", "bkg-h11", 4, "Relaxed Sunday atmosphere.", true},
+		{"rat-h10", "bkg-h2", 2, "Sound was too loud and distorted.", true},
+		{"rat-h11", "bkg-h6", 2, "Some good moments, mostly flat.", true},
+		{"rat-h12", "bkg-h13", 1, "Chaotic organization, matches started late.", true},
+		{"rat-h13", "bkg-h18", 2, "Poor projection quality.", true},
+		{"rat-h14", "bkg-h4", 3, "Solid comedy night.", true},
+		{"rat-h15", "bkg-h5", 3, "Funny, but a bit too long.", true},
+		{"rat-h16", "bkg-h10", 4, "Great beers from local brewers.", true},
+		{"rat-h17", "bkg-h15", 3, "Interesting photos, small venue.", true},
 	}
 	for _, r := range ratings {
 		id := seedUUID(r.tag)
