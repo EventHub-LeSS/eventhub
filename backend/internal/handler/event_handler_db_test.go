@@ -5,69 +5,22 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"backend/internal/testdb"
 	"bytes"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-migrate/migrate/v4"
-	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/shopspring/decimal"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// Exercises the real handler, service and repositories against a real Postgres.
-// Set TEST_DATABASE_DSN to enable, e.g.:
-// postgres://postgres:test@localhost:5599/postgres?sslmode=disable
-func setupHandlerDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_DSN not set")
-	}
-
-	sqlDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	driver, err := migratePostgres.WithInstance(sqlDB, &migratePostgres.Config{})
-	if err != nil {
-		t.Fatalf("migration driver: %v", err)
-	}
-	m, err := migrate.NewWithDatabaseInstance("file://../../migrations", "postgres", driver)
-	if err != nil {
-		t.Fatalf("migrator: %v", err)
-	}
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		t.Fatalf("migrate up: %v", err)
-	}
-	sqlDB.Close()
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	if err != nil {
-		t.Fatalf("gorm open: %v", err)
-	}
-	t.Cleanup(func() {
-		if gormDB, err := db.DB(); err == nil {
-			gormDB.Close()
-		}
-	})
-	if err := db.Exec("TRUNCATE bookings, events, organizations, users, categories, locations CASCADE").Error; err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
-	return db
-}
+// The tests in this file exercise the real handlers, services and repositories against a real
+// Postgres; see testdb.Open for how to enable them.
 
 type seededEvent struct {
 	eventID    uuid.UUID
@@ -170,7 +123,7 @@ func validBody(s seededEvent) map[string]any {
 }
 
 func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
 	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
 
@@ -195,7 +148,7 @@ func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 }
 
 func TestUpdateEventHandler_RejectsForeignEvent(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
 	router := newEventRouter(db, principalManaging("kc-org-a"))
 
@@ -216,7 +169,7 @@ func TestUpdateEventHandler_RejectsForeignEvent(t *testing.T) {
 }
 
 func TestUpdateEventHandler_StatusCodes(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusCancelled)
 
 	tests := []struct {
@@ -244,7 +197,7 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 }
 
 func TestPublishEventHandler_PublishesOwnDraftEvent(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
 	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
 
@@ -268,7 +221,7 @@ func TestPublishEventHandler_PublishesOwnDraftEvent(t *testing.T) {
 }
 
 func TestPublishEventHandler_RejectsIncompleteEvent(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
 	if err := db.Exec("UPDATE events SET category_id = NULL WHERE event_id = ?", seeded.eventID).Error; err != nil {
 		t.Fatalf("break event: %v", err)
@@ -288,7 +241,7 @@ func TestPublishEventHandler_RejectsIncompleteEvent(t *testing.T) {
 }
 
 func TestPublishEventHandler_StatusCodes(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	draft := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
 	published := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
 
