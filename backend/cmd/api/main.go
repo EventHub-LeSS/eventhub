@@ -71,7 +71,7 @@ func main() {
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
-	recommendationsService := service.NewRecommendationsService(eventRepo, bookingRepo)
+	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)

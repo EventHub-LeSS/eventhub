@@ -5,6 +5,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -50,7 +51,7 @@ func resolveUserByPrincipal(userRepo repository.UserRepository, principal *middl
 }
 
 // @Summary      Get event recommendations
-// @Description  Returns a ranked list of recommended events for the authenticated user based on their historical bookings, category affinity, organizer affinity, and event popularity.
+// @Description  Returns future published events with free capacity, excluding the user's confirmed bookings. Active reservations count toward capacity. Ranking weights category affinity (50%), confirmed ticket popularity (40%), and organizer ratings (10%).
 // @Tags         recommendations
 // @Security     BearerAuth
 // @Produce      json
@@ -61,13 +62,14 @@ func resolveUserByPrincipal(userRepo repository.UserRepository, principal *middl
 func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
-		writeProblem(c, http.StatusUnauthorized, "autentication is required")
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
 
 	user, err := h.resolveUserForPrincipal(principal)
 	if err != nil {
-		writeProblem(c, http.StatusInternalServerError, err.Error())
+		slog.Error("recommendation user lookup failed", "error", err)
+		writeProblem(c, http.StatusInternalServerError, "could not resolve recommendation user")
 		return
 	}
 
@@ -78,7 +80,8 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 
 	events, err := h.recommendationsService.GetRecommendationsForUser(user.UserID)
 	if err != nil {
-		writeProblem(c, http.StatusInternalServerError, err.Error())
+		slog.Error("event recommendations failed", "user_id", user.UserID, "error", err)
+		writeProblem(c, http.StatusInternalServerError, "could not load event recommendations")
 		return
 	}
 
