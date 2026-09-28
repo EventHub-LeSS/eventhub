@@ -39,10 +39,6 @@ func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
 	return 0, nil
 }
 
-func (f *fakeEventRepo) GetAvailableEvents() ([]*model.EventModel, error) {
-	return nil, nil
-}
-
 func (f *fakeEventRepo) UpdateEvent(event *model.EventModel) error {
 	f.saved = event
 	return nil

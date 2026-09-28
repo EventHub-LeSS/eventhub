@@ -3,24 +3,63 @@ package service
 import (
 	"backend/internal/model"
 	"backend/internal/repository"
+	"fmt"
+	"math"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type RecommendationsService struct {
-	eventRepo   repository.EventRepository
-	bookingRepo repository.BookingRepository
+	repo repository.RecommendationRepository
 }
 
-func NewRecommendationsService(eventRepo repository.EventRepository, bookingRepo repository.BookingRepository) *RecommendationsService {
-	return &RecommendationsService{eventRepo: eventRepo, bookingRepo: bookingRepo}
+func NewRecommendationsService(repo repository.RecommendationRepository) *RecommendationsService {
+	return &RecommendationsService{repo: repo}
 }
 
 func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]*model.EventModel, error) {
-	events, err := s.eventRepo.GetAvailableEvents()
+	// Share a single cutoff between candidate selection and booking history.
+	now := time.Now()
+	candidates, err := s.repo.ListCandidates(userID, now)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load recommendation candidates: %w", err)
+	}
+	result := make([]*model.EventModel, 0, len(candidates))
+	if len(candidates) == 0 {
+		return result, nil
+	}
+
+	history, err := s.repo.ListPastEvents(userID, now)
+	if err != nil {
+		return nil, fmt.Errorf("load recommendation history: %w", err)
+	}
+	categoryCounts := make(map[uuid.UUID]int)
+	seenEvents := make(map[uuid.UUID]bool)
+	total := 0
+	for _, event := range history {
+		if event == nil || seenEvents[event.EventID] {
+			continue
+		}
+		seenEvents[event.EventID] = true
+		total++
+		if event.CategoryID != nil {
+			categoryCounts[*event.CategoryID]++
+		}
+	}
+
+	organizerIDs := make([]uuid.UUID, 0)
+	seenOrganizers := make(map[uuid.UUID]bool)
+	for _, candidate := range candidates {
+		if id := candidate.OrganizerID; id != nil && !seenOrganizers[*id] {
+			seenOrganizers[*id] = true
+			organizerIDs = append(organizerIDs, *id)
+		}
+	}
+	ratings, err := s.repo.GetOrganizerRatings(organizerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load recommendation organizer ratings: %w", err)
 	}
 
 	type scoredEvent struct {
@@ -28,20 +67,39 @@ func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]
 		score float64
 	}
 
-	scoredEvents := make([]scoredEvent, 0, len(events))
-	for _, event := range events {
-		if event == nil {
+	scoredEvents := make([]scoredEvent, 0, len(candidates))
+	for i := range candidates {
+		candidate := &candidates[i]
+		event := &candidate.EventModel
+		// Defensive guard even if invalid legacy data reaches the service.
+		if event.Capacity <= 0 {
 			continue
 		}
-		score := s.scoreEventForUser(userID, *event)
+		categoryAffinity := 0.0
+		if event.CategoryID != nil && total > 0 {
+			categoryAffinity = float64(categoryCounts[*event.CategoryID]) / float64(total)
+		}
+		organizerScore := 0.0
+		if event.OrganizerID != nil {
+			organizerScore = recommendationUnitScore((ratings[*event.OrganizerID] - 1) / 4)
+		}
+		popularity := recommendationUnitScore(float64(candidate.ConfirmedTickets) / float64(event.Capacity))
+		score := 0.5*categoryAffinity + 0.4*popularity + 0.1*organizerScore
 		scoredEvents = append(scoredEvents, scoredEvent{event: event, score: score})
 	}
 
+	// Deterministic ties: sooner events first, then UUID, independent of DB order.
 	sort.Slice(scoredEvents, func(i, j int) bool {
-		return scoredEvents[i].score > scoredEvents[j].score
+		a, b := scoredEvents[i], scoredEvents[j]
+		if a.score != b.score {
+			return a.score > b.score
+		}
+		if !a.event.StartTime.Equal(b.event.StartTime) {
+			return a.event.StartTime.Before(b.event.StartTime)
+		}
+		return a.event.EventID.String() < b.event.EventID.String()
 	})
 
-	result := make([]*model.EventModel, 0, len(scoredEvents))
 	for _, item := range scoredEvents {
 		result = append(result, item.event)
 	}
@@ -49,57 +107,9 @@ func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]
 	return result, nil
 }
 
-func (s *RecommendationsService) scoreEventForUser(userID uuid.UUID, event model.EventModel) float64 {
-	categoryAffinity := s.computeCategoryAffinity(userID, event.CategoryID)
-	popularityScore := s.computePopularityScore(event.EventID)
-	organizerScore := s.computeOrganizerScore(event.OrganizerID)
-
-	return 0.5*categoryAffinity + 0.4*popularityScore + 0.1*organizerScore
-}
-
-func (s *RecommendationsService) computeOrganizerScore(OrganizerID *uuid.UUID) float64 {
-	rating, err := s.bookingRepo.GetAvgRatingByOrganizer(OrganizerID)
-
-	if err != nil {
+func recommendationUnitScore(score float64) float64 {
+	if math.IsNaN(score) || math.IsInf(score, 0) {
 		return 0
 	}
-	if rating < 1 {
-		return 0
-	}
-	return (rating - 1) / 4
-}
-
-func (s *RecommendationsService) computePopularityScore(EventID uuid.UUID) float64 {
-	booked, err := s.eventRepo.GetConfirmedTicketCount(EventID)
-
-	if err != nil {
-		return 0
-	}
-
-	event, err := s.eventRepo.GetEventByID(EventID)
-
-	if err != nil {
-		return 0
-	}
-
-	return float64(booked) / float64(event.Capacity)
-
-}
-
-func (s *RecommendationsService) computeCategoryAffinity(userID uuid.UUID, CategoryID *uuid.UUID) float64 {
-	events, err := s.bookingRepo.ListEventsByUser(userID)
-
-	if err != nil || len(events) == 0 {
-		return 0
-	}
-
-	total := len(events)
-	sameCategory := 0
-	for _, event := range events {
-		if &event.CategoryID == &CategoryID {
-			sameCategory++
-		}
-	}
-	return float64(sameCategory) / float64(total)
-
+	return math.Max(0, math.Min(1, score))
 }

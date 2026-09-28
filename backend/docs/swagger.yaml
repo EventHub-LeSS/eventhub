@@ -700,9 +700,10 @@ paths:
       - organizations
   /recommendations:
     get:
-      description: Returns a ranked list of recommended events for the authenticated
-        user based on their historical bookings, category affinity, organizer affinity,
-        and event popularity.
+      description: Returns future published events with free capacity, excluding the
+        user's confirmed bookings. Active reservations count toward capacity. Ranking
+        weights category affinity (50%), confirmed ticket popularity (40%), and organizer
+        ratings (10%).
       produces:
       - application/json
       responses:
