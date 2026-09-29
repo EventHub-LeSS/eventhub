@@ -37,6 +37,11 @@ type KeycloakService struct {
 	adminTokenExpires time.Time
 }
 
+var (
+	globalRoleUpdateLocksMu sync.Mutex
+	globalRoleUpdateLocks   = map[string]*sync.Mutex{}
+)
+
 func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 	return &KeycloakService{
 		cfg:            cfg,
@@ -444,6 +449,22 @@ func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clie
 	return selected, nil
 }
 
+func lockGlobalRoleUpdate(realm, clientID string) func() {
+	key := realm + ":" + clientID
+	globalRoleUpdateLocksMu.Lock()
+	mu, ok := globalRoleUpdateLocks[key]
+	if !ok {
+		mu = &sync.Mutex{}
+		globalRoleUpdateLocks[key] = mu
+	}
+	globalRoleUpdateLocksMu.Unlock()
+
+	mu.Lock()
+	return func() {
+		mu.Unlock()
+	}
+}
+
 func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) (result []string, err error) {
 	accessToken, err := k.adminToken(ctx)
 	if err != nil {
@@ -809,6 +830,7 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
 	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
