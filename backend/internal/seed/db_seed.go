@@ -242,10 +242,10 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 }
 
 type paymentDef struct {
-	tag         string
-	amount      string
-	status      model.PaymentStatus
-	refundAmt   string
+	tag       string
+	amount    string
+	status    model.PaymentStatus
+	refundAmt string
 }
 
 func (s *DBSeeder) seedPayments(_ context.Context) error {
@@ -362,6 +362,10 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 				PaymentID:       &payID,
 				NumberOfTickets: b.numTix,
 				Status:          b.status,
+			}
+			if b.status == model.BookingStatusReserved {
+				expiresAt := time.Now().Add(15 * time.Minute)
+				bk.ExpiresAt = &expiresAt
 			}
 			if err := s.db.Create(&bk).Error; err != nil {
 				return fmt.Errorf("create booking %q: %w", b.tag, err)

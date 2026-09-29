@@ -103,7 +103,7 @@ Alle Passwörter: `password`
 
 | Benutzer                                  | Globale Rolle | Organisation & Berechtigung                          |
 | ----------------------------------------- | ------------- | ---------------------------------------------------- |
-| `großmeister_finn`                        | admin         | Provadis `org_admin`, Telekom `org_admin`, ACME `org_admin`, Stadthalle `org_admin` |
+| `finn.betz@grossmeister.de`               | admin         | Provadis `org_admin`, Telekom `org_admin`, ACME `org_admin`, Stadthalle `org_admin` |
 | `organizer@provadis-hochschule.de`        | visitor       | Provadis `event_manager`                             |
 | `organizer@telekom.de`                    | visitor       | Telekom `event_manager`                              |
 | `eva.manager@provadis-hochschule.de`      | visitor       | Provadis `event_manager`, ACME `event_manager`       |
@@ -116,6 +116,11 @@ Alle Passwörter: `password`
 
 `max.multi@eventhub.de` hat bewusst **unterschiedliche Rollen** in verschiedenen
 Organisationen, um die abgestuften Berechtigungen (EVENTHUB-188) zu demonstrieren.
+
+Benutzernamen sind überall die E-Mail-Adresse (`registrationEmailAsUsername`).
+Realms, die vor der Vereinheitlichung importiert oder geseedet wurden, benennt
+`api-seed` beim nächsten Lauf um; Service-Konten wie `service-account-backend`
+haben keine E-Mail-Adresse und behalten ihren Namen.
 
 #### Mock-Organisationen
 

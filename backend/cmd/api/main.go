@@ -37,9 +37,9 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	db, db_err := db.Connect()
-	if db_err != nil {
-		log.Fatal(db_err)
+	db, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatal(dbErr)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -66,9 +66,11 @@ func main() {
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
+	bookingRepo := repository.NewBookingRepository(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo)
+	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -93,11 +95,15 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
+		// events
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
 		adminUsers := v1.Group("/admin/users")
 		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -106,6 +112,9 @@ func main() {
 			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
 			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
 		}
+
+		// bookings
+		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))

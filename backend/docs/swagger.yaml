@@ -28,58 +28,6 @@ definitions:
       username:
         type: string
     type: object
-  handler.UserAdminListItem:
-    properties:
-      email:
-        type: string
-      firstName:
-        type: string
-      keycloakUserId:
-        type: string
-      lastName:
-        type: string
-      phoneNumber:
-        type: string
-      roles:
-        items:
-          type: string
-        type: array
-      userId:
-        type: string
-    type: object
-  handler.UserAdminListResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/handler.UserAdminListItem'
-        type: array
-      limit:
-        type: integer
-      page:
-        type: integer
-      total:
-        type: integer
-    type: object
-  handler.UserAdminRolesRequest:
-    properties:
-      roles:
-        items:
-          type: string
-        type: array
-    required:
-    - roles
-    type: object
-  handler.UserAdminRolesResponse:
-    properties:
-      keycloakUserId:
-        type: string
-      roles:
-        items:
-          type: string
-        type: array
-      userId:
-        type: string
-    type: object
   middleware.GlobalRole:
     enum:
     - admin
@@ -319,6 +267,55 @@ paths:
       summary: Health check
       tags:
       - system
+  /bookings:
+    post:
+      consumes:
+        - application/json
+      description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
+        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
+      parameters:
+        - description: Buchungsdaten
+          in: body
+          name: booking
+          required: true
+          schema:
+            $ref: '#/definitions/handler.CreateBookingRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Event nicht veröffentlicht oder Kapazität überschritten
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+        - BearerAuth: [ ]
+      summary: Buchung anlegen
+      tags:
+        - bookings
   /admin/users:
     get:
       description: Returns a database page of shared users ordered by userId ascending,

@@ -48,30 +48,16 @@ func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 // adminToken returns the service-account token for admin operations, caching it
 // until shortly before it expires instead of logging in on every call.
 func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
-	// Waiting for another request's login must respect this request's deadline too.
-	select {
-	case k.adminLoginGate <- struct{}{}:
-		defer func() { <-k.adminLoginGate }()
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
 	k.adminTokenMu.Lock()
+	defer k.adminTokenMu.Unlock()
 	if k.adminTokenValue != "" && time.Now().Before(k.adminTokenExpires) {
-		value := k.adminTokenValue
-		k.adminTokenMu.Unlock()
-		return value, nil
+		return k.adminTokenValue, nil
 	}
-	k.adminTokenMu.Unlock()
 	token, err := k.client.LoginClient(ctx, k.cfg.ClientID, k.cfg.ClientSecret, k.cfg.AdminRealm)
 	if err != nil {
 		return "", fmt.Errorf("keycloak admin login failed: %w", err)
 	}
 	const expirySkew = 30 * time.Second
-	k.adminTokenMu.Lock()
-	defer k.adminTokenMu.Unlock()
 	k.adminTokenValue = token.AccessToken
 	k.adminTokenExpires = time.Now().Add(time.Duration(token.ExpiresIn)*time.Second - expirySkew)
 	return token.AccessToken, nil
@@ -365,6 +351,47 @@ func (k *KeycloakService) adminAddMissingRoles(ctx context.Context, accessToken,
 		return false, err
 	}
 	return true, nil
+}
+
+// EnsureEmailUsernames makes the stored username of every user their email address. The realm
+// registers users with registrationEmailAsUsername, so usernames are emails; realms seeded
+// before that rule keep plain usernames, because --import-realm skips existing realms. The
+// stored username cannot be detected through the admin API: in email-as-username realms it
+// reports the email as the username, so a legacy username looks already unified. The update
+// is therefore issued for every user with an email address; it is idempotent. Users without
+// an email address, like the backend service account, are skipped. Reports how many users
+// were written.
+func (k *KeycloakService) EnsureEmailUsernames(ctx context.Context, accessToken, realm string) (int, error) {
+	maxResults := 100
+	page := 0
+	var users []*gocloak.User
+	for {
+		pageUsers, err := k.client.GetUsers(ctx, accessToken, realm, gocloak.GetUsersParams{
+			First: &page,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to get users: %w", err)
+		}
+		users = append(users, pageUsers...)
+		if len(pageUsers) < maxResults {
+			break
+		}
+		page += maxResults
+	}
+
+	updated := 0
+	for _, user := range users {
+		if user.ID == nil || user.Email == nil || *user.Email == "" {
+			continue
+		}
+		user.Username = user.Email
+		if err := k.client.UpdateUser(ctx, accessToken, realm, *user); err != nil {
+			return updated, fmt.Errorf("failed to set the username of user %q to their email address: %w", *user.Email, err)
+		}
+		updated++
+	}
+	return updated, nil
 }
 
 func (k *KeycloakService) backendClientID(ctx context.Context, accessToken string) (string, error) {
@@ -782,7 +809,6 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
-	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
 	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
@@ -823,16 +849,6 @@ var orgMutexes sync.Map // map[string]*sync.Mutex
 
 func lockOrganization(orgID string) func() {
 	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
-	mu := value.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
-}
-
-var globalRoleMutexes sync.Map // map[string]*sync.Mutex
-
-func lockGlobalRoleUpdate(realm, clientID string) func() {
-	key := realm + "/" + clientID
-	value, _ := globalRoleMutexes.LoadOrStore(key, &sync.Mutex{})
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock

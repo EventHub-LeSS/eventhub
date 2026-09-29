@@ -28,6 +28,81 @@
                 }
             }
         },
+        "/bookings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Buchung anlegen",
+                "parameters": [
+                    {
+                        "description": "Buchungsdaten",
+                        "name": "booking",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateBookingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.BookingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Event nicht veröffentlicht oder Kapazität überschritten",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users": {
             "get": {
                 "security": [
@@ -650,86 +725,6 @@
                     "type": "string"
                 },
                 "username": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.UserAdminListItem": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "firstName": {
-                    "type": "string"
-                },
-                "keycloakUserId": {
-                    "type": "string"
-                },
-                "lastName": {
-                    "type": "string"
-                },
-                "phoneNumber": {
-                    "type": "string"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "userId": {
-                    "type": "string"
-                }
-            }
-        },
-        "handler.UserAdminListResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handler.UserAdminListItem"
-                    }
-                },
-                "limit": {
-                    "type": "integer"
-                },
-                "page": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handler.UserAdminRolesRequest": {
-            "type": "object",
-            "required": [
-                "roles"
-            ],
-            "properties": {
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "handler.UserAdminRolesResponse": {
-            "type": "object",
-            "properties": {
-                "keycloakUserId": {
-                    "type": "string"
-                },
-                "roles": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "userId": {
                     "type": "string"
                 }
             }

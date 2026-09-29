@@ -12,3 +12,10 @@ export {
 } from "@/features/auth/lib/dal"
 export { organizationsFromClaims, roleFor } from "@/features/auth/lib/user"
 export type { SessionUser, UserRole } from "@/features/auth/lib/user"
+export { refreshAccessToken } from "@/features/auth/lib/oidc"
+export {
+  sealSession,
+  sessionCookieOptions,
+  unsealSession,
+} from "@/features/auth/lib/session"
+export type { Session } from "@/features/auth/lib/session"
