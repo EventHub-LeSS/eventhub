@@ -34,7 +34,7 @@ func (r *recommendationRepository) ListCandidates(userID uuid.UUID, now time.Tim
 	// Confirmed bookings affect popularity; live reservations only affect capacity.
 	counts := r.db.Table("bookings").
 		Select("event_id, SUM(CASE WHEN status = ? THEN number_of_tickets ELSE 0 END) AS confirmed_tickets, SUM(number_of_tickets) AS occupied_tickets", model.BookingStatusConfirmed).
-		Where("status = ? OR (status = ? AND expires_at > ?)", model.BookingStatusConfirmed, model.BookingStatusReserved, now).
+		Where("status = ? OR (status = ? AND expires_at > NOW() )", model.BookingStatusConfirmed, model.BookingStatusReserved).
 		Group("event_id")
 	bookedByUser := r.db.Table("bookings AS own").Select("1").
 		Where("own.event_id = e.event_id AND own.user_id = ? AND own.status = ?", userID, model.BookingStatusConfirmed)
@@ -69,7 +69,7 @@ func (r *recommendationRepository) GetOrganizerRatings(organizerIDs []uuid.UUID)
 	}
 	err := r.db.Table("events AS e").Select("e.organizer_id, AVG(r.score) AS rating").
 		Joins("JOIN bookings AS b ON b.event_id = e.event_id JOIN ratings AS r ON r.booking_id = b.booking_id").
-		Where("e.organizer_id IN ? AND e.status = ?", organizerIDs, model.EventStatusCompleted).
+		Where("r.is_visible = true AND e.organizer_id IN ? AND e.status = ?", organizerIDs, model.EventStatusCompleted).
 		Group("e.organizer_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
