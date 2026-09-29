@@ -24,7 +24,10 @@ func insertRecommendationBooking(t *testing.T, db *gorm.DB, eventID, userID uuid
 func TestRecommendationsDBCandidateFilters(t *testing.T) {
 	db := setupTestDB(t)
 	availableID, userID := seedEvent(t, db, 10, model.EventStatusPublished)
-	now := time.Now().UTC()
+	var now time.Time
+	if err := db.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
+		t.Fatal(err)
+	}
 	past, future := now.Add(-time.Hour), now.Add(time.Hour)
 	want := map[uuid.UUID]int64{availableID: 0}
 	for _, tc := range []struct {
@@ -77,7 +80,7 @@ func TestRecommendationsDBCandidateFilters(t *testing.T) {
 	insertRecommendationBooking(t, db, mixedID, otherUser, "confirmed", 6, nil)
 	insertRecommendationBooking(t, db, mixedID, otherUser, "reserved", 4, &future)
 	repo := repository.NewRecommendationRepository(db)
-	candidates, err := repo.ListCandidates(userID, now)
+	candidates, err := repo.ListCandidates(userID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +100,10 @@ func TestRecommendationsDBHistoryAndRatings(t *testing.T) {
 	pastID, userID := seedEvent(t, db, 100, model.EventStatusCompleted)
 	futureID, _ := seedEvent(t, db, 100, model.EventStatusPublished)
 	ignoredID, otherUser := seedEvent(t, db, 100, model.EventStatusCompleted)
-	now := time.Now().UTC()
+	var now time.Time
+	if err := db.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Exec("UPDATE events SET start_time = ?, end_time = ? WHERE event_id IN ?", now.Add(-2*time.Hour), now.Add(-time.Hour), []uuid.UUID{pastID, ignoredID}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +118,7 @@ func TestRecommendationsDBHistoryAndRatings(t *testing.T) {
 		}
 	}
 	repo := repository.NewRecommendationRepository(db)
-	history, err := repo.ListPastEvents(userID, now)
+	history, err := repo.ListPastEvents(userID)
 	if err != nil || len(history) != 1 || history[0].EventID != pastID {
 		t.Fatalf("history=%v, err=%v", history, err)
 	}

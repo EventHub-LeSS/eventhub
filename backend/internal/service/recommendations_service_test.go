@@ -19,21 +19,18 @@ type recommendationRepoStub struct {
 	candidateErr, historyErr, ratingErr error
 	calls                               [3]int
 	userIDs                             []uuid.UUID
-	cutoffs                             []time.Time
 	organizerIDs                        []uuid.UUID
 }
 
-func (r *recommendationRepoStub) ListCandidates(userID uuid.UUID, now time.Time) ([]repository.RecommendationCandidate, error) {
+func (r *recommendationRepoStub) ListCandidates(userID uuid.UUID) ([]repository.RecommendationCandidate, error) {
 	r.calls[0]++
 	r.userIDs = append(r.userIDs, userID)
-	r.cutoffs = append(r.cutoffs, now)
 	return r.candidates, r.candidateErr
 }
 
-func (r *recommendationRepoStub) ListPastEvents(userID uuid.UUID, now time.Time) ([]*model.EventModel, error) {
+func (r *recommendationRepoStub) ListPastEvents(userID uuid.UUID) ([]*model.EventModel, error) {
 	r.calls[1]++
 	r.userIDs = append(r.userIDs, userID)
-	r.cutoffs = append(r.cutoffs, now)
 	return r.history, r.historyErr
 }
 
@@ -158,8 +155,8 @@ func TestRecommendationsBatchQueries(t *testing.T) {
 	if repo.calls != [3]int{1, 1, 1} || !reflect.DeepEqual(repo.organizerIDs, []uuid.UUID{organizer}) {
 		t.Errorf("calls=%v, organizers=%v", repo.calls, repo.organizerIDs)
 	}
-	if !reflect.DeepEqual(repo.userIDs, []uuid.UUID{userID, userID}) || !repo.cutoffs[0].Equal(repo.cutoffs[1]) {
-		t.Errorf("inconsistent user or cutoff: %v, %v", repo.userIDs, repo.cutoffs)
+	if !reflect.DeepEqual(repo.userIDs, []uuid.UUID{userID, userID}) {
+		t.Errorf("inconsistent user: %v", repo.userIDs)
 	}
 }
 
