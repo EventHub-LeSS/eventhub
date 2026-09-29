@@ -597,6 +597,15 @@ const docTemplate = `{
                     "recommendations"
                 ],
                 "summary": "Get event recommendations",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Maximum number of recommendations after ranking; omitted returns all recommendations",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -605,6 +614,12 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/model.EventModel"
                             }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "401": {

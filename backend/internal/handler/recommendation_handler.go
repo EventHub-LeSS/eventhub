@@ -2,11 +2,11 @@ package handler
 
 import (
 	"backend/internal/middleware"
-	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,42 +20,14 @@ func NewRecommendationsHandler(recommendationsService *service.RecommendationsSe
 	return &RecommendationsHandler{recommendationsService: recommendationsService, userRepo: userRepo}
 }
 
-func (h *RecommendationsHandler) resolveUserForPrincipal(principal *middleware.Principal) (*model.UserModel, error) {
-	return resolveUserByPrincipal(h.userRepo, principal)
-}
-
-func resolveUserByPrincipal(userRepo repository.UserRepository, principal *middleware.Principal) (*model.UserModel, error) {
-	if userRepo == nil || principal == nil {
-		return nil, nil
-	}
-
-	user, err := userRepo.GetByKeycloakUserID(principal.Subject)
-	if err != nil || user != nil {
-		return user, err
-	}
-	if principal.Username == "" {
-		return nil, nil
-	}
-
-	user, err = userRepo.GetByEmail(principal.Username)
-	if err != nil || user == nil {
-		return user, err
-	}
-	if user.KeycloakUserID != principal.Subject {
-		if err := userRepo.UpdateKeycloakUserID(user.UserID, principal.Subject); err != nil {
-			return nil, err
-		}
-		user.KeycloakUserID = principal.Subject
-	}
-	return user, nil
-}
-
 // @Summary      Get event recommendations
 // @Description  Returns future published events with free capacity, excluding the user's confirmed bookings. Active reservations count toward capacity. Ranking weights category affinity (50%), confirmed ticket popularity (40%), and organizer ratings (10%).
 // @Tags         recommendations
 // @Security     BearerAuth
 // @Produce      json
+// @Param        limit query int false "Maximum number of recommendations after ranking; omitted returns all recommendations" minimum(1)
 // @Success      200 {array} model.EventModel
+// @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /recommendations [get]
@@ -66,7 +38,17 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 		return
 	}
 
-	user, err := h.resolveUserForPrincipal(principal)
+	limit := 0
+	if values := c.Request.URL.Query()["limit"]; len(values) > 0 {
+		var err error
+		limit, err = strconv.Atoi(values[0])
+		if len(values) != 1 || err != nil || limit <= 0 {
+			writeProblem(c, http.StatusBadRequest, "limit must be a single positive integer")
+			return
+		}
+	}
+
+	user, err := middleware.ResolveUserForPrincipal(h.userRepo, principal)
 	if err != nil {
 		slog.Error("recommendation user lookup failed", "error", err)
 		writeProblem(c, http.StatusInternalServerError, "could not resolve recommendation user")
@@ -74,7 +56,7 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 	}
 
 	if user == nil {
-		writeProblem(c, http.StatusInternalServerError, "user not found in API database, run sync first")
+		writeProblem(c, http.StatusForbidden, "user not found in API database, run sync first")
 		return
 	}
 
@@ -83,6 +65,11 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 		slog.Error("event recommendations failed", "user_id", user.UserID, "error", err)
 		writeProblem(c, http.StatusInternalServerError, "could not load event recommendations")
 		return
+	}
+
+	// Limit only after the service has ranked all eligible events.
+	if limit > 0 && limit < len(events) {
+		events = events[:limit]
 	}
 
 	c.JSON(http.StatusOK, events)
