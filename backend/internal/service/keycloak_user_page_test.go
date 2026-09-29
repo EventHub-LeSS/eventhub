@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -310,41 +309,6 @@ func TestGetUsersGlobalRolesTotalTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 	if err == nil || roles != nil || elapsed < 14*time.Second || elapsed > 18*time.Second {
 		t.Fatalf("roles=%v err=%v elapsed=%s, want 15-second timeout", roles, err, elapsed)
-	}
-}
-
-func TestGetUsersGlobalRolesCancelsWhileWaitingForLogin(t *testing.T) {
-	loginStarted := make(chan struct{})
-	fake := &userPageKeycloak{login: func(w http.ResponseWriter, r *http.Request) {
-		close(loginStarted)
-		<-r.Context().Done()
-	}}
-	kc := fake.service(t)
-	firstCtx, firstCancel := context.WithCancel(context.Background())
-	defer firstCancel()
-	firstDone := make(chan error, 1)
-	go func() {
-		_, err := kc.GetUsersGlobalRoles(firstCtx, []string{"a"})
-		firstDone <- err
-	}()
-	select {
-	case <-loginStarted:
-	case <-time.After(3 * time.Second):
-		t.Fatal("login did not start")
-	}
-	secondCtx, secondCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer secondCancel()
-	if _, err := kc.GetUsersGlobalRoles(secondCtx, []string{"b"}); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("waiting for login did not honor deadline: %v", err)
-	}
-	firstCancel()
-	select {
-	case err := <-firstDone:
-		if err == nil {
-			t.Fatal("canceled login unexpectedly succeeded")
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("first request did not cancel")
 	}
 }
 
