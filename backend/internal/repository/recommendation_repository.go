@@ -2,7 +2,6 @@ package repository
 
 import (
 	"backend/internal/model"
-	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -16,8 +15,8 @@ type RecommendationCandidate struct {
 }
 
 type RecommendationRepository interface {
-	ListCandidates(userID uuid.UUID, now time.Time) ([]RecommendationCandidate, error)
-	ListPastEvents(userID uuid.UUID, now time.Time) ([]*model.EventModel, error)
+	ListCandidates(userID uuid.UUID) ([]RecommendationCandidate, error)
+	ListPastEvents(userID uuid.UUID) ([]*model.EventModel, error)
 	GetOrganizerRatings(organizerIDs []uuid.UUID) (map[uuid.UUID]float64, error)
 }
 
@@ -29,31 +28,31 @@ func NewRecommendationRepository(db *gorm.DB) RecommendationRepository {
 	return &recommendationRepository{db: db}
 }
 
-func (r *recommendationRepository) ListCandidates(userID uuid.UUID, now time.Time) ([]RecommendationCandidate, error) {
+func (r *recommendationRepository) ListCandidates(userID uuid.UUID) ([]RecommendationCandidate, error) {
 	var candidates []RecommendationCandidate
 	// Confirmed bookings affect popularity; live reservations only affect capacity.
 	counts := r.db.Table("bookings").
 		Select("event_id, SUM(CASE WHEN status = ? THEN number_of_tickets ELSE 0 END) AS confirmed_tickets, SUM(number_of_tickets) AS occupied_tickets", model.BookingStatusConfirmed).
-		Where("status = ? OR (status = ? AND expires_at > NOW() )", model.BookingStatusConfirmed, model.BookingStatusReserved).
+		Where("status = ? OR (status = ? AND expires_at > NOW())", model.BookingStatusConfirmed, model.BookingStatusReserved).
 		Group("event_id")
 	bookedByUser := r.db.Table("bookings AS own").Select("1").
 		Where("own.event_id = e.event_id AND own.user_id = ? AND own.status = ?", userID, model.BookingStatusConfirmed)
 	err := r.db.Table("events AS e").
 		Select("e.*, COALESCE(t.confirmed_tickets, 0) AS confirmed_tickets").
 		Joins("LEFT JOIN (?) AS t ON t.event_id = e.event_id", counts).
-		Where("e.status = ? AND e.start_time > ? AND e.capacity > 0", model.EventStatusPublished, now).
+		Where("e.status = ? AND e.start_time > NOW() AND e.capacity > 0", model.EventStatusPublished).
 		Where("COALESCE(t.occupied_tickets, 0) < e.capacity").
 		Where("NOT EXISTS (?)", bookedByUser).
 		Scan(&candidates).Error
 	return candidates, err
 }
 
-func (r *recommendationRepository) ListPastEvents(userID uuid.UUID, now time.Time) ([]*model.EventModel, error) {
+func (r *recommendationRepository) ListPastEvents(userID uuid.UUID) ([]*model.EventModel, error) {
 	var events []*model.EventModel
 	// One attended event counts once, even if the user made multiple bookings.
 	err := r.db.Table("events AS e").Distinct("e.*").
 		Joins("JOIN bookings AS b ON b.event_id = e.event_id").
-		Where("b.user_id = ? AND b.status = ? AND e.end_time < ?", userID, model.BookingStatusConfirmed, now).
+		Where("b.user_id = ? AND b.status = ? AND e.end_time < NOW()", userID, model.BookingStatusConfirmed).
 		Scan(&events).Error
 	return events, err
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -20,9 +19,7 @@ func NewRecommendationsService(repo repository.RecommendationRepository) *Recomm
 }
 
 func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]*model.EventModel, error) {
-	// Share a single cutoff between candidate selection and booking history.
-	now := time.Now()
-	candidates, err := s.repo.ListCandidates(userID, now)
+	candidates, err := s.repo.ListCandidates(userID)
 	if err != nil {
 		return nil, fmt.Errorf("load recommendation candidates: %w", err)
 	}
@@ -31,7 +28,7 @@ func (s *RecommendationsService) GetRecommendationsForUser(userID uuid.UUID) ([]
 		return result, nil
 	}
 
-	history, err := s.repo.ListPastEvents(userID, now)
+	history, err := s.repo.ListPastEvents(userID)
 	if err != nil {
 		return nil, fmt.Errorf("load recommendation history: %w", err)
 	}

@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"backend/internal/middleware"
 	"backend/internal/model"
@@ -37,12 +36,12 @@ type handlerRecommendationRepo struct {
 	candidates []repository.RecommendationCandidate
 }
 
-func (r *handlerRecommendationRepo) ListCandidates(id uuid.UUID, _ time.Time) ([]repository.RecommendationCandidate, error) {
+func (r *handlerRecommendationRepo) ListCandidates(id uuid.UUID) ([]repository.RecommendationCandidate, error) {
 	r.userID = id
 	return r.candidates, r.err
 }
 
-func (r *handlerRecommendationRepo) ListPastEvents(uuid.UUID, time.Time) ([]*model.EventModel, error) {
+func (r *handlerRecommendationRepo) ListPastEvents(uuid.UUID) ([]*model.EventModel, error) {
 	return nil, nil
 }
 
