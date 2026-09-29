@@ -11,6 +11,9 @@ type OrganizationRepository interface {
 	CreateOrganization(org *model.OrganizationModel) error
 	GetByID(organizationID uuid.UUID) (*model.OrganizationModel, error)
 	GetByKeycloakOrgID(keycloakOrgID string) (*model.OrganizationModel, error)
+	// ListByKeycloakOrgIDsOrAliases returns the organizations whose Keycloak ID or alias is in refs.
+	// Tokens identify organizations by alias when the claim carries no ID.
+	ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error)
 	AddMembership(membership *model.OrganizationMembershipModel) error
 }
 
@@ -48,6 +51,17 @@ func (r *organizationRepository) GetByKeycloakOrgID(keycloakOrgID string) (*mode
 		return nil, err
 	}
 	return org, nil
+}
+
+func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	var orgs []*model.OrganizationModel
+	if err := r.db.Where("keycloak_org_id IN ? OR alias IN ?", refs, refs).Find(&orgs).Error; err != nil {
+		return nil, err
+	}
+	return orgs, nil
 }
 
 func (r *organizationRepository) AddMembership(membership *model.OrganizationMembershipModel) error {
