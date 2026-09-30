@@ -239,8 +239,9 @@ func adminResponseError(resp *resty.Response, err error) error {
 
 // ServiceAccountRoles are the realm-management roles the backend service account needs to
 // configure organization member roles (EVENTHUB-188): manage-organizations to change org group
-// memberships, manage-users to look up users and write the memberships. realm-admin is not needed.
-var ServiceAccountRoles = []string{"manage-organizations", "manage-users"}
+// memberships, manage-users to look up users and write the memberships, and view-clients
+// to resolve the backend client and its global roles. realm-admin is not needed.
+var ServiceAccountRoles = []string{"manage-organizations", "manage-users", "view-clients"}
 
 // EnsureServiceAccount enables the service account of the configured backend client and grants it
 // ServiceAccountRoles, both as role mapping and as scope mapping: the client has
