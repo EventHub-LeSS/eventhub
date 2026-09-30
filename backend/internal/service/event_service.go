@@ -22,10 +22,11 @@ var (
 type EventService struct {
 	eventRepo repository.EventRepository
 	orgRepo   repository.OrganizationRepository
+	tx        repository.Transactor
 }
 
-func NewEventService(eventRepo repository.EventRepository, orgRepo repository.OrganizationRepository) *EventService {
-	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo}
+func NewEventService(eventRepo repository.EventRepository, orgRepo repository.OrganizationRepository, tx repository.Transactor) *EventService {
+	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo, tx: tx}
 }
 
 func (s *EventService) CreateEvent(event *model.EventModel) error {
@@ -46,45 +47,53 @@ func (s *EventService) UpdateEvent(
 	keycloakOrgIDs []string,
 	req model.UpdateEventRequest,
 ) (*model.EventModel, error) {
-	event, err := s.eventRepo.GetEventByID(eventID)
+	var updated *model.EventModel
+	err := s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
+			!slices.Contains(keycloakOrgIDs, org.Alias)) {
+			return ErrForbidden
+		}
+
+		switch event.Status {
+		case model.EventStatusDraft, model.EventStatusPublished:
+		default:
+			return ErrInvalidStatus
+		}
+
+		event.Title = req.Title
+		event.Description = req.Description
+		event.StartTime = req.StartTime
+		event.EndTime = req.EndTime
+		event.Capacity = req.Capacity
+		event.Price = req.Price
+		event.CategoryID = &req.CategoryID
+		event.LocationID = &req.LocationID
+
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		updated = event
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if event == nil {
-		return nil, ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return nil, ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return nil, err
-	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
-		!slices.Contains(keycloakOrgIDs, org.Alias)) {
-		return nil, ErrForbidden
-	}
-
-	switch event.Status {
-	case model.EventStatusDraft, model.EventStatusPublished:
-	default:
-		return nil, ErrInvalidStatus
-	}
-
-	event.Title = req.Title
-	event.Description = req.Description
-	event.StartTime = req.StartTime
-	event.EndTime = req.EndTime
-	event.Capacity = req.Capacity
-	event.Price = req.Price
-	event.CategoryID = &req.CategoryID
-	event.LocationID = &req.LocationID
-
-	if err := s.eventRepo.UpdateEvent(event); err != nil {
-		return nil, err
-	}
-	return event, nil
+	return updated, nil
 }
 
 func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
@@ -116,66 +125,63 @@ func isEventComplete(event *model.EventModel) bool {
 }
 
 func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	event, err := s.eventRepo.GetEventByID(eventID)
-	if err != nil {
-		return err
-	}
-	if event == nil {
-		return ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return err
-	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
-		!slices.Contains(keycloakOrgIDs, org.Alias)) {
-		return ErrForbidden
-	}
-	if event.Status == model.EventStatusPublished {
-		return ErrAlreadyPublished
-	}
-	if event.Status != model.EventStatusDraft {
-		return ErrNotDraft
-	}
-	if !isEventComplete(event) {
-		return ErrIncomplete
-	}
-
-	event.Status = model.EventStatusPublished
-	return s.eventRepo.UpdateEvent(event)
+	return s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+			return ErrForbidden
+		}
+		if event.Status == model.EventStatusPublished {
+			return ErrAlreadyPublished
+		}
+		if event.Status != model.EventStatusDraft {
+			return ErrNotDraft
+		}
+		if !isEventComplete(event) {
+			return ErrIncomplete
+		}
+		event.Status = model.EventStatusPublished
+		return tx.Events.UpdateEvent(event)
+	})
 }
 
 func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	event, err := s.eventRepo.GetEventByID(eventID)
-	if err != nil {
-		return err
-	}
-	if event == nil {
-		return ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return err
-	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
-		!slices.Contains(keycloakOrgIDs, org.Alias)) {
-		return ErrForbidden
-	}
-
-	if event.Status != model.EventStatusPublished {
-		return ErrNotPublished
-	}
-
-	event.Status = model.EventStatusCancelled
-	return s.eventRepo.UpdateEvent(event)
+	return s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+			return ErrForbidden
+		}
+		if event.Status != model.EventStatusPublished {
+			return ErrNotPublished
+		}
+		event.Status = model.EventStatusCancelled
+		return tx.Events.UpdateEvent(event)
+	})
 }
 
 func (s *EventService) GetEventStatistics(

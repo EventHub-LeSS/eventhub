@@ -755,7 +755,8 @@ paths:
         weights category affinity (50%), confirmed ticket popularity (40%), and organizer
         ratings (10%).
       parameters:
-      - description: Maximum number of recommendations after ranking; omitted returns all recommendations
+      - description: Maximum number of recommendations after ranking; omitted returns
+          all recommendations
         in: query
         minimum: 1
         name: limit

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -120,7 +121,11 @@ func principalManaging(keycloakOrgIDs ...string) *middleware.Principal {
 
 func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	gin.SetMode(gin.TestMode)
-	eventService := service.NewEventService(repository.NewEventRepository(db), repository.NewOrganizationRepository(db))
+	eventService := service.NewEventService(
+		repository.NewEventRepository(db),
+		repository.NewOrganizationRepository(db),
+		repository.NewTransactor(db),
+	)
 	h := NewEventHandler(eventService)
 
 	setPrincipal := func(c *gin.Context) {
@@ -404,5 +409,119 @@ func TestWithdrawEventHandler_StatusCodes(t *testing.T) {
 	db.First(&stored, "event_id = ?", published.eventID)
 	if stored.Status != model.EventStatusPublished {
 		t.Errorf("rejected withdraw changed status to %s", stored.Status)
+	}
+}
+
+func runConcurrentPosts(t *testing.T, db *gorm.DB, n int, fn func() int) (ok, rejected int) {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(n)
+	sqlDB.SetMaxIdleConns(n)
+
+	start := make(chan struct{})
+	codes := make(chan int, n)
+	var ready, wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		ready.Add(1)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ready.Done()
+			<-start
+			codes <- fn()
+		}()
+	}
+	ready.Wait()
+	close(start)
+	wg.Wait()
+	close(codes)
+
+	for code := range codes {
+		switch code {
+		case http.StatusOK:
+			ok++
+		case http.StatusBadRequest:
+			rejected++
+		default:
+			t.Errorf("unexpected status %d", code)
+		}
+	}
+	return ok, rejected
+}
+
+func TestPublishEventHandler_ConcurrentPublishesSerialize(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+
+	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
+		return postPublish(t, router, seeded.eventID.String()).Code
+	})
+	if ok != 1 {
+		t.Fatalf("expected exactly 1 successful publish, got %d ok and %d rejected", ok, rejected)
+	}
+
+	var stored model.EventModel
+	if err := db.First(&stored, "event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if stored.Status != model.EventStatusPublished {
+		t.Errorf("expected published, got %s", stored.Status)
+	}
+}
+
+func TestUpdateEventHandler_ConcurrentUpdateKeepsPublishedStatus(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+	body := validBody(seeded)
+	eventID := seeded.eventID.String()
+
+	var publishOnce sync.Once
+	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
+		publish := false
+		publishOnce.Do(func() { publish = true })
+		if publish {
+			return postPublish(t, router, eventID).Code
+		}
+		return putEvent(t, router, eventID, body).Code
+	})
+	if ok != 20 || rejected != 0 {
+		t.Fatalf("expected 20 successful requests, got %d ok and %d rejected", ok, rejected)
+	}
+
+	var stored model.EventModel
+	if err := db.First(&stored, "event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if stored.Status != model.EventStatusPublished {
+		t.Errorf("expected published, got %s", stored.Status)
+	}
+	if stored.Title != "Neues Konzert" {
+		t.Errorf("expected updated title, got %q", stored.Title)
+	}
+}
+
+func TestWithdrawEventHandler_ConcurrentWithdrawsSerialize(t *testing.T) {
+	db := setupHandlerDB(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+
+	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
+		return postWithdraw(t, router, seeded.eventID.String()).Code
+	})
+	if ok != 1 {
+		t.Fatalf("expected exactly 1 successful withdraw, got %d ok and %d rejected", ok, rejected)
+	}
+
+	var stored model.EventModel
+	if err := db.First(&stored, "event_id = ?", seeded.eventID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if stored.Status != model.EventStatusCancelled {
+		t.Errorf("expected cancelled, got %s", stored.Status)
 	}
 }

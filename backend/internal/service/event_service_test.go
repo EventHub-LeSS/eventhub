@@ -2,6 +2,7 @@ package service
 
 import (
 	"backend/internal/model"
+	"backend/internal/repository"
 	"errors"
 	"testing"
 	"time"
@@ -39,6 +40,9 @@ func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
 	return 0, nil
 }
 
+func (f *fakeEventRepo) LockEvent(uuid.UUID) (*model.EventModel, error) {
+	return f.event, nil
+}
 func (f *fakeEventRepo) UpdateEvent(event *model.EventModel) error {
 	f.saved = event
 	return nil
@@ -110,6 +114,15 @@ func updateRequest() model.UpdateEventRequest {
 	}
 }
 
+type fakeTransactor struct {
+	events repository.EventRepository
+	orgs   repository.OrganizationRepository
+}
+
+func (f *fakeTransactor) InTransaction(fn func(repository.Tx) error) error {
+	return fn(repository.Tx{Events: f.events, Organizations: f.orgs})
+}
+
 func newTestService(event *model.EventModel) (*EventService, *fakeEventRepo) {
 	eventRepo := &fakeEventRepo{event: event}
 	orgRepo := &fakeOrgRepo{
@@ -118,8 +131,8 @@ func newTestService(event *model.EventModel) (*EventService, *fakeEventRepo) {
 			orgB.OrganizationID: orgB,
 		},
 	}
-
-	return NewEventService(eventRepo, orgRepo), eventRepo
+	tx := &fakeTransactor{events: eventRepo, orgs: orgRepo}
+	return NewEventService(eventRepo, orgRepo, tx), eventRepo
 }
 
 func TestUpdateEvent_Ownership(t *testing.T) {
