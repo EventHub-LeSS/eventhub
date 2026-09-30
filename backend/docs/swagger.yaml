@@ -1,5 +1,18 @@
 basePath: /api/v1
 definitions:
+  handler.CreateBookingRequest:
+    properties:
+      eventId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      numberOfTickets:
+        example: 2
+        minimum: 1
+        type: integer
+    required:
+    - eventId
+    - numberOfTickets
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -26,6 +39,64 @@ definitions:
       subject:
         type: string
       username:
+        type: string
+    type: object
+  handler.UserAdminListItem:
+    properties:
+      email:
+        type: string
+      firstName:
+        type: string
+      keycloakUserId:
+        type: string
+      lastName:
+        type: string
+      phoneNumber:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+    type: object
+  handler.UserAdminListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handler.UserAdminListItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.UserAdminRolesRequest:
+    properties:
+      roles:
+        example:
+        - visitor
+        items:
+          enum:
+          - admin
+          - moderator
+          - visitor
+          type: string
+        type: array
+    required:
+    - roles
+    type: object
+  handler.UserAdminRolesResponse:
+    properties:
+      keycloakUserId:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
         type: string
     type: object
   middleware.GlobalRole:
@@ -60,6 +131,48 @@ definitions:
       message:
         type: string
     type: object
+  model.AvailableSeatsResponse:
+    properties:
+      availableSeats:
+        type: integer
+      eventId:
+        type: string
+    type: object
+  model.BookingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      eventId:
+        type: string
+      expiresAt:
+        type: string
+      numberOfTickets:
+        type: integer
+      paymentId:
+        type: string
+      status:
+        $ref: '#/definitions/model.BookingStatus'
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  model.BookingStatus:
+    enum:
+    - reserved
+    - confirmed
+    - cancelled
+    - failed
+    - expired
+    type: string
+    x-enum-varnames:
+    - BookingStatusReserved
+    - BookingStatusConfirmed
+    - BookingStatusCancelled
+    - BookingStatusFailed
+    - BookingStatusExpired
   model.ConfigureOrgRolesRequest:
     properties:
       roles:
@@ -217,6 +330,13 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.SoldTicketsResponse:
+    properties:
+      eventId:
+        type: string
+      soldTickets:
+        type: integer
+    type: object
   model.UpdateEventRequest:
     properties:
       capacity:
@@ -267,55 +387,6 @@ paths:
       summary: Health check
       tags:
       - system
-  /bookings:
-    post:
-      consumes:
-        - application/json
-      description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
-        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
-      parameters:
-        - description: Buchungsdaten
-          in: body
-          name: booking
-          required: true
-          schema:
-            $ref: '#/definitions/handler.CreateBookingRequest'
-      produces:
-        - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/model.BookingModel'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "409":
-          description: Event nicht veröffentlicht oder Kapazität überschritten
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-      security:
-        - BearerAuth: [ ]
-      summary: Buchung anlegen
-      tags:
-        - bookings
   /admin/users:
     get:
       description: Returns a database page of shared users ordered by userId ascending,
@@ -457,6 +528,55 @@ paths:
       summary: Update user roles
       tags:
       - users
+  /bookings:
+    post:
+      consumes:
+      - application/json
+      description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
+        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
+      parameters:
+      - description: Buchungsdaten
+        in: body
+        name: booking
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateBookingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Event nicht veröffentlicht oder Kapazität überschritten
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Buchung anlegen
+      tags:
+      - bookings
   /debug/token:
     post:
       consumes:
@@ -488,6 +608,90 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events/{eventId}/available-seats:
+    get:
+      description: Returns the remaining available seats for an event. Requires the
+        event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.AvailableSeatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get available seats
+      tags:
+      - events
+  /events/{eventId}/sold-tickets:
+    get:
+      description: Returns the number of confirmed tickets sold for an event. Requires
+        the event_manager role in the organization that owns the event.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.SoldTicketsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get sold tickets
+      tags:
+      - events
   /events/{id}:
     put:
       consumes:

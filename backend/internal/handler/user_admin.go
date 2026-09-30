@@ -72,7 +72,7 @@ type UserAdminListResponse struct {
 
 // UserAdminRolesRequest sets the complete global role set for a user.
 type UserAdminRolesRequest struct {
-	Roles []string `json:"roles" binding:"required"`
+	Roles []string `json:"roles" binding:"required" example:"visitor" enums:"admin,moderator,visitor"`
 }
 
 // @Summary      List users
