@@ -63,7 +63,7 @@ func (f *userPageKeycloak) service(t *testing.T) *KeycloakService {
 		}
 		writeUserPageResponse(t, w, `[{"id":"client-backend","clientId":"backend"}]`)
 	})
-	mux.HandleFunc("GET /admin/realms/eventhub/users/{id}/role-mappings/clients/client-backend", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /admin/realms/eventhub/users/{id}/role-mappings/clients/client-backend/composite", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		f.mu.Lock()
 		f.requests = append(f.requests, r.PathValue("id"))
@@ -198,6 +198,14 @@ func TestGetUsersGlobalRolesEmpty(t *testing.T) {
 	defer fake.mu.Unlock()
 	if fake.logins != 0 || fake.clients != 0 || len(fake.requests) != 0 {
 		t.Fatal("empty page made external calls")
+	}
+}
+
+func TestGetUserGlobalRolesIncludesInheritedRoles(t *testing.T) {
+	fake := &userPageKeycloak{}
+	roles, err := fake.service(t).GetUserGlobalRoles(context.Background(), "user-1")
+	if err != nil || !reflect.DeepEqual(roles, []string{"visitor"}) {
+		t.Fatalf("effective roles=%v err=%v, want inherited visitor", roles, err)
 	}
 }
 

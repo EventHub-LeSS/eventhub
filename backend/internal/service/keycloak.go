@@ -432,7 +432,7 @@ func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID
 }
 
 func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clientID, keycloakUserID string) ([]string, error) {
-	roles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	roles, err := k.client.GetCompositeClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch global roles for %s: %w", keycloakUserID, err)
 	}
