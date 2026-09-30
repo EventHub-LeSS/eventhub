@@ -5,11 +5,13 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type EventRepository interface {
 	CreateEvent(event *model.EventModel) error
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
+	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
 	GetAllEvents() ([]*model.EventModel, error)
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
@@ -30,8 +32,20 @@ func (r *eventRepository) CreateEvent(event *model.EventModel) error {
 }
 
 func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
+	return r.getEvent(eventID, false)
+}
+
+func (r *eventRepository) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {
+	return r.getEvent(eventID, true)
+}
+
+func (r *eventRepository) getEvent(eventID uuid.UUID, lock bool) (*model.EventModel, error) {
 	event := &model.EventModel{}
-	err := r.db.First(event, "event_id = ?", eventID).Error
+	q := r.db
+	if lock {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	err := q.First(event, "event_id = ?", eventID).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}

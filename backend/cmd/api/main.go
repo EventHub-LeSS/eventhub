@@ -67,9 +67,10 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	tx := repository.NewTransactor(db)
 
 	// Initialize Services
-	eventService := service.NewEventService(eventRepo, orgRepo)
+	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
