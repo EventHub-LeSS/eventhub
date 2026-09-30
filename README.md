@@ -103,7 +103,7 @@ Alle Passwörter: `password`
 
 | Benutzer                                  | Globale Rolle | Organisation & Berechtigung                          |
 | ----------------------------------------- | ------------- | ---------------------------------------------------- |
-| `großmeister_finn`                        | admin         | Provadis `org_admin`, Telekom `org_admin`, ACME `org_admin`, Stadthalle `org_admin` |
+| `finn.betz@grossmeister.de`               | admin         | Provadis `org_admin`, Telekom `org_admin`, ACME `org_admin`, Stadthalle `org_admin` |
 | `organizer@provadis-hochschule.de`        | visitor       | Provadis `event_manager`                             |
 | `organizer@telekom.de`                    | visitor       | Telekom `event_manager`                              |
 | `eva.manager@provadis-hochschule.de`      | visitor       | Provadis `event_manager`, ACME `event_manager`       |
@@ -116,6 +116,11 @@ Alle Passwörter: `password`
 
 `max.multi@eventhub.de` hat bewusst **unterschiedliche Rollen** in verschiedenen
 Organisationen, um die abgestuften Berechtigungen (EVENTHUB-188) zu demonstrieren.
+
+Benutzernamen sind überall die E-Mail-Adresse (`registrationEmailAsUsername`).
+Realms, die vor der Vereinheitlichung importiert oder geseedet wurden, benennt
+`api-seed` beim nächsten Lauf um; Service-Konten wie `service-account-backend`
+haben keine E-Mail-Adresse und behalten ihren Namen.
 
 #### Mock-Organisationen
 
@@ -136,3 +141,32 @@ bun dev
 ```
 
 Das Frontend läuft auf <http://localhost:3000>.
+
+### Event-Empfehlungen
+
+`GET /api/v1/recommendations` liefert für angemeldete Nutzer veröffentlichte,
+noch nicht gestartete Events mit freien Plätzen. Bestätigte eigene Buchungen
+werden ausgeschlossen. Bei der Verfügbarkeit zählen bestätigte Tickets und
+noch gültige Reservierungen; abgelaufene Reservierungen blockieren keine Plätze.
+Die Prüfung ist eine Momentaufnahme, keine Platzgarantie bei späterer Buchung.
+
+Das Ranking gewichtet Kategorie-Affinität mit 50 %, bestätigte Tickets relativ
+zur Kapazität mit 40 % und die durchschnittliche Veranstalterbewertung mit 10 %.
+Für die Kategorie-Affinität zählt jedes vergangene, bestätigt gebuchte Event
+einmal. Events ohne Kategorie bleiben im Nenner, tragen aber zu keiner Kategorie
+bei. Veranstalterbewertungen stammen wie bisher aus abgeschlossenen Events.
+Ohne Historie oder Bewertungen ist der jeweilige Anteil null. Bei gleichem Score
+entscheiden Startzeit und Event-ID. Es werden höchstens drei SQL-Abfragen pro
+Anfrage ausgeführt. Datenbankfehler führen zu HTTP 500 statt zu einem unbemerkt
+unvollständigen Ranking; Details werden nur serverseitig protokolliert.
+
+Migration 000005 erzwingt positive Event-Kapazitäten und ergänzt einen Index für
+bestätigte Nutzerbuchungen. Bestehende Kapazitäten kleiner oder gleich null müssen
+vor dem Einspielen fachlich korrigiert werden; die Migration verändert sie nicht
+automatisch.
+
+Backend-Tests laufen im Backend-Verzeichnis mit `go test ./...`. Die
+PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
+`go test -p 1 ./...` ausgeführt werden, weil mehrere Pakete dieselben Testtabellen
+zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
+Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.

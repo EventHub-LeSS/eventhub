@@ -32,7 +32,7 @@
           "username": "organizer@provadis-hochschule.de"
         },
         {
-          "username": "großmeister_finn"
+          "username": "finn.betz@grossmeister.de"
         }
       ]
     },
@@ -46,7 +46,7 @@
           "username": "organizer@telekom.de"
         },
         {
-          "username": "großmeister_finn"
+          "username": "finn.betz@grossmeister.de"
         }
       ]
     }
@@ -147,7 +147,7 @@
       ]
     },
     {
-      "username": "großmeister_finn",
+      "username": "finn.betz@grossmeister.de",
       "email": "finn.betz@grossmeister.de",
       "emailVerified": true,
       "enabled": true,

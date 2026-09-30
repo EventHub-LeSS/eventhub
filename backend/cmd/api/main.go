@@ -37,9 +37,9 @@ func main() {
 	port := flag.Int("p", 8080, "port to listen on")
 	flag.Parse()
 
-	db, db_err := db.Connect()
-	if db_err != nil {
-		log.Fatal(db_err)
+	db, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatal(dbErr)
 	}
 
 	authConfig, err := middleware.LoadAuthenticationConfig()
@@ -66,13 +66,18 @@ func main() {
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
+	bookingRepo := repository.NewBookingRepository(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo)
+	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -92,12 +97,21 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+
+		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
+
+		// events
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
+			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
+
+		// bookings
+		protected.POST("/bookings", bookingHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -117,7 +131,6 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
-		return
 	}
 }
 

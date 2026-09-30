@@ -41,7 +41,11 @@ func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 }
 
 // keycloakOrgIDs are the organizations in which the caller may manage events.
-func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgIDs []string, req model.UpdateEventRequest) (*model.EventModel, error) {
+func (s *EventService) UpdateEvent(
+	eventID uuid.UUID,
+	keycloakOrgIDs []string,
+	req model.UpdateEventRequest,
+) (*model.EventModel, error) {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
 		return nil, err
@@ -52,11 +56,13 @@ func (s *EventService) UpdateEvent(eventID uuid.UUID, keycloakOrgIDs []string, r
 	if event.OrganizerID == nil {
 		return nil, ErrForbidden
 	}
+
 	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return nil, err
 	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
+		!slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return nil, ErrForbidden
 	}
 
@@ -120,11 +126,13 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 	if event.OrganizerID == nil {
 		return ErrForbidden
 	}
+
 	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return err
 	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
+		!slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return ErrForbidden
 	}
 	if event.Status == model.EventStatusPublished {
@@ -136,6 +144,7 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 	if !isEventComplete(event) {
 		return ErrIncomplete
 	}
+
 	event.Status = model.EventStatusPublished
 	return s.eventRepo.UpdateEvent(event)
 }
@@ -151,16 +160,62 @@ func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string)
 	if event.OrganizerID == nil {
 		return ErrForbidden
 	}
+
 	org, err := s.orgRepo.GetByID(*event.OrganizerID)
 	if err != nil {
 		return err
 	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
+		!slices.Contains(keycloakOrgIDs, org.Alias)) {
 		return ErrForbidden
 	}
+
 	if event.Status != model.EventStatusPublished {
 		return ErrNotPublished
 	}
+
 	event.Status = model.EventStatusCancelled
 	return s.eventRepo.UpdateEvent(event)
+}
+
+func (s *EventService) GetEventStatistics(
+	eventID uuid.UUID,
+	keycloakOrgIDs []string,
+) (*model.EventStatistics, error) {
+	event, err := s.eventRepo.GetEventByID(eventID)
+	if err != nil {
+		return nil, err
+	}
+	if event == nil {
+		return nil, ErrEventNotFound
+	}
+	if event.OrganizerID == nil {
+		return nil, ErrForbidden
+	}
+
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
+		!slices.Contains(keycloakOrgIDs, org.Alias)) {
+		return nil, ErrForbidden
+	}
+
+	soldTickets, err := s.eventRepo.GetConfirmedTicketCount(eventID)
+	if err != nil {
+		return nil, err
+	}
+
+	availableSeats := int64(event.Capacity) - soldTickets
+	if availableSeats < 0 {
+		availableSeats = 0
+	}
+
+	return &model.EventStatistics{
+		EventID:        event.EventID,
+		Capacity:       event.Capacity,
+		SoldTickets:    soldTickets,
+		AvailableSeats: availableSeats,
+	}, nil
 }

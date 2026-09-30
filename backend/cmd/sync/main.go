@@ -40,7 +40,7 @@ func main() {
 	}
 	keycloakService := service.NewKeycloakService(keycloakCfg)
 
-	syncUsername := firstNonEmpty(os.Getenv("SYNC_USERNAME"), "großmeister_finn")
+	syncUsername := firstNonEmpty(os.Getenv("SYNC_USERNAME"), "finn.betz@grossmeister.de")
 	syncPassword := firstNonEmpty(os.Getenv("SYNC_PASSWORD"), "password")
 
 	log.Printf("logging in as %q to realm %q", syncUsername, keycloakCfg.UserRealm)
