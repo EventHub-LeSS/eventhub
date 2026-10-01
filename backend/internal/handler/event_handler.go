@@ -3,6 +3,7 @@ package handler
 import (
 	"backend/internal/middleware"
 	"backend/internal/model"
+	"backend/internal/repository"
 	"backend/internal/service"
 	"errors"
 	"net/http"
@@ -14,10 +15,11 @@ import (
 type EventHandler struct {
 	eventService    *service.EventService
 	keycloakService *service.KeycloakService
+	orgRepo         repository.OrganizationRepository
 }
 
-func NewEventHandler(eventService *service.EventService, keycloakService *service.KeycloakService) *EventHandler {
-	return &EventHandler{eventService: eventService, keycloakService: keycloakService}
+func NewEventHandler(eventService *service.EventService, keycloakService *service.KeycloakService, orgRepo repository.OrganizationRepository) *EventHandler {
+	return &EventHandler{eventService: eventService, keycloakService: keycloakService, orgRepo: orgRepo}
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
@@ -184,42 +186,61 @@ func writeEventActionError(c *gin.Context, err error) {
 // EVENTHUB-79: Eigene Veranstaltungen anzeigen
 
 // ListOwnEventsHandler
-// @Summary      Get users organization events
-// @Description  Returns the events posted by all organizations where the user has the event_manager role
+// @Summary      Get organization events by the given id
+// @Description  Returns events from the requested organization. Requires organization membership, regardless of role.
 // @Tags         events
 // @Security     BearerAuth
-// @Produce      applcation/json
+// @Produce      json
+// @Param        id path string true "Organization ID (database UUID)"
 // @Success      200 {array} model.EventModel
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.ErrorResponse
-// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
-// @Router       /events/self [get]
+// @Router       /events/org/{id} [get]
 func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
-	principal, rsp := checkPreconditions(c, middleware.RoleEventManager)
+	orgID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+	principal, rsp := checkPreconditions(c, nil)
 	if rsp != nil {
 		c.AbortWithStatusJSON(rsp.Status, rsp)
 		return
 	}
-	allEvents := make([]*model.EventModel, 0)
-	for _, orgAlias := range principal.OrganizationIDsWithRole(middleware.RoleEventManager) {
-		orgId, err := h.keycloakService.GetOrganizationIDBySlug(c, principal.AccessToken, orgAlias)
-		if err != nil {
-			writeEventActionError(c, err)
-			return
-		}
-		events, err := h.eventService.ListByOrganization(orgId)
-		if err != nil {
-			writeEventActionError(c, err)
-			return
-		}
-		allEvents = append(allEvents, events...)
+
+	org, err := h.orgRepo.GetByID(orgID)
+	if err != nil {
+		writeProblem(c, http.StatusInternalServerError, "error getting organization")
+		return
 	}
 
-	c.JSON(http.StatusOK, allEvents)
+	if org == nil {
+		writeProblem(c, http.StatusNotFound, "organization not found")
+		return
+	}
+
+	for _, userOrg := range principal.Organizations {
+		if userOrg != nil && (userOrg.ID == org.KeycloakOrgID ||
+			(org.Alias != "" && (userOrg.ID == org.Alias || userOrg.Alias == org.Alias))) {
+			events, err := h.eventService.ListByOrganization(orgID)
+			if err != nil {
+				writeEventActionError(c, err)
+				return
+			}
+			if events == nil {
+				events = make([]*model.EventModel, 0)
+			}
+			c.JSON(http.StatusOK, events)
+			return
+		}
+	}
+
+	writeProblem(c, http.StatusNotFound, "organization not found")
 }
 
-func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
+func checkPreconditions(c *gin.Context, role *middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
 		return nil, &model.ErrorResponse{
@@ -230,7 +251,11 @@ func checkPreconditions(c *gin.Context, role middleware.OrganizationRole) (*midd
 		}
 	}
 
-	if !principal.HasOrganizationRole(role) {
+	if role == nil {
+		return principal, nil
+	}
+
+	if !principal.HasOrganizationRole(*role) {
 		return principal, &model.ErrorResponse{
 			Status: 403,
 			Type:   "about:blank",

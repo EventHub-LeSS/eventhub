@@ -77,7 +77,7 @@ func main() {
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
-	eventHandler := handler.NewEventHandler(eventService, keycloakService)
+	eventHandler := handler.NewEventHandler(eventService, keycloakService, orgRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
@@ -106,7 +106,7 @@ func main() {
 		events := protected.Group("/events")
 		{
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
-			events.GET("/self", eventHandler.ListOwnEventsHandler)
+			events.GET("/org/:id", eventHandler.ListOwnEventsHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
