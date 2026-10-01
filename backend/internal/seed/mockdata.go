@@ -17,17 +17,17 @@ type mockMembership struct {
 }
 
 type mockOrg struct {
-	Name            string
-	Alias           string
-	Description     string
-	AdminUser       string
-	ContactEmail    string
-	ContactPhone    string
-	Street          string
-	HouseNumber     string
-	PostalCode      string
-	City            string
-	CountryCode     string
+	Name         string
+	Alias        string
+	Description  string
+	AdminUser    string
+	ContactEmail string
+	ContactPhone string
+	Street       string
+	HouseNumber  string
+	PostalCode   string
+	City         string
+	CountryCode  string
 }
 
 var mockUsers = []mockUser{

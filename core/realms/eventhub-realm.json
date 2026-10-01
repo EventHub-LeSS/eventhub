@@ -169,7 +169,7 @@
       "enabled": true,
       "serviceAccountClientId": "backend",
       "clientRoles": {
-        "realm-management": ["manage-organizations", "manage-users"]
+        "realm-management": ["manage-organizations", "manage-users", "view-clients"]
       }
     }
   ],
@@ -349,7 +349,7 @@
     "realm-management": [
       {
         "client": "backend",
-        "roles": ["manage-organizations", "manage-users"]
+        "roles": ["manage-organizations", "manage-users", "view-clients"]
       }
     ]
   }

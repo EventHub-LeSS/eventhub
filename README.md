@@ -93,7 +93,7 @@ werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden 
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
 per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur die Rollen
-`manage-organizations` und `manage-users` aus `realm-management`, kein `realm-admin`.
+`manage-organizations`, `manage-users` und `view-clients` aus `realm-management`, kein `realm-admin`.
 Frische Realms bekommen es über `core/realms/eventhub-realm.json`. Bei einem bestehenden
 Keycloak-Volume richtet `docker compose up api-seed` das Service-Konto nachträglich ein.
 

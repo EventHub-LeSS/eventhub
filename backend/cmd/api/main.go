@@ -76,6 +76,7 @@ func main() {
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
@@ -110,6 +111,13 @@ func main() {
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
+		adminUsers := v1.Group("/admin/users")
+		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+		{
+			adminUsers.GET("", userAdminHandler.ListUsers)
+			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
+			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
+		}
 
 		// bookings
 		protected.POST("/bookings", bookingHandler)
@@ -132,6 +140,7 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 }
 
