@@ -12,6 +12,7 @@ import (
 var (
 	ErrForbidden        = errors.New("forbidden")
 	ErrEventNotFound    = errors.New("event not found")
+	ErrOrgNotFound   = errors.New("event not found")
 	ErrInvalidStatus    = errors.New("invalid event status")
 	ErrIncomplete       = errors.New("event is incomplete")
 	ErrNotDraft         = errors.New("only draft events can be published")
@@ -100,8 +101,8 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
 
-func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
-	return s.eventRepo.ListByOrganization(organizationID)
+func (s *EventService) ListByOrganization(orgId uuid.UUID) ([]*model.EventModel, error) {
+	return s.eventRepo.ListByOrganization(orgId)
 }
 
 func isEventComplete(event *model.EventModel) bool {

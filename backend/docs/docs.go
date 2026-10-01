@@ -694,6 +694,53 @@ const docTemplate = `{
                 }
             }
         },
+		"/events/org/{id}": {
+		  "get": {
+		    "summary": "List organization events",
+		    "description": "Returns events from the requested organization. Requires organization membership, regardless of role.",
+		    "tags": ["events"],
+		    "security": [
+		      { "BearerAuth": [] }
+		    ],
+		    "produces": ["application/json"],
+		    "parameters": [{"name": "id", "in": "path", "required": true, "type": "string", "description": "Organization ID (database UUID)"}],
+                "responses": {
+		      "200": {
+		        "description": "Organization events; an empty array if none exist",
+		        "schema": {
+		          "type": "array",
+		          "items": {
+		            "$ref": "#/definitions/model.EventModel"
+		          }
+		        }
+		      },
+		      "400": {
+		        "description": "Bad Request",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "401": {
+		        "description": "Authentication required",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "404": {
+		        "description": "Organization not found",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      },
+		      "500": {
+		        "description": "Internal Server Error",
+		        "schema": {
+		          "$ref": "#/definitions/model.ErrorResponse"
+		        }
+		      }
+		    }
+		  }
+		},
         "/organizations/": {
             "post": {
                 "security": [

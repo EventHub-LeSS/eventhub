@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/keycloakmock"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
@@ -119,14 +120,20 @@ func principalManaging(keycloakOrgIDs ...string) *middleware.Principal {
 	return p
 }
 
-func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
+func newEventRouter(db *gorm.DB, principal *middleware.Principal, t *testing.T, fakes ...*keycloakmock.Fake) http.Handler {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	eventService := service.NewEventService(
 		repository.NewEventRepository(db),
 		repository.NewOrganizationRepository(db),
 		repository.NewTransactor(db),
 	)
-	h := NewEventHandler(eventService)
+	fake := keycloakmock.New()
+	if len(fakes) > 0 {
+		fake = fakes[0]
+	}
+	kc := fake.KeycloakService(t)
+	h := NewEventHandler(eventService, kc, repository.NewOrganizationRepository(db))
 
 	setPrincipal := func(c *gin.Context) {
 		if principal != nil {
@@ -136,6 +143,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	}
 
 	r := gin.New()
+	r.GET("/api/v1/events/org/:id", setPrincipal, h.ListOwnEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, h.PublishEventHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, h.WithdrawEventHandler)
@@ -171,6 +179,106 @@ func postWithdraw(t *testing.T, router http.Handler, eventID string) *httptest.R
 	return rec
 }
 
+func getOwnEvents(router http.Handler, orgID string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/org/"+orgID, nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func assertOwnEventsProblem(t *testing.T, rec *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("expected %d, got %d: %s", status, rec.Code, rec.Body.String())
+	}
+	var problem model.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v; body: %s", err, rec.Body.String())
+	}
+	if problem.Status != status || problem.Type != "about:blank" || problem.Title != http.StatusText(status) || problem.Detail == "" {
+		t.Errorf("unexpected problem response: %+v", problem)
+	}
+}
+
+func TestListOwnEventsHandler_OnlyRequestedOrganization(t *testing.T) {
+	db := setupHandlerDB(t)
+	want := map[uuid.UUID]seededEvent{}
+	var orgID uuid.UUID
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		event := seedEventForOrg(t, db, "kc-org-a", status)
+		want[event.eventID] = event
+		orgID = event.ownerOrgID
+	}
+	seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	seedEventForOrg(t, db, "kc-org-foreign", model.EventStatusPublished)
+	principal := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{
+		{ID: "kc-org-a", Alias: "alias-a"},
+		{ID: "kc-org-b", Alias: "alias-b"},
+	}}
+	principal.ActiveOrganization = principal.Organizations[1]
+	fake := keycloakmock.New()
+	rec := getOwnEvents(newEventRouter(db, principal, t, fake), orgID.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var events []model.EventModel
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
+	if len(events) != len(want) {
+		t.Fatalf("expected %d events, got %d: %s", len(want), len(events), rec.Body.String())
+	}
+	for _, event := range events {
+		seeded, ok := want[event.EventID]
+		if !ok {
+			t.Fatalf("unexpected or duplicate event %s", event.EventID)
+		}
+		if event.OrganizerID == nil || *event.OrganizerID != seeded.ownerOrgID {
+			t.Errorf("event %s has unexpected organizer %v", event.EventID, event.OrganizerID)
+		}
+		delete(want, event.EventID)
+	}
+	fake.Mu.Lock()
+	defer fake.Mu.Unlock()
+	if len(fake.AdminRequests) != 0 || fake.TokenRequests != 0 {
+		t.Error("listing events should not contact Keycloak")
+	}
+}
+
+func TestListOwnEventsHandler_EmptyArray(t *testing.T) {
+	db := setupHandlerDB(t)
+	orgID := uuid.New()
+	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", orgID, "org-1", "Empty organization").Error; err != nil {
+		t.Fatalf("seed organization: %v", err)
+	}
+	seedEventForOrg(t, db, "foreign-org", model.EventStatusPublished)
+	principal := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{{ID: "org-1"}}}
+	rec := getOwnEvents(newEventRouter(db, principal, t), orgID.String())
+	if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+		t.Fatalf("expected 200 with [], got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListOwnEventsHandler_DatabaseFailure(t *testing.T) {
+	for _, table := range []string{"organizations", "events"} {
+		t.Run(table, func(t *testing.T) {
+			db := setupHandlerDB(t)
+			seeded := seedEventForOrg(t, db, "org-1", model.EventStatusPublished)
+			const callback = "test:list_own_events_failure"
+			if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+				if tx.Statement.Table == table {
+					_ = tx.AddError(errors.New("query failed"))
+				}
+			}); err != nil {
+				t.Fatalf("register query failure: %v", err)
+			}
+			t.Cleanup(func() { db.Callback().Query().Remove(callback) })
+			rec := getOwnEvents(newEventRouter(db, principalManaging("org-1"), t), seeded.ownerOrgID.String())
+			assertOwnEventsProblem(t, rec, http.StatusInternalServerError)
+		})
+	}
+}
+
 func validBody(s seededEvent) map[string]any {
 	return map[string]any{
 		"title":      "Neues Konzert",
@@ -186,7 +294,7 @@ func validBody(s seededEvent) map[string]any {
 func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := putEvent(t, router, seeded.eventID.String(), validBody(seeded))
 	if rec.Code != http.StatusOK {
@@ -211,7 +319,7 @@ func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 func TestUpdateEventHandler_RejectsForeignEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a"))
+	router := newEventRouter(db, principalManaging("kc-org-a"), t)
 
 	rec := putEvent(t, router, seeded.eventID.String(), validBody(seeded))
 	if rec.Code != http.StatusForbidden {
@@ -249,7 +357,7 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := putEvent(t, newEventRouter(db, tt.principal), tt.eventID, tt.body)
+			rec := putEvent(t, newEventRouter(db, tt.principal, t), tt.eventID, tt.body)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
@@ -260,7 +368,7 @@ func TestUpdateEventHandler_StatusCodes(t *testing.T) {
 func TestPublishEventHandler_PublishesOwnDraftEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := postPublish(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusOK {
@@ -287,7 +395,7 @@ func TestPublishEventHandler_RejectsIncompleteEvent(t *testing.T) {
 	if err := db.Exec("UPDATE events SET category_id = NULL WHERE event_id = ?", seeded.eventID).Error; err != nil {
 		t.Fatalf("break event: %v", err)
 	}
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	rec := postPublish(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusBadRequest {
@@ -321,7 +429,7 @@ func TestPublishEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postPublish(t, newEventRouter(db, tt.principal), tt.eventID)
+			rec := postPublish(t, newEventRouter(db, tt.principal, t), tt.eventID)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
@@ -338,7 +446,7 @@ func TestPublishEventHandler_StatusCodes(t *testing.T) {
 func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := postWithdraw(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusOK {
@@ -362,7 +470,7 @@ func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
 func TestWithdrawEventHandler_RejectsDraftEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	rec := postWithdraw(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusBadRequest {
@@ -398,7 +506,7 @@ func TestWithdrawEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postWithdraw(t, newEventRouter(db, tt.principal), tt.eventID)
+			rec := postWithdraw(t, newEventRouter(db, tt.principal, t), tt.eventID)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
@@ -455,7 +563,7 @@ func runConcurrentPosts(t *testing.T, db *gorm.DB, n int, fn func() int) (ok, re
 func TestPublishEventHandler_ConcurrentPublishesSerialize(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
 		return postPublish(t, router, seeded.eventID.String()).Code
@@ -476,7 +584,7 @@ func TestPublishEventHandler_ConcurrentPublishesSerialize(t *testing.T) {
 func TestUpdateEventHandler_ConcurrentUpdateKeepsPublishedStatus(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 	body := validBody(seeded)
 	eventID := seeded.eventID.String()
 
@@ -508,7 +616,7 @@ func TestUpdateEventHandler_ConcurrentUpdateKeepsPublishedStatus(t *testing.T) {
 func TestWithdrawEventHandler_ConcurrentWithdrawsSerialize(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
 		return postWithdraw(t, router, seeded.eventID.String()).Code
