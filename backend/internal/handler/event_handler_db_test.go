@@ -446,7 +446,7 @@ func TestPublishEventHandler_StatusCodes(t *testing.T) {
 func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"), t)
 
 	rec := postWithdraw(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusOK {
@@ -470,7 +470,7 @@ func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
 func TestWithdrawEventHandler_RejectsDraftEvent(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	rec := postWithdraw(t, router, seeded.eventID.String())
 	if rec.Code != http.StatusBadRequest {
@@ -506,7 +506,7 @@ func TestWithdrawEventHandler_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := postWithdraw(t, newEventRouter(db, tt.principal), tt.eventID)
+			rec := postWithdraw(t, newEventRouter(db, tt.principal, t), tt.eventID)
 			if rec.Code != tt.want {
 				t.Fatalf("expected %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
 			}
@@ -563,7 +563,7 @@ func runConcurrentPosts(t *testing.T, db *gorm.DB, n int, fn func() int) (ok, re
 func TestPublishEventHandler_ConcurrentPublishesSerialize(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
 		return postPublish(t, router, seeded.eventID.String()).Code
@@ -584,7 +584,7 @@ func TestPublishEventHandler_ConcurrentPublishesSerialize(t *testing.T) {
 func TestUpdateEventHandler_ConcurrentUpdateKeepsPublishedStatus(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 	body := validBody(seeded)
 	eventID := seeded.eventID.String()
 
@@ -616,7 +616,7 @@ func TestUpdateEventHandler_ConcurrentUpdateKeepsPublishedStatus(t *testing.T) {
 func TestWithdrawEventHandler_ConcurrentWithdrawsSerialize(t *testing.T) {
 	db := setupHandlerDB(t)
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
-	router := newEventRouter(db, principalManaging("kc-org-b"))
+	router := newEventRouter(db, principalManaging("kc-org-b"), t)
 
 	ok, rejected := runConcurrentPosts(t, db, 20, func() int {
 		return postWithdraw(t, router, seeded.eventID.String()).Code
