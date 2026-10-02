@@ -254,6 +254,7 @@ func newFakeServiceAccountAdmin(enabled bool, roleMappings, scopeMappings []stri
 		realmMgmtRoles: []map[string]any{
 			{"id": "r-orgs", "name": "manage-organizations"},
 			{"id": "r-users", "name": "manage-users"},
+			{"id": "r-clients", "name": "view-clients"},
 			{"id": "r-admin", "name": "realm-admin"},
 		},
 	}
@@ -347,7 +348,7 @@ func TestEnsureServiceAccount_RepairsRealmWithoutServiceAccount(t *testing.T) {
 	if fake.clientPuts[0]["secret"] != "dev-secret" || fake.clientPuts[0]["fullScopeAllowed"] != false {
 		t.Errorf("client attributes were lost or changed: %v", fake.clientPuts[0])
 	}
-	want := "[manage-organizations manage-users]"
+	want := "[manage-organizations manage-users view-clients]"
 	if len(fake.rolePosts) != 1 || fmt.Sprint(fake.rolePosts[0]) != want {
 		t.Errorf("role mapping posts = %v, want one post with %s", fake.rolePosts, want)
 	}
@@ -358,7 +359,7 @@ func TestEnsureServiceAccount_RepairsRealmWithoutServiceAccount(t *testing.T) {
 }
 
 func TestEnsureServiceAccount_AddsOnlyMissingRoles(t *testing.T) {
-	fake := newFakeServiceAccountAdmin(true, []string{"manage-users"}, []string{"manage-organizations", "manage-users"})
+	fake := newFakeServiceAccountAdmin(true, []string{"manage-users", "view-clients"}, []string{"manage-organizations", "manage-users", "view-clients"})
 	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL, ClientID: "backend"})
 
 	updated, err := kc.EnsureServiceAccount(context.Background(), "admin-token", "eventhub")
@@ -380,7 +381,7 @@ func TestEnsureServiceAccount_AddsOnlyMissingRoles(t *testing.T) {
 }
 
 func TestEnsureServiceAccount_LeavesConfiguredRealmAlone(t *testing.T) {
-	all := []string{"manage-organizations", "manage-users"}
+	all := []string{"manage-organizations", "manage-users", "view-clients"}
 	fake := newFakeServiceAccountAdmin(true, all, all)
 	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL, ClientID: "backend"})
 
@@ -390,6 +391,19 @@ func TestEnsureServiceAccount_LeavesConfiguredRealmAlone(t *testing.T) {
 	}
 	if len(fake.clientPuts)+len(fake.rolePosts)+len(fake.scopePosts) != 0 {
 		t.Errorf("expected no writes, got puts=%v roles=%v scopes=%v", fake.clientPuts, fake.rolePosts, fake.scopePosts)
+	}
+}
+
+func TestEnsureServiceAccount_AddsMissingViewClients(t *testing.T) {
+	oldRoles := []string{"manage-organizations", "manage-users"}
+	fake := newFakeServiceAccountAdmin(true, oldRoles, oldRoles)
+	kc := NewKeycloakService(KeycloakClientConfig{Host: fake.server(t).URL, ClientID: "backend"})
+	updated, err := kc.EnsureServiceAccount(context.Background(), "admin-token", "eventhub")
+	if err != nil || !updated {
+		t.Fatalf("updated=%v err=%v, want repaired client access", updated, err)
+	}
+	if fmt.Sprint(fake.rolePosts) != "[[view-clients]]" || fmt.Sprint(fake.scopePosts) != "[[view-clients]]" {
+		t.Fatalf("expected only view-clients in both mappings, got roles=%v scopes=%v", fake.rolePosts, fake.scopePosts)
 	}
 }
 

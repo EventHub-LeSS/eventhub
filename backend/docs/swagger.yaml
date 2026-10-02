@@ -41,6 +41,64 @@ definitions:
       username:
         type: string
     type: object
+  handler.UserAdminListItem:
+    properties:
+      email:
+        type: string
+      firstName:
+        type: string
+      keycloakUserId:
+        type: string
+      lastName:
+        type: string
+      phoneNumber:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+    type: object
+  handler.UserAdminListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handler.UserAdminListItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handler.UserAdminRolesRequest:
+    properties:
+      roles:
+        example:
+        - visitor
+        items:
+          enum:
+          - admin
+          - moderator
+          - visitor
+          type: string
+        type: array
+    required:
+    - roles
+    type: object
+  handler.UserAdminRolesResponse:
+    properties:
+      keycloakUserId:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+      userId:
+        type: string
+    type: object
   middleware.GlobalRole:
     enum:
     - admin
@@ -255,6 +313,12 @@ definitions:
     - EventStatusPublished
     - EventStatusCancelled
     - EventStatusCompleted
+  model.EventWithdrawnResponse:
+    properties:
+      message:
+        example: event withdrawn
+        type: string
+    type: object
   model.HealthcheckModel:
     properties:
       message:
@@ -329,6 +393,147 @@ paths:
       summary: Health check
       tags:
       - system
+  /admin/users:
+    get:
+      description: Returns a database page of shared users ordered by userId ascending,
+        with their current global roles. Only users on this page are looked up in
+        Keycloak, with at most four concurrent lookups and a 15-second total role-lookup
+        timeout. Available only to global admins. total counts all database users;
+        concurrent user creation or deletion can cause count/page differences.
+      parameters:
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
+  /admin/users/{userID}/roles:
+    get:
+      description: Returns the effective global roles for a user. Available only to
+        global admins.
+      parameters:
+      - description: Database user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminRolesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user roles
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Replaces the user's global roles with the submitted set. Only global
+        admins may perform this change; the change is applied in Keycloak and takes
+        effect after a fresh token or login.
+      parameters:
+      - description: Database user UUID
+        in: path
+        name: userID
+        required: true
+        type: string
+      - description: Roles to assign
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.UserAdminRolesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserAdminRolesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user roles
+      tags:
+      - users
   /bookings:
     post:
       consumes:
@@ -548,7 +753,8 @@ paths:
     post:
       description: Publishes a draft event so that visitors can find and book it.
         Requires the event_manager role in the organization that owns the event. Only
-        sufficiently complete events in status draft can be published.
+        sufficiently complete events in status draft can be published. If the event
+        is already published, returns 400 with detail "this event is already published".
       parameters:
       - description: Event ID
         in: path
@@ -585,6 +791,49 @@ paths:
       security:
       - BearerAuth: []
       summary: Publish event
+      tags:
+      - events
+  /events/{id}/withdraw:
+    post:
+      description: Withdraws a published event so that it is no longer bookable. Requires
+        the event_manager role in the organization that owns the event. Only events
+        in status published can be withdrawn; the event status becomes cancelled.
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventWithdrawnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Withdraw event
       tags:
       - events
   /organizations/:
@@ -698,6 +947,45 @@ paths:
       summary: Configure organization member roles
       tags:
       - organizations
+  /recommendations:
+    get:
+      description: Returns future published events with free capacity, excluding the
+        user's confirmed bookings. Active reservations count toward capacity. Ranking
+        weights category affinity (50%), confirmed ticket popularity (40%), and organizer
+        ratings (10%).
+      parameters:
+      - description: Maximum number of recommendations after ranking; omitted returns
+          all recommendations
+        in: query
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get event recommendations
+      tags:
+      - recommendations
   /users/me:
     get:
       description: Returns the authenticated user's profile, global roles, active

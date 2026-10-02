@@ -48,7 +48,7 @@ func CreateBookingHandler(bookingService *service.BookingService, userRepo repos
 		}
 
 		// The token subject is the Keycloak user id, bookings reference the API user id.
-		user, err := userRepo.GetByKeycloakUserID(principal.Subject)
+		user, err := middleware.ResolveUserForPrincipal(userRepo, principal)
 		if err != nil {
 			writeProblem(c, http.StatusInternalServerError, "internal error")
 			return
