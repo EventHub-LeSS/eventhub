@@ -227,8 +227,8 @@ func (s *EventService) GetEventStatistics(
 }
 
 // ListPublishedEvents returns the public listing from the shared event database.
-func (s *EventService) ListPublishedEvents() ([]model.PublishedEventResponse, error) {
-	events, err := s.eventRepo.ListPublishedEvents()
+func (s *EventService) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
+	events, err := s.eventRepo.ListPublishedEvents(filter)
 	if err != nil {
 		return nil, err
 	}

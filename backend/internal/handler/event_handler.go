@@ -6,6 +6,8 @@ import (
 	"backend/internal/service"
 	"errors"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -267,16 +269,23 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 	return statistics, true
 }
 
-// ListPublishedEventsHandler handles EVENTHUB-206.
+// ListPublishedEventsHandler handles EVENTHUB-206 and EVENTHUB-207.
+// @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Summary List published events
 // @Description Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse
+// @Failure 400 {object} model.ErrorResponse
 // @Failure 500 {object} model.ErrorResponse
 // @Router /events [get]
 func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
-	events, err := h.eventService.ListPublishedEvents()
+	location := strings.TrimSpace(c.Query("location"))
+	if utf8.RuneCountInString(location) > 200 {
+		writeProblem(c, http.StatusBadRequest, "location must not exceed 200 characters")
+		return
+	}
+	events, err := h.eventService.ListPublishedEvents(model.PublishedEventFilter{Location: location})
 	if err != nil {
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 		return

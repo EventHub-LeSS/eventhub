@@ -372,6 +372,14 @@ const docTemplate = `{
                     "events"
                 ],
                 "summary": "List published events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
+                        "name": "location",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -380,6 +388,12 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/model.PublishedEventResponse"
                             }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "500": {

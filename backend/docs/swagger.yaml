@@ -661,6 +661,12 @@ paths:
       description: Public list of published events with their category and location.
         Events missing a category or location are omitted. Sorted by start time and
         event ID; an empty result is returned as [].
+      parameters:
+      - description: Case-insensitive substring of city or venue name; trimmed, empty
+          means no filter, maximum 200 characters. Wildcards are treated literally.
+        in: query
+        name: location
+        type: string
       produces:
       - application/json
       responses:
@@ -670,6 +676,10 @@ paths:
             items:
               $ref: '#/definitions/model.PublishedEventResponse'
             type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -17,9 +18,13 @@ type publishedEventsStub struct {
 	repository.EventRepository
 	events []model.PublishedEventResponse
 	err    error
+	filter model.PublishedEventFilter
+	called bool
 }
 
-func (s *publishedEventsStub) ListPublishedEvents() ([]model.PublishedEventResponse, error) {
+func (s *publishedEventsStub) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
+	s.filter = filter
+	s.called = true
 	return s.events, s.err
 }
 
@@ -59,10 +64,14 @@ func TestListPublishedEventsResponses(t *testing.T) {
 	}
 }
 
-func listPublishedEvents(t *testing.T, router http.Handler) []model.PublishedEventResponse {
+func listPublishedEvents(t *testing.T, router http.Handler, query ...string) []model.PublishedEventResponse {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events", nil))
+	target := "/api/v1/events"
+	if len(query) > 0 {
+		target += "?location=" + url.QueryEscape(query[0])
+	}
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -164,5 +173,81 @@ func TestListPublishedEventsOrdering(t *testing.T) {
 	}
 	if events[0].EventID != low || events[1].EventID != high || events[2].EventID != later.eventID {
 		t.Fatalf("unexpected order: %+v", events)
+	}
+}
+
+func TestPublishedEventsLocationValidation(t *testing.T) {
+	for _, tc := range []struct {
+		input, want string
+		status      int
+	}{
+		{" Bonn ", "Bonn", http.StatusOK},
+		{" 	 ", "", http.StatusOK},
+		{strings.Repeat("ü", 200), strings.Repeat("ü", 200), http.StatusOK},
+		{strings.Repeat("ü", 201), "", http.StatusBadRequest},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			repo := &publishedEventsStub{}
+			router := gin.New()
+			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil)).ListPublishedEventsHandler)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?location="+url.QueryEscape(tc.input), nil))
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if tc.status == http.StatusBadRequest {
+				if repo.called {
+					t.Fatal("invalid filter reached repository")
+				}
+			} else if !repo.called || repo.filter.Location != tc.want {
+				t.Fatalf("filter=%+v called=%v", repo.filter, repo.called)
+			}
+		})
+	}
+}
+
+func TestPublishedEventsLocationDatabase(t *testing.T) {
+	db := setupHandlerDB(t)
+	bonn := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
+	venue := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
+	special := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
+	for _, row := range []struct{ id, city, name string }{
+		{bonn.locationID.String(), "Bonn", "Stadthalle"},
+		{venue.locationID.String(), "Berlin", "Bonner Bühne"},
+		{special.locationID.String(), "Köln", "100%_!Club"},
+	} {
+		if err := db.Exec("UPDATE locations SET city = ?, name = ? WHERE location_id = ?", row.city, row.name, row.id).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
+		seedEventForOrg(t, db, "filter", status) // Matching city Bonn must still be excluded.
+	}
+	router := newEventRouter(db, nil)
+	for _, tc := range []struct {
+		query string
+		want  int
+	}{
+		{"", 3}, {"  ", 3}, {" bOnN ", 2}, {"stadth", 1}, {"Berlin", 1},
+		{"München", 0}, {"KÖLN", 1}, {"%", 1}, {"_", 1}, {"!", 1},
+		{"100%_!Club", 1}, {"' OR true --", 0},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			events := listPublishedEvents(t, router, tc.query)
+			if len(events) != tc.want {
+				t.Fatalf("query=%q count=%d want=%d", tc.query, len(events), tc.want)
+			}
+			for _, event := range events {
+				if event.Status != model.EventStatusPublished {
+					t.Fatal("non-published event exposed")
+				}
+			}
+		})
+	}
+	// Changing and removing the filter must not retain state from a prior request.
+	if len(listPublishedEvents(t, router, "Berlin")) != 1 ||
+		len(listPublishedEvents(t, router, "Bonn")) != 2 ||
+		len(listPublishedEvents(t, router)) != 3 {
+		t.Fatal("filter change/reset failed")
 	}
 }
