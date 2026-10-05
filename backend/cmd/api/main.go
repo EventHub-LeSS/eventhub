@@ -67,14 +67,19 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	tx := repository.NewTransactor(db)
 
 	// Initialize Services
-	eventService := service.NewEventService(eventRepo, orgRepo)
+	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -95,6 +100,8 @@ func main() {
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
 
+		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
+
 		// events
 		events := protected.Group("/events")
 		{
@@ -106,9 +113,16 @@ func main() {
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
+		adminUsers := v1.Group("/admin/users")
+		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+		{
+			adminUsers.GET("", userAdminHandler.ListUsers)
+			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
+			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
+		}
 
 		// bookings
-		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
+		protected.POST("/bookings", bookingHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -128,6 +142,7 @@ func main() {
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 }
 

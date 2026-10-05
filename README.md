@@ -93,7 +93,7 @@ werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden 
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
 per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur die Rollen
-`manage-organizations` und `manage-users` aus `realm-management`, kein `realm-admin`.
+`manage-organizations`, `manage-users` und `view-clients` aus `realm-management`, kein `realm-admin`.
 Frische Realms bekommen es über `core/realms/eventhub-realm.json`. Bei einem bestehenden
 Keycloak-Volume richtet `docker compose up api-seed` das Service-Konto nachträglich ein.
 
@@ -141,3 +141,32 @@ bun dev
 ```
 
 Das Frontend läuft auf <http://localhost:3000>.
+
+### Event-Empfehlungen
+
+`GET /api/v1/recommendations` liefert für angemeldete Nutzer veröffentlichte,
+noch nicht gestartete Events mit freien Plätzen. Bestätigte eigene Buchungen
+werden ausgeschlossen. Bei der Verfügbarkeit zählen bestätigte Tickets und
+noch gültige Reservierungen; abgelaufene Reservierungen blockieren keine Plätze.
+Die Prüfung ist eine Momentaufnahme, keine Platzgarantie bei späterer Buchung.
+
+Das Ranking gewichtet Kategorie-Affinität mit 50 %, bestätigte Tickets relativ
+zur Kapazität mit 40 % und die durchschnittliche Veranstalterbewertung mit 10 %.
+Für die Kategorie-Affinität zählt jedes vergangene, bestätigt gebuchte Event
+einmal. Events ohne Kategorie bleiben im Nenner, tragen aber zu keiner Kategorie
+bei. Veranstalterbewertungen stammen wie bisher aus abgeschlossenen Events.
+Ohne Historie oder Bewertungen ist der jeweilige Anteil null. Bei gleichem Score
+entscheiden Startzeit und Event-ID. Es werden höchstens drei SQL-Abfragen pro
+Anfrage ausgeführt. Datenbankfehler führen zu HTTP 500 statt zu einem unbemerkt
+unvollständigen Ranking; Details werden nur serverseitig protokolliert.
+
+Migration 000005 erzwingt positive Event-Kapazitäten und ergänzt einen Index für
+bestätigte Nutzerbuchungen. Bestehende Kapazitäten kleiner oder gleich null müssen
+vor dem Einspielen fachlich korrigiert werden; die Migration verändert sie nicht
+automatisch.
+
+Backend-Tests laufen im Backend-Verzeichnis mit `go test ./...`. Die
+PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
+`go test -p 1 ./...` ausgeführt werden, weil mehrere Pakete dieselben Testtabellen
+zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
+Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.

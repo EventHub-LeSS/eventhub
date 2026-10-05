@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	ErrForbidden     = errors.New("forbidden")
-	ErrEventNotFound = errors.New("event not found")
-	ErrInvalidStatus = errors.New("invalid event status")
-	ErrIncomplete    = errors.New("event is incomplete")
-	ErrNotDraft      = errors.New("only draft events can be published")
-	ErrNotPublished  = errors.New("only published events can be withdrawn")
+	ErrForbidden        = errors.New("forbidden")
+	ErrEventNotFound    = errors.New("event not found")
+	ErrInvalidStatus    = errors.New("invalid event status")
+	ErrIncomplete       = errors.New("event is incomplete")
+	ErrNotDraft         = errors.New("only draft events can be published")
+	ErrNotPublished     = errors.New("only published events can be withdrawn")
+	ErrAlreadyPublished = errors.New("this event is already published")
 	// ErrOrganizationRequired means the caller manages events in several organizations and did not
 	// say which one a new event belongs to.
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
@@ -26,10 +27,11 @@ var (
 type EventService struct {
 	eventRepo repository.EventRepository
 	orgRepo   repository.OrganizationRepository
+	tx        repository.Transactor
 }
 
-func NewEventService(eventRepo repository.EventRepository, orgRepo repository.OrganizationRepository) *EventService {
-	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo}
+func NewEventService(eventRepo repository.EventRepository, orgRepo repository.OrganizationRepository, tx repository.Transactor) *EventService {
+	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo, tx: tx}
 }
 
 func (s *EventService) CreateEvent(event *model.EventModel) error {
@@ -112,44 +114,52 @@ func (s *EventService) UpdateEvent(
 	keycloakOrgIDs []string,
 	req model.UpdateEventRequest,
 ) (*model.EventModel, error) {
-	event, err := s.eventRepo.GetEventByID(eventID)
+	var updated *model.EventModel
+	err := s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+
+		switch event.Status {
+		case model.EventStatusDraft, model.EventStatusPublished:
+		default:
+			return ErrInvalidStatus
+		}
+
+		event.Title = req.Title
+		event.Description = req.Description
+		event.StartTime = req.StartTime
+		event.EndTime = req.EndTime
+		event.Capacity = req.Capacity
+		event.Price = req.Price
+		event.CategoryID = &req.CategoryID
+		event.LocationID = &req.LocationID
+
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		updated = event
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if event == nil {
-		return nil, ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return nil, ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return nil, err
-	}
-	if !managesOrganization(org, keycloakOrgIDs) {
-		return nil, ErrForbidden
-	}
-
-	switch event.Status {
-	case model.EventStatusDraft, model.EventStatusPublished:
-	default:
-		return nil, ErrInvalidStatus
-	}
-
-	event.Title = req.Title
-	event.Description = req.Description
-	event.StartTime = req.StartTime
-	event.EndTime = req.EndTime
-	event.Capacity = req.Capacity
-	event.Price = req.Price
-	event.CategoryID = &req.CategoryID
-	event.LocationID = &req.LocationID
-
-	if err := s.eventRepo.UpdateEvent(event); err != nil {
-		return nil, err
-	}
-	return event, nil
+	return updated, nil
 }
 
 func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
@@ -188,62 +198,63 @@ func isEventComplete(event *model.EventModel) bool {
 }
 
 func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	event, err := s.eventRepo.GetEventByID(eventID)
-	if err != nil {
-		return err
-	}
-	if event == nil {
-		return ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return err
-	}
-	if !managesOrganization(org, keycloakOrgIDs) {
-		return ErrForbidden
-	}
-
-	if event.Status != model.EventStatusDraft {
-		return ErrNotDraft
-	}
-	if !isEventComplete(event) {
-		return ErrIncomplete
-	}
-
-	event.Status = model.EventStatusPublished
-	return s.eventRepo.UpdateEvent(event)
+	return s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+		if event.Status == model.EventStatusPublished {
+			return ErrAlreadyPublished
+		}
+		if event.Status != model.EventStatusDraft {
+			return ErrNotDraft
+		}
+		if !isEventComplete(event) {
+			return ErrIncomplete
+		}
+		event.Status = model.EventStatusPublished
+		return tx.Events.UpdateEvent(event)
+	})
 }
 
 func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	event, err := s.eventRepo.GetEventByID(eventID)
-	if err != nil {
-		return err
-	}
-	if event == nil {
-		return ErrEventNotFound
-	}
-	if event.OrganizerID == nil {
-		return ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return err
-	}
-	if !managesOrganization(org, keycloakOrgIDs) {
-		return ErrForbidden
-	}
-
-	if event.Status != model.EventStatusPublished {
-		return ErrNotPublished
-	}
-
-	event.Status = model.EventStatusCancelled
-	return s.eventRepo.UpdateEvent(event)
+	return s.tx.InTransaction(func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+		if event.Status != model.EventStatusPublished {
+			return ErrNotPublished
+		}
+		event.Status = model.EventStatusCancelled
+		return tx.Events.UpdateEvent(event)
+	})
 }
 
 func (s *EventService) GetEventStatistics(
