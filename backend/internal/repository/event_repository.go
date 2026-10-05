@@ -108,6 +108,9 @@ func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter)
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Where("events.status = ?", model.EventStatusPublished)
+	if filter.CategoryID != nil {
+		query = query.Where("events.category_id = ?", *filter.CategoryID)
+	}
 	if filter.Location != "" {
 		// Use ! as an explicit escape character so %, _ and ! remain literal text.
 		pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(filter.Location) + "%"

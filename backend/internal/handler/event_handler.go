@@ -269,8 +269,9 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 	return statistics, true
 }
 
-// ListPublishedEventsHandler handles EVENTHUB-206 and EVENTHUB-207.
+// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207 and EVENTHUB-208.
 // @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
+// @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Summary List published events
 // @Description Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].
 // @Tags events
@@ -285,7 +286,16 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 		writeProblem(c, http.StatusBadRequest, "location must not exceed 200 characters")
 		return
 	}
-	events, err := h.eventService.ListPublishedEvents(model.PublishedEventFilter{Location: location})
+	filter := model.PublishedEventFilter{Location: location}
+	if category := strings.TrimSpace(c.Query("categoryId")); category != "" {
+		categoryID, err := uuid.Parse(category)
+		if err != nil {
+			writeProblem(c, http.StatusBadRequest, "categoryId must be a valid UUID")
+			return
+		}
+		filter.CategoryID = &categoryID
+	}
+	events, err := h.eventService.ListPublishedEvents(filter)
 	if err != nil {
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 		return

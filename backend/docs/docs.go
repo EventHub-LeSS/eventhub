@@ -378,6 +378,12 @@ const docTemplate = `{
                         "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
                         "name": "location",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND.",
+                        "name": "categoryId",
+                        "in": "query"
                     }
                 ],
                 "responses": {

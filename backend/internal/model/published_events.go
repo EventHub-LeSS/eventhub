@@ -33,7 +33,8 @@ type PublishedEventLocation struct {
 	HouseNumber *string   `json:"houseNumber"`
 }
 
-// PublishedEventFilter limits the public listing by city or venue name.
+// PublishedEventFilter limits the public listing by category and city or venue name.
 type PublishedEventFilter struct {
-	Location string
+	Location   string
+	CategoryID *uuid.UUID
 }

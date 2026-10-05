@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -249,5 +250,107 @@ func TestPublishedEventsLocationDatabase(t *testing.T) {
 		len(listPublishedEvents(t, router, "Bonn")) != 2 ||
 		len(listPublishedEvents(t, router)) != 3 {
 		t.Fatal("filter change/reset failed")
+	}
+}
+
+func TestPublishedEventsCategoryValidation(t *testing.T) {
+	id := uuid.New()
+	for _, tc := range []struct {
+		name, input     string
+		valid, filtered bool
+	}{
+		{"missing", "", true, false},
+		{"whitespace", " 	 ", true, false},
+		{"valid", id.String(), true, true},
+		{"trimmed", " " + id.String() + " ", true, true},
+		{"invalid", "music", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &publishedEventsStub{}
+			router := gin.New()
+			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil)).ListPublishedEventsHandler)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?categoryId="+url.QueryEscape(tc.input), nil))
+			if !tc.valid {
+				if rec.Code != http.StatusBadRequest || repo.called {
+					t.Fatalf("status=%d called=%v", rec.Code, repo.called)
+				}
+				return
+			}
+			if rec.Code != http.StatusOK || !repo.called {
+				t.Fatalf("status=%d called=%v", rec.Code, repo.called)
+			}
+			if tc.filtered {
+				if repo.filter.CategoryID == nil || *repo.filter.CategoryID != id {
+					t.Fatalf("filter=%+v", repo.filter)
+				}
+			} else if repo.filter.CategoryID != nil {
+				t.Fatal("empty filter should be unset")
+			}
+		})
+	}
+}
+
+func TestPublishedEventsCategoryDatabase(t *testing.T) {
+	db := setupHandlerDB(t)
+	first := seedEventForOrg(t, db, "category", model.EventStatusPublished)
+	shared := seedEventForOrg(t, db, "category", model.EventStatusPublished)
+	other := seedEventForOrg(t, db, "category", model.EventStatusPublished)
+	if err := db.Exec("UPDATE events SET category_id = ? WHERE event_id = ?", first.categoryID, shared.eventID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("UPDATE locations SET city = 'Berlin' WHERE location_id = ?", shared.locationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
+		hidden := seedEventForOrg(t, db, "category", status)
+		if err := db.Exec("UPDATE events SET category_id = ? WHERE event_id = ?", first.categoryID, hidden.eventID).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	router := newEventRouter(db, nil)
+	for _, tc := range []struct {
+		name, category, location string
+		ids                      []uuid.UUID
+	}{
+		{"selected", first.categoryID.String(), "", []uuid.UUID{first.eventID, shared.eventID}},
+		{"changed", other.categoryID.String(), "", []uuid.UUID{other.eventID}},
+		{"unknown", uuid.NewString(), "", nil},
+		{"zero UUID", uuid.Nil.String(), "", nil},
+		{"reset", "", "", []uuid.UUID{first.eventID, shared.eventID, other.eventID}},
+		{"combined city", first.categoryID.String(), "Bonn", []uuid.UUID{first.eventID}},
+		{"combined other city", first.categoryID.String(), "Berlin", []uuid.UUID{shared.eventID}},
+		{"combined venue", first.categoryID.String(), "loc-" + shared.locationID.String(), []uuid.UUID{shared.eventID}},
+		{"combined no match", other.categoryID.String(), "Berlin", nil},
+		{"category reset keeps location", "", "Berlin", []uuid.UUID{shared.eventID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := url.Values{"categoryId": {tc.category}, "location": {tc.location}}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?"+query.Encode(), nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var events []model.PublishedEventResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+				t.Fatal(err)
+			}
+			if events == nil || len(events) != len(tc.ids) {
+				t.Fatalf("body=%s want=%v", rec.Body.String(), tc.ids)
+			}
+			want := make(map[uuid.UUID]bool)
+			for _, id := range tc.ids {
+				want[id] = true
+			}
+			for _, event := range events {
+				if !want[event.EventID] || event.Status != model.EventStatusPublished {
+					t.Fatalf("unexpected event: %+v", event)
+				}
+				delete(want, event.EventID)
+			}
+			if len(want) != 0 {
+				t.Fatalf("missing events: %v", want)
+			}
+		})
 	}
 }

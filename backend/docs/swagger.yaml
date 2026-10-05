@@ -667,6 +667,11 @@ paths:
         in: query
         name: location
         type: string
+      - description: Exact category UUID; trimmed, empty means no category filter.
+          Combined with location using AND.
+        in: query
+        name: categoryId
+        type: string
       produces:
       - application/json
       responses:
