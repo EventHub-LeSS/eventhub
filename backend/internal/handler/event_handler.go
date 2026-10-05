@@ -266,3 +266,20 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 
 	return statistics, true
 }
+
+// ListPublishedEventsHandler handles EVENTHUB-206.
+// @Summary List published events
+// @Description Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].
+// @Tags events
+// @Produce json
+// @Success 200 {array} model.PublishedEventResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /events [get]
+func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
+	events, err := h.eventService.ListPublishedEvents()
+	if err != nil {
+		writeProblem(c, http.StatusInternalServerError, "internal error")
+		return
+	}
+	c.JSON(http.StatusOK, events)
+}

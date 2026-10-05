@@ -355,6 +355,35 @@
                 }
             }
         },
+        "/events": {
+            "get": {
+                "description": "Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "List published events",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.PublishedEventResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/available-seats": {
             "get": {
                 "security": [
@@ -1428,6 +1457,70 @@
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.PublishedEventCategory": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "categoryId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventLocation": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "street": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/model.PublishedEventCategory"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.PublishedEventLocation"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "20.00"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "model.SoldTicketsResponse": {
             "type": "object",

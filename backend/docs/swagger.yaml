@@ -336,6 +336,48 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.PublishedEventCategory:
+    properties:
+      category:
+        type: string
+      categoryId:
+        type: string
+    type: object
+  model.PublishedEventLocation:
+    properties:
+      city:
+        type: string
+      houseNumber:
+        type: string
+      locationId:
+        type: string
+      name:
+        type: string
+      postalCode:
+        type: string
+      street:
+        type: string
+    type: object
+  model.PublishedEventResponse:
+    properties:
+      category:
+        $ref: '#/definitions/model.PublishedEventCategory'
+      endTime:
+        type: string
+      eventId:
+        type: string
+      location:
+        $ref: '#/definitions/model.PublishedEventLocation'
+      price:
+        example: "20.00"
+        type: string
+      startTime:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+      title:
+        type: string
+    type: object
   model.SoldTicketsResponse:
     properties:
       eventId:
@@ -614,6 +656,27 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events:
+    get:
+      description: Public list of published events with their category and location.
+        Events missing a category or location are omitted. Sorted by start time and
+        event ID; an empty result is returned as [].
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.PublishedEventResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: List published events
+      tags:
+      - events
   /events/{eventId}/available-seats:
     get:
       description: Returns the remaining available seats for an event. Requires the

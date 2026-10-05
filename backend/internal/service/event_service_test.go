@@ -413,3 +413,7 @@ func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
 		})
 	}
 }
+
+func (f *fakeEventRepo) ListPublishedEvents() ([]model.PublishedEventResponse, error) {
+	return nil, nil
+}

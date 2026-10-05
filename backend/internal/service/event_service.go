@@ -225,3 +225,15 @@ func (s *EventService) GetEventStatistics(
 		AvailableSeats: availableSeats,
 	}, nil
 }
+
+// ListPublishedEvents returns the public listing from the shared event database.
+func (s *EventService) ListPublishedEvents() ([]model.PublishedEventResponse, error) {
+	events, err := s.eventRepo.ListPublishedEvents()
+	if err != nil {
+		return nil, err
+	}
+	if events == nil {
+		events = make([]model.PublishedEventResponse, 0)
+	}
+	return events, nil
+}
