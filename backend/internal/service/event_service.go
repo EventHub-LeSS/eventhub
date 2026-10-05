@@ -17,6 +17,11 @@ var (
 	ErrNotDraft         = errors.New("only draft events can be published")
 	ErrNotPublished     = errors.New("only published events can be withdrawn")
 	ErrAlreadyPublished = errors.New("this event is already published")
+	// ErrOrganizationRequired means the caller manages events in several organizations and did not
+	// say which one a new event belongs to.
+	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
+	// ErrUnknownReference means the event references a category or location that does not exist.
+	ErrUnknownReference = repository.ErrUnknownReference
 )
 
 type EventService struct {
@@ -33,12 +38,74 @@ func (s *EventService) CreateEvent(event *model.EventModel) error {
 	return s.eventRepo.CreateEvent(event)
 }
 
+// CreateDraft saves a new event in status draft. keycloakOrgIDs are the organizations in which the
+// caller may manage events; req.OrganizationID picks one of them and may be omitted if there is only one.
+func (s *EventService) CreateDraft(keycloakOrgIDs []string, req model.CreateDraftRequest) (*model.EventModel, error) {
+	orgRef := req.OrganizationID
+	if orgRef == "" {
+		switch len(keycloakOrgIDs) {
+		case 0:
+			return nil, ErrForbidden
+		case 1:
+			orgRef = keycloakOrgIDs[0]
+		default:
+			return nil, ErrOrganizationRequired
+		}
+	}
+
+	// Only managed organizations are resolved, so an organizationId outside of them is not found.
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases(keycloakOrgIDs)
+	if err != nil {
+		return nil, err
+	}
+	idx := slices.IndexFunc(orgs, func(org *model.OrganizationModel) bool {
+		return org.KeycloakOrgID == orgRef || org.Alias == orgRef
+	})
+	if idx < 0 {
+		return nil, ErrForbidden
+	}
+	org := orgs[idx]
+
+	event := &model.EventModel{
+		EventID:     uuid.New(),
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Capacity:    req.Capacity,
+		Status:      model.EventStatusDraft,
+		Price:       req.Price,
+		CategoryID:  &req.CategoryID,
+		OrganizerID: &org.OrganizationID,
+		LocationID:  &req.LocationID,
+	}
+
+	if err := s.eventRepo.CreateEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
 func (s *EventService) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
 	return s.eventRepo.GetEventByID(eventID)
 }
 
 func (s *EventService) GetAllEvents() ([]*model.EventModel, error) {
 	return s.eventRepo.GetAllEvents()
+}
+
+// ListOwnEvents returns the events of all organizations in keycloakOrgIDs, the organizations in
+// which the caller may manage events. An empty status returns events of every status.
+func (s *EventService) ListOwnEvents(keycloakOrgIDs []string, status model.EventStatus) ([]*model.EventModel, error) {
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases(keycloakOrgIDs)
+	if err != nil {
+		return nil, err
+	}
+	orgIDs := make([]uuid.UUID, 0, len(orgs))
+	for _, org := range orgs {
+		orgIDs = append(orgIDs, org.OrganizationID)
+	}
+	return s.eventRepo.ListByOrganizers(orgIDs, status)
 }
 
 // keycloakOrgIDs are the organizations in which the caller may manage events.
@@ -64,8 +131,7 @@ func (s *EventService) UpdateEvent(
 		if err != nil {
 			return err
 		}
-		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
-			!slices.Contains(keycloakOrgIDs, org.Alias)) {
+		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
 		}
 
@@ -104,6 +170,13 @@ func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.Ev
 	return s.eventRepo.ListByOrganization(organizationID)
 }
 
+// managesOrganization reports whether org is one of keycloakOrgIDs, which tokens identify by
+// Keycloak ID or, when the claim carries no ID, by alias.
+func managesOrganization(org *model.OrganizationModel, keycloakOrgIDs []string) bool {
+	return org != nil && (slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) ||
+		slices.Contains(keycloakOrgIDs, org.Alias))
+}
+
 func isEventComplete(event *model.EventModel) bool {
 	if event.Title == "" {
 		return false
@@ -140,7 +213,7 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 		if err != nil {
 			return err
 		}
-		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
 		}
 		if event.Status == model.EventStatusPublished {
@@ -173,7 +246,7 @@ func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string)
 		if err != nil {
 			return err
 		}
-		if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) && !slices.Contains(keycloakOrgIDs, org.Alias)) {
+		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
 		}
 		if event.Status != model.EventStatusPublished {
@@ -203,8 +276,7 @@ func (s *EventService) GetEventStatistics(
 	if err != nil {
 		return nil, err
 	}
-	if org == nil || (!slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) &&
-		!slices.Contains(keycloakOrgIDs, org.Alias)) {
+	if !managesOrganization(org, keycloakOrgIDs) {
 		return nil, ErrForbidden
 	}
 
