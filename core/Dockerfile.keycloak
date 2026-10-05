@@ -26,5 +26,7 @@ RUN mkdir -p /opt/keycloak/data/import
 COPY --chown=1000:0 --chmod=644 realms/eventhub-realm.json /opt/keycloak/data/import/eventhub-realm.json
 COPY --chown=1000:0 --chmod=755 entrypoint-realm-override.sh /opt/keycloak/entrypoint-realm-override.sh
 
+RUN sed -i 's/\r$//' /opt/keycloak/entrypoint-realm-override.sh
+
 ENTRYPOINT ["/opt/keycloak/entrypoint-realm-override.sh"]
 CMD ["start", "--import-realm"]
