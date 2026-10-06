@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
+	_ "time/tzdata"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -328,11 +330,12 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 	return statistics, true
 }
 
-// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207 and EVENTHUB-208.
+// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207, EVENTHUB-208 and EVENTHUB-210.
 // @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
+// @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse
@@ -346,6 +349,19 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 		return
 	}
 	filter := model.PublishedEventFilter{Location: location}
+	if date := strings.TrimSpace(c.Query("date")); date != "" {
+		calendarLocation, err := time.LoadLocation("Europe/Berlin")
+		if err != nil {
+			writeProblem(c, http.StatusInternalServerError, "internal error")
+			return
+		}
+		startDate, err := time.ParseInLocation(time.DateOnly, date, calendarLocation)
+		if err != nil {
+			writeProblem(c, http.StatusBadRequest, "date must be a valid date in YYYY-MM-DD format")
+			return
+		}
+		filter.Date = &startDate
+	}
 	if category := strings.TrimSpace(c.Query("categoryId")); category != "" {
 		categoryID, err := uuid.Parse(category)
 		if err != nil {

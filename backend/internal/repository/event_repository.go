@@ -126,6 +126,10 @@ func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter)
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Where("events.status = ?", model.EventStatusPublished)
+	if filter.Date != nil {
+		// Calendar days can be 23 or 25 hours across DST transitions.
+		query = query.Where("events.start_time >= ? AND events.start_time < ?", *filter.Date, filter.Date.AddDate(0, 0, 1))
+	}
 	if filter.CategoryID != nil {
 		query = query.Where("events.category_id = ?", *filter.CategoryID)
 	}
