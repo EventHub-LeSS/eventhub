@@ -447,6 +447,8 @@ func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
 
 func (f *fakeEventRepo) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
 	return nil, nil
+}
+
 func draftRequest(organizationID string) model.CreateDraftRequest {
 	return model.CreateDraftRequest{
 		OrganizationID: organizationID,

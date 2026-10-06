@@ -364,18 +364,7 @@ const docTemplate = `{
         },
         "/events": {
             "get": {
-                "description": "Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].",
-        "/events/draft": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -394,6 +383,51 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND.",
                         "name": "categoryId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.PublishedEventResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/draft": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
                 "summary": "Save event as draft",
                 "parameters": [
                     {
@@ -477,11 +511,6 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/model.PublishedEventResponse"
                         "description": "Own events; an empty array if there are none",
                         "schema": {
                             "type": "array",

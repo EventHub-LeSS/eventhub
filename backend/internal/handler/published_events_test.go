@@ -4,6 +4,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"backend/internal/testdb"
 	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
@@ -87,7 +88,7 @@ func listPublishedEvents(t *testing.T, router http.Handler, query ...string) []m
 }
 
 func TestListPublishedEventsDatabase(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	router := newEventRouter(db, nil)
 	if events := listPublishedEvents(t, router); len(events) != 0 {
 		t.Fatal("expected empty list")
@@ -129,7 +130,7 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 }
 
 func TestListPublishedEventsLifecycle(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "listing", model.EventStatusDraft)
 	publicRouter := newEventRouter(db, nil)
 	managerRouter := newEventRouter(db, principalManaging("listing"))
@@ -151,7 +152,7 @@ func TestListPublishedEventsLifecycle(t *testing.T) {
 }
 
 func TestListPublishedEventsOrdering(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	first := seedEventForOrg(t, db, "ordering", model.EventStatusPublished)
 	second := seedEventForOrg(t, db, "ordering", model.EventStatusPublished)
 	later := seedEventForOrg(t, db, "ordering", model.EventStatusPublished)
@@ -208,7 +209,7 @@ func TestPublishedEventsLocationValidation(t *testing.T) {
 }
 
 func TestPublishedEventsLocationDatabase(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	bonn := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
 	venue := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
 	special := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
@@ -292,7 +293,7 @@ func TestPublishedEventsCategoryValidation(t *testing.T) {
 }
 
 func TestPublishedEventsCategoryDatabase(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	first := seedEventForOrg(t, db, "category", model.EventStatusPublished)
 	shared := seedEventForOrg(t, db, "category", model.EventStatusPublished)
 	other := seedEventForOrg(t, db, "category", model.EventStatusPublished)

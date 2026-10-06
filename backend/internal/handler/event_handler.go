@@ -332,7 +332,7 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 // @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Summary List published events
-// @Description Public list of published events with their category and location. Events missing a category or location are omitted. Sorted by start time and event ID; an empty result is returned as [].
+// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse

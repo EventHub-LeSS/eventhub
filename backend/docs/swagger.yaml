@@ -698,8 +698,12 @@ paths:
   /events:
     get:
       description: Public list of published events with their category and location.
-        Events missing a category or location are omitted. Sorted by start time and
-        event ID; an empty result is returned as [].
+        Optional location searches city or venue name; categoryId selects an exact
+        category. Both filters are combined using AND. Omit a filter or pass an empty
+        value to reset it. Unknown categories and searches without matches return
+        200 with []. Invalid category UUIDs or location values exceeding 200 characters
+        after trimming return 400. Events missing a category or location are omitted.
+        Sorted by start time and event ID.
       parameters:
       - description: Case-insensitive substring of city or venue name; trimmed, empty
           means no filter, maximum 200 characters. Wildcards are treated literally.
