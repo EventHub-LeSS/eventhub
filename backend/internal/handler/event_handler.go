@@ -361,3 +361,28 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, events)
 }
+
+// GetPublishedEventDetailsHandler handles EVENTHUB-211.
+// @Summary Get published event details
+// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
+// @Tags events
+// @Produce json
+// @Param eventId path string true "Event UUID"
+// @Success 200 {object} model.PublishedEventDetailsResponse
+// @Failure 400 {object} model.ErrorResponse
+// @Failure 404 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /events/{eventId} [get]
+func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("eventId"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		return
+	}
+	details, err := h.eventService.GetPublishedEventDetails(eventID)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, details)
+}

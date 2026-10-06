@@ -546,6 +546,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}": {
+            "get": {
+                "description": "Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get published event details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.PublishedEventDetailsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/available-seats": {
             "get": {
                 "security": [
@@ -1676,6 +1723,48 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "categoryId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "availableSeats": {
+                    "type": "integer"
+                },
+                "bookable": {
+                    "type": "boolean"
+                },
+                "capacity": {
+                    "type": "integer"
+                },
+                "category": {
+                    "$ref": "#/definitions/model.PublishedEventCategory"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.PublishedEventLocation"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "20.00"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
                     "type": "string"
                 }
             }

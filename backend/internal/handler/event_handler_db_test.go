@@ -90,6 +90,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 
 	r := gin.New()
 	r.GET("/api/v1/events", h.ListPublishedEventsHandler)
+	r.GET("/api/v1/events/:eventId", h.GetPublishedEventDetailsHandler)
 	r.POST("/api/v1/events/draft", setPrincipal, h.SaveEventAsDraftHandler)
 	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)

@@ -89,6 +89,7 @@ func main() {
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
 		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
+		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
 
 		// DEBUG routes — disabled in production
 		if os.Getenv("DEBUG_ENABLED") == "true" {

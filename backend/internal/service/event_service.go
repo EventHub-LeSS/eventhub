@@ -309,3 +309,16 @@ func (s *EventService) ListPublishedEvents(filter model.PublishedEventFilter) ([
 	}
 	return events, nil
 }
+
+// GetPublishedEventDetails exposes only published events with current availability.
+func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
+	details, err := s.eventRepo.GetPublishedEventDetails(eventID)
+	if err != nil {
+		return nil, err
+	}
+	if details == nil {
+		return nil, ErrEventNotFound
+	}
+	details.Bookable = details.Status == model.EventStatusPublished && details.AvailableSeats > 0
+	return details, nil
+}
