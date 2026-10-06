@@ -106,6 +106,8 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
+			events.POST("/draft", eventHandler.SaveEventAsDraftHandler)
+			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.PUT("/:id", eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)

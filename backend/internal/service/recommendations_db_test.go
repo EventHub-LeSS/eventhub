@@ -3,6 +3,7 @@ package service
 import (
 	"backend/internal/model"
 	"backend/internal/repository"
+	"backend/internal/testdb"
 	"context"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func insertRecommendationBooking(t *testing.T, db *gorm.DB, eventID, userID uuid
 }
 
 func TestRecommendationsDBCandidateFilters(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	availableID, userID := seedEvent(t, db, 10, model.EventStatusPublished)
 	var now time.Time
 	if err := db.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
@@ -96,7 +97,7 @@ func TestRecommendationsDBCandidateFilters(t *testing.T) {
 }
 
 func TestRecommendationsDBHistoryAndRatings(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	pastID, userID := seedEvent(t, db, 100, model.EventStatusCompleted)
 	futureID, _ := seedEvent(t, db, 100, model.EventStatusPublished)
 	ignoredID, otherUser := seedEvent(t, db, 100, model.EventStatusCompleted)
@@ -149,7 +150,7 @@ func (l *recommendationQueryCounter) Trace(ctx context.Context, begin time.Time,
 }
 
 func TestRecommendationsDBRankingAndQueryCount(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	pastID, userID := seedEvent(t, db, 100, model.EventStatusCompleted)
 	preferredID, _ := seedEvent(t, db, 100, model.EventStatusPublished)
 	popularID, otherUser := seedEvent(t, db, 100, model.EventStatusPublished)
@@ -173,7 +174,7 @@ func TestRecommendationsDBRankingAndQueryCount(t *testing.T) {
 }
 
 func TestRecommendationsDBPositiveCapacityConstraint(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	id, _ := seedEvent(t, db, 1, model.EventStatusPublished)
 	for _, capacity := range []int{0, -1} {
 		if err := db.Exec("UPDATE events SET capacity = ? WHERE event_id = ?", capacity, id).Error; err == nil {

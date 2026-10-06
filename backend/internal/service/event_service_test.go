@@ -4,6 +4,8 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,9 +16,20 @@ import (
 type fakeEventRepo struct {
 	event *model.EventModel
 	saved *model.EventModel
+
+	createErr error
+	created   *model.EventModel
+
+	listed     []*model.EventModel
+	listOrgIDs []uuid.UUID
+	listStatus model.EventStatus
 }
 
-func (f *fakeEventRepo) CreateEvent(*model.EventModel) error {
+func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
+	f.created = event
 	return nil
 }
 
@@ -34,6 +47,12 @@ func (f *fakeEventRepo) DeleteEvent(uuid.UUID) error {
 
 func (f *fakeEventRepo) ListByOrganization(uuid.UUID) ([]*model.EventModel, error) {
 	return nil, nil
+}
+
+func (f *fakeEventRepo) ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error) {
+	f.listOrgIDs = organizationIDs
+	f.listStatus = status
+	return f.listed, nil
 }
 
 func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
@@ -68,14 +87,26 @@ func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	return f.orgs[id], nil
 }
 
+func (f *fakeOrgRepo) ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error) {
+	var orgs []*model.OrganizationModel
+	for _, org := range f.orgs {
+		if slices.Contains(refs, org.KeycloakOrgID) || slices.Contains(refs, org.Alias) {
+			orgs = append(orgs, org)
+		}
+	}
+	return orgs, nil
+}
+
 var (
 	orgA = &model.OrganizationModel{
 		OrganizationID: uuid.New(),
 		KeycloakOrgID:  "kc-org-a",
+		Alias:          "alias-a",
 	}
 	orgB = &model.OrganizationModel{
 		OrganizationID: uuid.New(),
 		KeycloakOrgID:  "kc-org-b",
+		Alias:          "alias-b",
 	}
 )
 
@@ -416,4 +447,117 @@ func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
 
 func (f *fakeEventRepo) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
 	return nil, nil
+func draftRequest(organizationID string) model.CreateDraftRequest {
+	return model.CreateDraftRequest{
+		OrganizationID: organizationID,
+		Title:          "Sommerfest 2026",
+		StartTime:      time.Now().Add(48 * time.Hour),
+		EndTime:        time.Now().Add(52 * time.Hour),
+		Capacity:       100,
+		Price:          decimal.NewFromInt(15),
+		CategoryID:     uuid.New(),
+		LocationID:     uuid.New(),
+	}
+}
+
+// EVENTHUB-77 / AK1: Eine Veranstaltung kann im Status Entwurf gespeichert werden.
+func TestCreateDraft_SavesDraftForManagedOrganization(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedOrgs    []string
+		organizationID string
+		wantOrg        *model.OrganizationModel
+	}{
+		{name: "single organization, organizationId omitted", managedOrgs: []string{"kc-org-b"}, wantOrg: orgB},
+		{name: "token identifies the organization by alias", managedOrgs: []string{"alias-a"}, wantOrg: orgA},
+		{name: "several organizations, picked by Keycloak ID", managedOrgs: []string{"kc-org-a", "kc-org-b"}, organizationID: "kc-org-b", wantOrg: orgB},
+		{name: "several organizations, picked by alias", managedOrgs: []string{"kc-org-a", "kc-org-b"}, organizationID: "alias-a", wantOrg: orgA},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(nil)
+			req := draftRequest(tt.organizationID)
+
+			created, err := svc.CreateDraft(tt.managedOrgs, req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if repo.created != created {
+				t.Fatal("draft was not saved")
+			}
+			if created.Status != model.EventStatusDraft {
+				t.Errorf("status = %s, want draft", created.Status)
+			}
+			if created.EventID == uuid.Nil {
+				t.Error("event ID not set")
+			}
+			if created.OrganizerID == nil || *created.OrganizerID != tt.wantOrg.OrganizationID {
+				t.Errorf("organizer = %v, want %v", created.OrganizerID, tt.wantOrg.OrganizationID)
+			}
+			if created.Title != req.Title || created.Capacity != req.Capacity || !created.Price.Equal(req.Price) ||
+				*created.CategoryID != req.CategoryID || *created.LocationID != req.LocationID {
+				t.Errorf("request fields not applied: %#v", created)
+			}
+		})
+	}
+}
+
+func TestCreateDraft_Rejections(t *testing.T) {
+	tests := []struct {
+		name           string
+		managedOrgs    []string
+		organizationID string
+		wantErr        error
+	}{
+		{name: "no managed organizations", wantErr: ErrForbidden},
+		{name: "several organizations without organizationId", managedOrgs: []string{"kc-org-a", "kc-org-b"}, wantErr: ErrOrganizationRequired},
+		{name: "organizationId of a foreign organization", managedOrgs: []string{"kc-org-a"}, organizationID: "kc-org-b", wantErr: ErrForbidden},
+		{name: "organization not in the database", managedOrgs: []string{"kc-org-unknown"}, wantErr: ErrForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(nil)
+
+			_, err := svc.CreateDraft(tt.managedOrgs, draftRequest(tt.organizationID))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+			if repo.created != nil {
+				t.Fatal("rejected draft must not be saved")
+			}
+		})
+	}
+}
+
+func TestCreateDraft_UnknownReference(t *testing.T) {
+	svc, repo := newTestService(nil)
+	repo.createErr = fmt.Errorf("%w: categoryId does not exist", repository.ErrUnknownReference)
+
+	_, err := svc.CreateDraft([]string{"kc-org-b"}, draftRequest(""))
+	if !errors.Is(err, ErrUnknownReference) {
+		t.Fatalf("expected ErrUnknownReference, got %v", err)
+	}
+}
+
+// EVENTHUB-77 / AK3: Der Veranstalter kann eigene Entwürfe sehen.
+func TestListOwnEvents_ListsManagedOrganizations(t *testing.T) {
+	svc, repo := newTestService(nil)
+	repo.listed = []*model.EventModel{eventOwnedBy(orgA, model.EventStatusDraft)}
+
+	events, err := svc.ListOwnEvents([]string{"alias-a", "kc-org-b", "kc-org-unknown"}, model.EventStatusDraft)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 1 || events[0] != repo.listed[0] {
+		t.Errorf("repository result not returned: %v", events)
+	}
+	if repo.listStatus != model.EventStatusDraft {
+		t.Errorf("status filter = %q, want draft", repo.listStatus)
+	}
+	if len(repo.listOrgIDs) != 2 ||
+		!slices.Contains(repo.listOrgIDs, orgA.OrganizationID) || !slices.Contains(repo.listOrgIDs, orgB.OrganizationID) {
+		t.Errorf("queried organizations %v, want %v and %v", repo.listOrgIDs, orgA.OrganizationID, orgB.OrganizationID)
+	}
 }
