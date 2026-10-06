@@ -362,6 +362,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/events": {
+            "get": {
+                "description": "Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "List published events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
+                        "name": "location",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND.",
+                        "name": "categoryId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.PublishedEventResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/draft": {
             "post": {
                 "security": [
@@ -1619,6 +1668,70 @@ const docTemplate = `{
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.PublishedEventCategory": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "categoryId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventLocation": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "street": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/model.PublishedEventCategory"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.PublishedEventLocation"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "20.00"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "model.SoldTicketsResponse": {
             "type": "object",

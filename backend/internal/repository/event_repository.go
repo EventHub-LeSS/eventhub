@@ -2,6 +2,7 @@ package repository
 
 import (
 	"backend/internal/model"
+	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -13,6 +14,7 @@ type EventRepository interface {
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
 	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
 	GetAllEvents() ([]*model.EventModel, error)
+	ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error)
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
@@ -112,4 +114,28 @@ func (r *eventRepository) GetConfirmedTicketCount(eventID uuid.UUID) (int64, err
 	}
 
 	return soldTickets, nil
+}
+
+// ListPublishedEvents resolves display data in the same query as the status filter.
+// Inner joins omit incomplete events whose category or location was deleted.
+func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
+	events := make([]model.PublishedEventResponse, 0)
+	query := r.db.Table("events").
+		Select("events.event_id, events.title, events.start_time, events.end_time, events.status, events.price, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number").
+		Joins("JOIN categories ON categories.category_id = events.category_id").
+		Joins("JOIN locations ON locations.location_id = events.location_id").
+		Where("events.status = ?", model.EventStatusPublished)
+	if filter.CategoryID != nil {
+		query = query.Where("events.category_id = ?", *filter.CategoryID)
+	}
+	if filter.Location != "" {
+		// Use ! as an explicit escape character so %, _ and ! remain literal text.
+		pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(filter.Location) + "%"
+		query = query.Where("(locations.city ILIKE ? ESCAPE '!' OR locations.name ILIKE ? ESCAPE '!')", pattern, pattern)
+	}
+	err := query.Order("events.start_time ASC, events.event_id ASC").Scan(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
 }

@@ -6,6 +6,8 @@ import (
 	"backend/internal/service"
 	"errors"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -324,4 +326,38 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 	}
 
 	return statistics, true
+}
+
+// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207 and EVENTHUB-208.
+// @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
+// @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
+// @Summary List published events
+// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
+// @Tags events
+// @Produce json
+// @Success 200 {array} model.PublishedEventResponse
+// @Failure 400 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /events [get]
+func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
+	location := strings.TrimSpace(c.Query("location"))
+	if utf8.RuneCountInString(location) > 200 {
+		writeProblem(c, http.StatusBadRequest, "location must not exceed 200 characters")
+		return
+	}
+	filter := model.PublishedEventFilter{Location: location}
+	if category := strings.TrimSpace(c.Query("categoryId")); category != "" {
+		categoryID, err := uuid.Parse(category)
+		if err != nil {
+			writeProblem(c, http.StatusBadRequest, "categoryId must be a valid UUID")
+			return
+		}
+		filter.CategoryID = &categoryID
+	}
+	events, err := h.eventService.ListPublishedEvents(filter)
+	if err != nil {
+		writeProblem(c, http.StatusInternalServerError, "internal error")
+		return
+	}
+	c.JSON(http.StatusOK, events)
 }
