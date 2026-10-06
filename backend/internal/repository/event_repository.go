@@ -148,8 +148,11 @@ func (r *eventRepository) GetPublishedEventDetails(eventID uuid.UUID) (*model.Pu
 		Select("COALESCE(SUM(number_of_tickets), 0)").
 		Where("event_id = events.event_id AND (status = ? OR (status = ? AND expires_at > NOW()))",
 			model.BookingStatusConfirmed, model.BookingStatusReserved)
+	confirmed := r.db.Table("bookings").
+		Select("COALESCE(SUM(number_of_tickets), 0)").
+		Where("event_id = events.event_id AND status = ?", model.BookingStatusConfirmed)
 	result := r.db.Table("events").
-		Select("events.event_id, events.title, events.description, events.start_time, events.end_time, events.status, events.price, events.capacity, GREATEST(events.capacity - (?), 0) AS available_seats, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number", occupied).
+		Select("events.event_id, events.title, events.description, events.start_time, events.end_time, events.status, events.price, events.capacity, (?) AS sold_tickets, GREATEST(events.capacity - (?), 0) AS available_seats, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number", confirmed, occupied).
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Where("events.event_id = ? AND events.status = ?", eventID, model.EventStatusPublished).

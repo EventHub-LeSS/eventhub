@@ -362,9 +362,9 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, events)
 }
 
-// GetPublishedEventDetailsHandler handles EVENTHUB-211.
+// GetPublishedEventDetailsHandler handles EVENTHUB-211 and EVENTHUB-212.
 // @Summary Get published event details
-// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
+// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event UUID"

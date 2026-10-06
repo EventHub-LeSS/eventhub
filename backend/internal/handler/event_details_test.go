@@ -167,3 +167,69 @@ func TestPublishedEventDetailsVisibility(t *testing.T) {
 		}
 	}
 }
+
+// Exercises the public response and real SQL, including threshold boundaries
+// and reservation expiry so sales labels never imply unavailable seats can be booked.
+func TestPublishedEventOccupancyDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "occupancy", model.EventStatusPublished)
+	router := newEventRouter(db, nil)
+	for _, tc := range []struct {
+		name                string
+		capacity            int
+		confirmed, reserved int
+		expired             bool
+		percent             float64
+		available           int64
+		status              model.EventAvailability
+		bookable            bool
+	}{
+		{"empty", 100, 0, 0, false, 0, 100, model.EventAvailabilityAvailable, true},
+		{"below threshold", 100, 89, 0, false, 89, 11, model.EventAvailabilityAvailable, true},
+		{"threshold", 100, 90, 0, false, 90, 10, model.EventAvailabilityAlmostSoldOut, true},
+		{"last seat", 100, 99, 0, false, 99, 1, model.EventAvailabilityAlmostSoldOut, true},
+		{"sold out", 100, 100, 0, false, 100, 0, model.EventAvailabilitySoldOut, false},
+		{"capacity reduced below sales", 100, 110, 0, false, 100, 0, model.EventAvailabilitySoldOut, false},
+		{"all seats reserved", 100, 0, 100, false, 0, 0, model.EventAvailabilityTemporarilyUnavailable, false},
+		{"mixed blocked", 100, 90, 10, false, 90, 0, model.EventAvailabilityTemporarilyUnavailable, false},
+		{"mixed available", 100, 90, 5, false, 90, 5, model.EventAvailabilityAlmostSoldOut, true},
+		{"expired reservations", 100, 90, 10, true, 90, 10, model.EventAvailabilityAlmostSoldOut, true},
+		{"fractional percentage", 3, 1, 0, false, 33.33, 2, model.EventAvailabilityAvailable, true},
+		{"small event threshold", 10, 9, 0, false, 90, 1, model.EventAvailabilityAlmostSoldOut, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := db.Exec("DELETE FROM bookings WHERE event_id = ?", event.eventID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Exec("UPDATE events SET capacity = ? WHERE event_id = ?", tc.capacity, event.eventID).Error; err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range []struct {
+				status  string
+				count   int
+				expires *time.Time
+			}{
+				{"confirmed", tc.confirmed, nil},
+				{"reserved", tc.reserved, ptrTime(time.Now().Add(time.Hour))},
+				{"cancelled", 10, nil},
+				{"failed", 10, nil},
+			} {
+				if row.count == 0 {
+					continue
+				}
+				if row.status == "reserved" && tc.expired {
+					row.expires = ptrTime(time.Now().Add(-time.Hour))
+				}
+				if err := db.Exec("INSERT INTO bookings (booking_id, event_id, number_of_tickets, status, expires_at) VALUES (?, ?, ?, ?, ?)",
+					uuid.New(), event.eventID, row.count, row.status, row.expires).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			details := getEventDetails(t, router, event.eventID)
+			if details.SoldTickets != int64(tc.confirmed) || details.OccupancyPercent != tc.percent ||
+				details.Availability != tc.status || details.AvailableSeats != tc.available || details.Bookable != tc.bookable {
+				t.Fatalf("unexpected occupancy/availability: %+v", details)
+			}
+		})
+	}
+}
