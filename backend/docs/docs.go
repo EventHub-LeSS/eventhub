@@ -362,6 +362,190 @@ const docTemplate = `{
                 }
             }
         },
+        "/events": {
+            "get": {
+                "description": "Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "List published events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
+                        "name": "location",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND.",
+                        "name": "categoryId",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.PublishedEventResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/draft": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Save event as draft",
+                "parameters": [
+                    {
+                        "description": "Draft event data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.CreateDraftRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unknown categoryId or locationId",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/self": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the events of all organizations in which the caller holds the event_manager role, ordered by start time. Use status=draft to list the own drafts. Drafts are never visible to other organizations or visitors.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "List own events",
+                "parameters": [
+                    {
+                        "enum": [
+                            "draft",
+                            "published",
+                            "cancelled",
+                            "completed"
+                        ],
+                        "type": "string",
+                        "description": "Only return events in this status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Own events; an empty array if there are none",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.EventModel"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/available-seats": {
             "get": {
                 "security": [
@@ -1229,6 +1413,55 @@ const docTemplate = `{
                 }
             }
         },
+        "model.CreateDraftRequest": {
+            "type": "object",
+            "required": [
+                "capacity",
+                "categoryId",
+                "endTime",
+                "locationId",
+                "startTime",
+                "title"
+            ],
+            "properties": {
+                "capacity": {
+                    "type": "integer",
+                    "maximum": 100000,
+                    "minimum": 1
+                },
+                "categoryId": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 5000
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "description": "Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.\nMay be omitted when the caller manages events in exactly one organization.",
+                    "type": "string",
+                    "example": "my-org"
+                },
+                "price": {
+                    "type": "number",
+                    "maximum": 10000,
+                    "minimum": 0
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 3
+                }
+            }
+        },
         "model.CreateOrganizationRequest": {
             "type": "object",
             "required": [
@@ -1435,6 +1668,70 @@ const docTemplate = `{
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.PublishedEventCategory": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "categoryId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventLocation": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "street": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PublishedEventResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/model.PublishedEventCategory"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "$ref": "#/definitions/model.PublishedEventLocation"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "20.00"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "model.SoldTicketsResponse": {
             "type": "object",

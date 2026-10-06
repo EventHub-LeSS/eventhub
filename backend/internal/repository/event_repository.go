@@ -2,6 +2,7 @@ package repository
 
 import (
 	"backend/internal/model"
+	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -13,9 +14,12 @@ type EventRepository interface {
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
 	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
 	GetAllEvents() ([]*model.EventModel, error)
+	ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error)
 	UpdateEvent(event *model.EventModel) error
 	DeleteEvent(eventID uuid.UUID) error
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
+	// ListByOrganizers returns the events of the given organizations; an empty status matches every status.
+	ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
 	GetConfirmedTicketCount(eventID uuid.UUID) (int64, error)
 }
 
@@ -28,7 +32,7 @@ func NewEventRepository(db *gorm.DB) EventRepository {
 }
 
 func (r *eventRepository) CreateEvent(event *model.EventModel) error {
-	return r.db.Create(event).Error
+	return translateEventWriteError(r.db.Create(event).Error)
 }
 
 func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, error) {
@@ -65,7 +69,7 @@ func (r *eventRepository) GetAllEvents() ([]*model.EventModel, error) {
 }
 
 func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
-	return r.db.Save(event).Error
+	return translateEventWriteError(r.db.Save(event).Error)
 }
 
 func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
@@ -76,6 +80,21 @@ func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model
 	var events []*model.EventModel
 	err := r.db.Where("organizer_id = ?", organizationID).Find(&events).Error
 	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *eventRepository) ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error) {
+	if len(organizationIDs) == 0 {
+		return nil, nil
+	}
+	query := r.db.Where("organizer_id IN ?", organizationIDs)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var events []*model.EventModel
+	if err := query.Order("start_time ASC").Find(&events).Error; err != nil {
 		return nil, err
 	}
 	return events, nil
@@ -95,4 +114,28 @@ func (r *eventRepository) GetConfirmedTicketCount(eventID uuid.UUID) (int64, err
 	}
 
 	return soldTickets, nil
+}
+
+// ListPublishedEvents resolves display data in the same query as the status filter.
+// Inner joins omit incomplete events whose category or location was deleted.
+func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
+	events := make([]model.PublishedEventResponse, 0)
+	query := r.db.Table("events").
+		Select("events.event_id, events.title, events.start_time, events.end_time, events.status, events.price, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number").
+		Joins("JOIN categories ON categories.category_id = events.category_id").
+		Joins("JOIN locations ON locations.location_id = events.location_id").
+		Where("events.status = ?", model.EventStatusPublished)
+	if filter.CategoryID != nil {
+		query = query.Where("events.category_id = ?", *filter.CategoryID)
+	}
+	if filter.Location != "" {
+		// Use ! as an explicit escape character so %, _ and ! remain literal text.
+		pattern := "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(filter.Location) + "%"
+		query = query.Where("(locations.city ILIKE ? ESCAPE '!' OR locations.name ILIKE ? ESCAPE '!')", pattern, pattern)
+	}
+	err := query.Order("events.start_time ASC, events.event_id ASC").Scan(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
 }

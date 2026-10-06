@@ -196,6 +196,45 @@ definitions:
       username:
         type: string
     type: object
+  model.CreateDraftRequest:
+    properties:
+      capacity:
+        maximum: 100000
+        minimum: 1
+        type: integer
+      categoryId:
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      endTime:
+        type: string
+      locationId:
+        type: string
+      organizationId:
+        description: |-
+          Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.
+          May be omitted when the caller manages events in exactly one organization.
+        example: my-org
+        type: string
+      price:
+        maximum: 10000
+        minimum: 0
+        type: number
+      startTime:
+        type: string
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - capacity
+    - categoryId
+    - endTime
+    - locationId
+    - startTime
+    - title
+    type: object
   model.CreateOrganizationRequest:
     properties:
       alias:
@@ -336,6 +375,48 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.PublishedEventCategory:
+    properties:
+      category:
+        type: string
+      categoryId:
+        type: string
+    type: object
+  model.PublishedEventLocation:
+    properties:
+      city:
+        type: string
+      houseNumber:
+        type: string
+      locationId:
+        type: string
+      name:
+        type: string
+      postalCode:
+        type: string
+      street:
+        type: string
+    type: object
+  model.PublishedEventResponse:
+    properties:
+      category:
+        $ref: '#/definitions/model.PublishedEventCategory'
+      endTime:
+        type: string
+      eventId:
+        type: string
+      location:
+        $ref: '#/definitions/model.PublishedEventLocation'
+      price:
+        example: "20.00"
+        type: string
+      startTime:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+      title:
+        type: string
+    type: object
   model.SoldTicketsResponse:
     properties:
       eventId:
@@ -614,6 +695,46 @@ paths:
       summary: '[DEBUG] Get access token'
       tags:
       - debug
+  /events:
+    get:
+      description: Public list of published events with their category and location.
+        Optional location searches city or venue name; categoryId selects an exact
+        category. Both filters are combined using AND. Omit a filter or pass an empty
+        value to reset it. Unknown categories and searches without matches return
+        200 with []. Invalid category UUIDs or location values exceeding 200 characters
+        after trimming return 400. Events missing a category or location are omitted.
+        Sorted by start time and event ID.
+      parameters:
+      - description: Case-insensitive substring of city or venue name; trimmed, empty
+          means no filter, maximum 200 characters. Wildcards are treated literally.
+        in: query
+        name: location
+        type: string
+      - description: Exact category UUID; trimmed, empty means no category filter.
+          Combined with location using AND.
+        in: query
+        name: categoryId
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.PublishedEventResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: List published events
+      tags:
+      - events
   /events/{eventId}/available-seats:
     get:
       description: Returns the remaining available seats for an event. Requires the
@@ -834,6 +955,100 @@ paths:
       security:
       - BearerAuth: []
       summary: Withdraw event
+      tags:
+      - events
+  /events/draft:
+    post:
+      consumes:
+      - application/json
+      description: Creates an event in status draft. Drafts are only visible to the
+        organization that owns them and can be edited (PUT /events/{id}) and published
+        (POST /events/{id}/publish) later. Requires the event_manager role in the
+        owning organization. organizationId is the Keycloak organization ID or alias
+        as returned by GET /users/me; it may be omitted when the caller manages events
+        in exactly one organization.
+      parameters:
+      - description: Draft event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateDraftRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.EventModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "422":
+          description: Unknown categoryId or locationId
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Save event as draft
+      tags:
+      - events
+  /events/self:
+    get:
+      description: Returns the events of all organizations in which the caller holds
+        the event_manager role, ordered by start time. Use status=draft to list the
+        own drafts. Drafts are never visible to other organizations or visitors.
+      parameters:
+      - description: Only return events in this status
+        enum:
+        - draft
+        - published
+        - cancelled
+        - completed
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Own events; an empty array if there are none
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List own events
       tags:
       - events
   /organizations/:

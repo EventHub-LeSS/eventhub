@@ -5,6 +5,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"backend/internal/testdb"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -68,7 +69,7 @@ func bookingCount(t *testing.T, db *gorm.DB) int64 {
 }
 
 func TestCreateBooking_ReservesTicketsForTokenUser(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	seeded := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	userID := seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
@@ -100,7 +101,7 @@ func TestCreateBooking_ReservesTicketsForTokenUser(t *testing.T) {
 }
 
 func TestCreateBooking_Rejections(t *testing.T) {
-	db := setupHandlerDB(t)
+	db := testdb.Open(t)
 	published := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	draft := seedEventForOrg(t, db, "org-a", model.EventStatusDraft)
 	seedBookingUser(t, db, bookingKeycloakUserID)
