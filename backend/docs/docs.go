@@ -947,6 +947,82 @@ const docTemplate = `{
                 }
             }
         },
+        "/organizations/{organizationID}/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the audit log of an organization, newest entries first: who (personal account) changed what and when. Covers event changes (including price changes, publishing and cancellation) and changes of member roles. Requires the org_admin role in the given organization (global admins bypass this check). organizationID is the Keycloak organization ID or alias. Entries of operations in Keycloak consist of a \"started\" entry and a \"succeeded\" or \"incomplete\" entry with the same operationId; a \"started\" entry without a result means the outcome is unconfirmed. Entries are deleted ten years after they were recorded. Use nextCursor from the response as cursor to get the next page.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "List organization audit log",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Keycloak organization ID or Alias",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entries per page (default 50, maximum 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cursor of the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.AuditLogPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/organizations/{organizationID}/members/{username}/roles": {
             "put": {
                 "security": [
@@ -1314,6 +1390,62 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.AuditChanges": {
+            "type": "object",
+            "additionalProperties": {}
+        },
+        "model.AuditLogModel": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actorSubject": {
+                    "type": "string"
+                },
+                "actorUsername": {
+                    "type": "string"
+                },
+                "changes": {
+                    "$ref": "#/definitions/model.AuditChanges"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "occurredAt": {
+                    "type": "string"
+                },
+                "operationId": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "resourceId": {
+                    "type": "string"
+                },
+                "resourceType": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.AuditLogPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.AuditLogModel"
+                    }
+                },
+                "nextCursor": {
                     "type": "string"
                 }
             }

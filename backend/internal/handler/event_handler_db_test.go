@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/audit"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
@@ -90,11 +91,11 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 
 	r := gin.New()
 	r.GET("/api/v1/events", h.ListPublishedEventsHandler)
-	r.POST("/api/v1/events/draft", setPrincipal, h.SaveEventAsDraftHandler)
+	r.POST("/api/v1/events/draft", setPrincipal, middleware.Audit(audit.EventCreated), h.SaveEventAsDraftHandler)
 	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
-	r.PUT("/api/v1/events/:id", setPrincipal, h.UpdateEventHandler)
-	r.POST("/api/v1/events/:id/publish", setPrincipal, h.PublishEventHandler)
-	r.POST("/api/v1/events/:id/withdraw", setPrincipal, h.WithdrawEventHandler)
+	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
+	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
+	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
 	return r
 }
 

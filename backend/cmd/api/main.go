@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/audit"
 	"backend/internal/db"
 	"backend/internal/handler"
 	"backend/internal/middleware"
@@ -60,7 +61,7 @@ func main() {
 		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
 		FrontendClientID: firstNonEmpty(os.Getenv("KEYCLOAK_FRONTEND_CLIENT_ID"), "frontend"),
 	}
-	keycloakService := service.NewKeycloakService(keycloakCfg)
+	keycloakService := service.NewKeycloakService(keycloakCfg).WithAuditLog(repository.NewAuditLogRepository(db))
 
 	// Initialize Repositories
 	orgRepo := repository.NewOrganizationRepository(db)
@@ -76,6 +77,7 @@ func main() {
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
@@ -106,11 +108,11 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
-			events.POST("/draft", eventHandler.SaveEventAsDraftHandler)
+			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
-			events.PUT("/:id", eventHandler.UpdateEventHandler)
-			events.POST("/:id/publish", eventHandler.PublishEventHandler)
-			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
+			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
+			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
@@ -137,7 +139,10 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
-		orgRoles.PUT("/:organizationID/members/:username/roles", orgHandler.ConfigureMemberRoles)
+		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
+		// Organization admins read the audit log of their organization; the handler authorizes
+		// against the resolved organization like the role endpoint above.
+		orgRoles.GET("/:organizationID/audit-logs", auditLogHandler.ListAuditLogs)
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))

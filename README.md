@@ -170,3 +170,22 @@ PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
 `go test -p 1 ./...` ausgeführt werden, weil mehrere Pakete dieselben Testtabellen
 zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
 Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
+
+### Audit Log der Organisationen
+
+Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
+
+**Einsicht:** `GET /api/v1/organizations/{organizationID}/audit-logs?limit=50&cursor=…` (neueste zuerst, max. 100 pro Seite, Cursor-Paginierung). Zugriff haben `org_admin` der Organisation und globale Admins. `organizationID` ist die Keycloak-Organisations-ID.
+
+**Garantien:** Event-Änderungen und Audit-Eintrag werden in einer Transaktion geschrieben; kann der Eintrag nicht geschrieben werden, wird die Änderung zurückgerollt. Keycloak-Rollenänderungen sind nicht transaktional: vor der ersten Änderung wird ein `started`-Eintrag geschrieben, danach ein Ergebniseintrag (`succeeded`/`incomplete`) mit derselben `operation_id`. Ein `started` ohne Ergebnis bedeutet „Ausgang unbestätigt“.
+
+**Grenzen:** Das Log belegt das verwendete Konto, nicht die reale Person hinter geteilten Zugangsdaten. Backups, Anwendungslogs und privilegierte Datenbankadministratoren sind nicht Teil der Garantie.
+
+**Neue Aktion ergänzen:**
+1. Aktion in `backend/internal/audit/audit.go` definieren.
+2. Route in `cmd/api/main.go` mit `middleware.Audit(audit.<Action>)` versehen (nach der Authentifizierung).
+3. Im Service Organisation autorisieren und `audit.MetaFromContext` auswerten, Eintrag in derselben Transaktion schreiben (`Tx.Audit`). Bei externen Systemen Start-/Ergebniseintrag wie in `ConfigureOrganizationMemberRoles`.
+
+**Aufbewahrung:** Einträge werden nach 10 Jahren täglich um 03:00 UTC per `pg_cron` (Migration `000007`) gelöscht. Die API-Datenbank braucht daher das Image aus `core/Dockerfile.api-db` und die Einstellungen `shared_preload_libraries=pg_cron`, `cron.database_name=<DB-Name>` (siehe `core/docker-compose.yml`). Ohne pg_cron bricht die Migration mit einer klaren Fehlermeldung ab. Bestehende Volumes bleiben erhalten; den `api-db`-Container mit `docker compose up -d --build api-db` neu erzeugen. Für externe Deployments (z. B. Dockhand) das Image `ghcr.io/<owner>/api-db` mit denselben Parametern verwenden.
+
+**Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.
