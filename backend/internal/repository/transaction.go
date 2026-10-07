@@ -1,15 +1,20 @@
 package repository
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
 
 type Tx struct {
 	Events        EventRepository
 	Organizations OrganizationRepository
 	Users         UserRepository
+	Audit         AuditLogRepository
 }
 
 type Transactor interface {
-	InTransaction(fn func(tx Tx) error) error
+	InTransaction(ctx context.Context, fn func(tx Tx) error) error
 }
 
 type transactor struct {
@@ -20,12 +25,13 @@ func NewTransactor(db *gorm.DB) Transactor {
 	return &transactor{db: db}
 }
 
-func (t *transactor) InTransaction(fn func(tx Tx) error) error {
-	return t.db.Transaction(func(gdb *gorm.DB) error {
+func (t *transactor) InTransaction(ctx context.Context, fn func(tx Tx) error) error {
+	return t.db.WithContext(ctx).Transaction(func(gdb *gorm.DB) error {
 		return fn(Tx{
 			Events:        NewEventRepository(gdb),
 			Organizations: NewOrganizationRepository(gdb),
 			Users:         NewUserRepository(gdb),
+			Audit:         NewAuditLogRepository(gdb),
 		})
 	})
 }

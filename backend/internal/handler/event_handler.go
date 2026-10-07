@@ -71,7 +71,7 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 		return
 	}
 
-	created, err := h.eventService.CreateDraft(managedOrgIDs, req)
+	created, err := h.eventService.CreateDraft(c.Request.Context(), managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -114,7 +114,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.eventService.UpdateEvent(eventID, managedOrgIDs, req)
+	updated, err := h.eventService.UpdateEvent(c.Request.Context(), eventID, managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -149,7 +149,7 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.eventService.PublishEvent(eventID, managedOrgIDs); err != nil {
+	if err := h.eventService.PublishEvent(c.Request.Context(), eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -183,7 +183,7 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.eventService.WithdrawEvent(eventID, managedOrgIDs); err != nil {
+	if err := h.eventService.WithdrawEvent(c.Request.Context(), eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}

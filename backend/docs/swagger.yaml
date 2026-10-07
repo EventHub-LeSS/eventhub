@@ -131,6 +131,43 @@ definitions:
       message:
         type: string
     type: object
+  model.AuditChanges:
+    additionalProperties: {}
+    type: object
+  model.AuditLogModel:
+    properties:
+      action:
+        type: string
+      actorSubject:
+        type: string
+      actorUsername:
+        type: string
+      changes:
+        $ref: '#/definitions/model.AuditChanges'
+      id:
+        type: string
+      occurredAt:
+        type: string
+      operationId:
+        type: string
+      organizationId:
+        type: string
+      phase:
+        type: string
+      resourceId:
+        type: string
+      resourceType:
+        type: string
+    type: object
+  model.AuditLogPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.AuditLogModel'
+        type: array
+      nextCursor:
+        type: string
+    type: object
   model.AvailableSeatsResponse:
     properties:
       availableSeats:
@@ -1192,6 +1229,63 @@ paths:
       security:
       - BearerAuth: []
       summary: Create organization
+      tags:
+      - organizations
+  /organizations/{organizationID}/audit-logs:
+    get:
+      description: 'Returns the audit log of an organization, newest entries first:
+        who (personal account) changed what and when. Covers event changes (including
+        price changes, publishing and cancellation) and changes of member roles. Requires
+        the org_admin role in the given organization (global admins bypass this check).
+        organizationID is the Keycloak organization ID or alias. Entries of operations
+        in Keycloak consist of a "started" entry and a "succeeded" or "incomplete"
+        entry with the same operationId; a "started" entry without a result means
+        the outcome is unconfirmed. Entries are deleted ten years after they were
+        recorded. Use nextCursor from the response as cursor to get the next page.'
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      - description: Entries per page (default 50, maximum 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.AuditLogPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List organization audit log
       tags:
       - organizations
   /organizations/{organizationID}/members/{username}/roles:

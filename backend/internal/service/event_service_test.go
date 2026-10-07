@@ -1,8 +1,10 @@
 package service
 
 import (
+	"backend/internal/audit"
 	"backend/internal/model"
 	"backend/internal/repository"
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -148,13 +150,45 @@ func updateRequest() model.UpdateEventRequest {
 type fakeTransactor struct {
 	events repository.EventRepository
 	orgs   repository.OrganizationRepository
+	audit  repository.AuditLogRepository
 }
 
-func (f *fakeTransactor) InTransaction(fn func(repository.Tx) error) error {
-	return fn(repository.Tx{Events: f.events, Organizations: f.orgs})
+func (f *fakeTransactor) InTransaction(_ context.Context, fn func(repository.Tx) error) error {
+	return fn(repository.Tx{Events: f.events, Organizations: f.orgs, Audit: f.audit})
+}
+
+type fakeAuditRepo struct {
+	entries []*model.AuditLogModel
+	err     error
+}
+
+func (f *fakeAuditRepo) Append(entry *model.AuditLogModel) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.entries = append(f.entries, entry)
+	return nil
+}
+
+func (f *fakeAuditRepo) ListByOrganization(string, int, *model.AuditLogCursor) ([]model.AuditLogModel, error) {
+	return nil, nil
+}
+
+func auditCtx(action audit.Action) context.Context {
+	return audit.WithMeta(context.Background(), audit.Meta{
+		OperationID:   uuid.New(),
+		Action:        action,
+		ActorSubject:  "sub-anna",
+		ActorUsername: "anna@acme.test",
+	})
 }
 
 func newTestService(event *model.EventModel) (*EventService, *fakeEventRepo) {
+	svc, repo, _ := newTestServiceWithAudit(event)
+	return svc, repo
+}
+
+func newTestServiceWithAudit(event *model.EventModel) (*EventService, *fakeEventRepo, *fakeAuditRepo) {
 	eventRepo := &fakeEventRepo{event: event}
 	orgRepo := &fakeOrgRepo{
 		orgs: map[uuid.UUID]*model.OrganizationModel{
@@ -162,8 +196,9 @@ func newTestService(event *model.EventModel) (*EventService, *fakeEventRepo) {
 			orgB.OrganizationID: orgB,
 		},
 	}
-	tx := &fakeTransactor{events: eventRepo, orgs: orgRepo}
-	return NewEventService(eventRepo, orgRepo, tx), eventRepo
+	auditRepo := &fakeAuditRepo{}
+	tx := &fakeTransactor{events: eventRepo, orgs: orgRepo, audit: auditRepo}
+	return NewEventService(eventRepo, orgRepo, tx), eventRepo, auditRepo
 }
 
 func TestUpdateEvent_Ownership(t *testing.T) {
@@ -223,7 +258,7 @@ func TestUpdateEvent_Ownership(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newTestService(tt.event)
 
-			_, err := svc.UpdateEvent(uuid.New(), tt.managedOrgs, updateRequest())
+			_, err := svc.UpdateEvent(auditCtx(audit.EventUpdated), uuid.New(), tt.managedOrgs, updateRequest())
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
@@ -242,7 +277,7 @@ func TestUpdateEvent_KeepsStatusAndOrganizer(t *testing.T) {
 	event := eventOwnedBy(orgB, model.EventStatusPublished)
 	svc, _ := newTestService(event)
 
-	updated, err := svc.UpdateEvent(event.EventID, []string{"kc-org-b"}, updateRequest())
+	updated, err := svc.UpdateEvent(auditCtx(audit.EventUpdated), event.EventID, []string{"kc-org-b"}, updateRequest())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -302,7 +337,7 @@ func TestPublishEvent_Ownership(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newTestService(tt.event)
 
-			err := svc.PublishEvent(uuid.New(), tt.managedOrgs)
+			err := svc.PublishEvent(auditCtx(audit.EventPublished), uuid.New(), tt.managedOrgs)
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
@@ -321,7 +356,7 @@ func TestPublishEvent_PersistsPublishedStatus(t *testing.T) {
 	event := eventOwnedBy(orgB, model.EventStatusDraft)
 	svc, repo := newTestService(event)
 
-	if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); err != nil {
+	if err := svc.PublishEvent(auditCtx(audit.EventPublished), event.EventID, []string{"kc-org-b"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.saved == nil || repo.saved.Status != model.EventStatusPublished {
@@ -343,7 +378,7 @@ func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
 			event := eventOwnedBy(orgB, tt.status)
 			svc, repo := newTestService(event)
 
-			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, tt.wantErr) {
+			if err := svc.PublishEvent(auditCtx(audit.EventPublished), event.EventID, []string{"kc-org-b"}); !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
 			}
 			if repo.saved != nil {
@@ -373,7 +408,7 @@ func TestPublishEvent_RequiresCompleteness(t *testing.T) {
 			mutate(event)
 			svc, repo := newTestService(event)
 
-			if err := svc.PublishEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrIncomplete) {
+			if err := svc.PublishEvent(auditCtx(audit.EventPublished), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrIncomplete) {
 				t.Fatalf("expected ErrIncomplete, got %v", err)
 			}
 			if repo.saved != nil {
@@ -402,7 +437,7 @@ func TestWithdrawEvent_Ownership(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newTestService(tt.event)
 
-			err := svc.WithdrawEvent(uuid.New(), tt.managedOrgs)
+			err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), uuid.New(), tt.managedOrgs)
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
@@ -421,7 +456,7 @@ func TestWithdrawEvent_PersistsCancelledStatus(t *testing.T) {
 	event := eventOwnedBy(orgB, model.EventStatusPublished)
 	svc, repo := newTestService(event)
 
-	if err := svc.WithdrawEvent(event.EventID, []string{"kc-org-b"}); err != nil {
+	if err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.saved == nil || repo.saved.Status != model.EventStatusCancelled {
@@ -435,7 +470,7 @@ func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
 			event := eventOwnedBy(orgB, status)
 			svc, repo := newTestService(event)
 
-			if err := svc.WithdrawEvent(event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotPublished) {
+			if err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotPublished) {
 				t.Fatalf("expected ErrNotPublished, got %v", err)
 			}
 			if repo.saved != nil {
@@ -481,7 +516,7 @@ func TestCreateDraft_SavesDraftForManagedOrganization(t *testing.T) {
 			svc, repo := newTestService(nil)
 			req := draftRequest(tt.organizationID)
 
-			created, err := svc.CreateDraft(tt.managedOrgs, req)
+			created, err := svc.CreateDraft(auditCtx(audit.EventCreated), tt.managedOrgs, req)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -522,7 +557,7 @@ func TestCreateDraft_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newTestService(nil)
 
-			_, err := svc.CreateDraft(tt.managedOrgs, draftRequest(tt.organizationID))
+			_, err := svc.CreateDraft(auditCtx(audit.EventCreated), tt.managedOrgs, draftRequest(tt.organizationID))
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
 			}
@@ -537,7 +572,7 @@ func TestCreateDraft_UnknownReference(t *testing.T) {
 	svc, repo := newTestService(nil)
 	repo.createErr = fmt.Errorf("%w: categoryId does not exist", repository.ErrUnknownReference)
 
-	_, err := svc.CreateDraft([]string{"kc-org-b"}, draftRequest(""))
+	_, err := svc.CreateDraft(auditCtx(audit.EventCreated), []string{"kc-org-b"}, draftRequest(""))
 	if !errors.Is(err, ErrUnknownReference) {
 		t.Fatalf("expected ErrUnknownReference, got %v", err)
 	}
