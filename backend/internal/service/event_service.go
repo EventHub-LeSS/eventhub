@@ -6,6 +6,7 @@ import (
 	"backend/internal/repository"
 	"context"
 	"errors"
+	"math"
 	"slices"
 
 	"github.com/google/uuid"
@@ -353,4 +354,34 @@ func (s *EventService) ListPublishedEvents(filter model.PublishedEventFilter) ([
 		events = make([]model.PublishedEventResponse, 0)
 	}
 	return events, nil
+}
+
+// GetPublishedEventDetails exposes only published events with current availability.
+func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
+	details, err := s.eventRepo.GetPublishedEventDetails(eventID)
+	if err != nil {
+		return nil, err
+	}
+	if details == nil {
+		return nil, ErrEventNotFound
+	}
+	// EVENTHUB-212: occupancy reflects confirmed sales, while availability also
+	// accounts for live reservations. Reservations alone never mean sold out.
+	details.Bookable = details.Status == model.EventStatusPublished && details.AvailableSeats > 0
+	details.Availability = model.EventAvailabilityTemporarilyUnavailable
+	if details.Capacity > 0 {
+		ratio := math.Min(1, math.Max(0, float64(details.SoldTickets)/float64(details.Capacity)))
+		details.OccupancyPercent = math.Round(ratio*10000) / 100
+		switch {
+		case details.SoldTickets >= int64(details.Capacity):
+			details.Availability = model.EventAvailabilitySoldOut
+		case !details.Bookable:
+			details.Availability = model.EventAvailabilityTemporarilyUnavailable
+		case ratio >= 0.9:
+			details.Availability = model.EventAvailabilityAlmostSoldOut
+		default:
+			details.Availability = model.EventAvailabilityAvailable
+		}
+	}
+	return details, nil
 }
