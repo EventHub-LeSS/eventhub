@@ -598,3 +598,7 @@ func TestListOwnEvents_ListsManagedOrganizations(t *testing.T) {
 		t.Errorf("queried organizations %v, want %v and %v", repo.listOrgIDs, orgA.OrganizationID, orgB.OrganizationID)
 	}
 }
+
+func (f *fakeEventRepo) GetPublishedEventDetails(uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
+	return nil, nil
+}
