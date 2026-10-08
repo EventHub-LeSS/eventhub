@@ -4,21 +4,51 @@ import { XIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 
+import type { EventCategory } from "@/features/catalog/lib/get-published-events"
 import { Button } from "@/features/shared/components/ui/button"
 import { Input } from "@/features/shared/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/shared/components/ui/select"
 
-export function EventFilters() {
+const ALL_CATEGORIES = "all"
+
+interface EventFiltersProps {
+  categories: EventCategory[]
+}
+
+export function EventFilters({ categories }: EventFiltersProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const [location, setLocation] = useState(searchParams.get("location") ?? "")
   const [date, setDate] = useState(searchParams.get("date") ?? "")
+  const [categoryId, setCategoryId] = useState(
+    searchParams.get("categoryId") ?? ALL_CATEGORIES
+  )
 
   const hasActiveFilter =
-    searchParams.has("location") || searchParams.has("date")
+    searchParams.has("location") ||
+    searchParams.has("date") ||
+    searchParams.has("categoryId")
 
-  function applyFilters(next: { location: string; date: string }) {
+  const categoryItems: Record<string, string> = {
+    [ALL_CATEGORIES]: "Alle Kategorien",
+  }
+  for (const category of categories) {
+    categoryItems[category.categoryId] = category.category
+  }
+
+  function applyFilters(next: {
+    location: string
+    date: string
+    categoryId: string
+  }) {
     const params = new URLSearchParams(searchParams)
 
     if (next.location) {
@@ -33,25 +63,32 @@ export function EventFilters() {
       params.delete("date")
     }
 
+    if (next.categoryId && next.categoryId !== ALL_CATEGORIES) {
+      params.set("categoryId", next.categoryId)
+    } else {
+      params.delete("categoryId")
+    }
+
     const query = params.toString()
     router.push(query ? `${pathname}?${query}` : pathname)
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    applyFilters({ location, date })
+    applyFilters({ location, date, categoryId })
   }
 
   function handleReset() {
     setLocation("")
     setDate("")
-    applyFilters({ location: "", date: "" })
+    setCategoryId(ALL_CATEGORIES)
+    applyFilters({ location: "", date: "", categoryId: "" })
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-end"
     >
       <div className="flex flex-1 flex-col gap-1.5">
         <label
@@ -80,6 +117,31 @@ export function EventFilters() {
           value={date}
           onChange={(event) => setDate(event.target.value)}
         />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="event-filter-category"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          Kategorie
+        </label>
+        <Select
+          items={categoryItems}
+          value={categoryId}
+          onValueChange={(value) => setCategoryId(value ?? ALL_CATEGORIES)}
+        >
+          <SelectTrigger id="event-filter-category" className="w-full">
+            <SelectValue placeholder="Alle Kategorien" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_CATEGORIES}>Alle Kategorien</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.categoryId} value={category.categoryId}>
+                {category.category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex gap-2">
         <Button type="submit">Filtern</Button>

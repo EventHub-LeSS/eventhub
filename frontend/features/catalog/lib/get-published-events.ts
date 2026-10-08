@@ -7,6 +7,8 @@ export interface PublishedEventsFilter {
   location?: string
   /** Start calendar day in YYYY-MM-DD, interpreted in Europe/Berlin by the backend. */
   date?: string
+  /** Exact category UUID. */
+  categoryId?: string
 }
 
 export interface PublishedEventsResult {
@@ -20,15 +22,17 @@ export interface PublishedEventsResult {
 /**
  * EVENTHUB-83: Veröffentlichte Veranstaltungen anzeigen
  * EVENTHUB-223: Veranstaltungen nach Datum und Ort filtern
+ * EVENTHUB-208: Veranstaltungen nach Kategorie filtern
  *
  * Calls `GET /events` (public, unauthenticated; see
  * backend/internal/handler/event_handler.go#ListPublishedEventsHandler).
  * The endpoint already only returns events in status "published" — it has
- * no `status` query param. `location` and `date` are combined with AND by
- * the backend; omitting a filter (or passing an empty value) resets it.
- * Any non-OK response or network error is treated as "unavailable" rather
- * than thrown, so this page keeps rendering even if the backend is
- * unreachable or a filter value is rejected (e.g. an invalid date).
+ * no `status` query param. `location`, `date` and `categoryId` are combined
+ * with AND by the backend; omitting a filter (or passing an empty value)
+ * resets it. Any non-OK response or network error is treated as
+ * "unavailable" rather than thrown, so this page keeps rendering even if
+ * the backend is unreachable or a filter value is rejected (e.g. an
+ * invalid date or category UUID).
  */
 export async function getPublishedEvents(
   filter: PublishedEventsFilter = {}
@@ -37,6 +41,7 @@ export async function getPublishedEvents(
     const query = new URLSearchParams()
     if (filter.location) query.set("location", filter.location)
     if (filter.date) query.set("date", filter.date)
+    if (filter.categoryId) query.set("categoryId", filter.categoryId)
     const queryString = query.toString()
 
     const response = await fetch(
@@ -65,4 +70,36 @@ export async function getPublishedEvents(
   } catch {
     return { events: [], unavailable: true }
   }
+}
+
+export interface EventCategory {
+  categoryId: string
+  category: string
+}
+
+/**
+ * EVENTHUB-208: Veranstaltungen nach Kategorie filtern
+ *
+ * There is no dedicated "list categories" endpoint, so the category filter's
+ * options are derived from the categories that currently have at least one
+ * published event — i.e. the real, filterable data, not a hardcoded list
+ * (same reasoning as the free-text location filter). Fetches the
+ * unfiltered list once; on failure this returns an empty list, which just
+ * means the category dropdown has no options rather than breaking the page.
+ */
+export async function getEventCategories(): Promise<EventCategory[]> {
+  const { events, unavailable } = await getPublishedEvents()
+
+  if (unavailable) {
+    return []
+  }
+
+  const byId = new Map<string, EventCategory>()
+  for (const event of events) {
+    byId.set(event.category.categoryId, event.category)
+  }
+
+  return [...byId.values()].toSorted((a, b) =>
+    a.category.localeCompare(b.category)
+  )
 }

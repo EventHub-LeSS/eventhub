@@ -1,13 +1,18 @@
 import { Suspense } from "react"
 
-import { EventFilters, EventList } from "@/features/catalog"
+import { EventFilters, EventList, getEventCategories } from "@/features/catalog"
 
 interface PageProps {
-  searchParams: Promise<{ location?: string; date?: string }>
+  searchParams: Promise<{
+    location?: string
+    date?: string
+    categoryId?: string
+  }>
 }
 
 export default async function Page({ searchParams }: PageProps) {
-  const { location, date } = await searchParams
+  const { location, date, categoryId } = await searchParams
+  const categories = await getEventCategories()
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
@@ -17,9 +22,9 @@ export default async function Page({ searchParams }: PageProps) {
         </h1>
       </div>
       <Suspense fallback={null}>
-        <EventFilters />
+        <EventFilters categories={categories} />
       </Suspense>
-      <EventList filter={{ location, date }} />
+      <EventList filter={{ location, date, categoryId }} />
     </div>
   )
 }
