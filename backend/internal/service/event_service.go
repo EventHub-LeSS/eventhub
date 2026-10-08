@@ -198,8 +198,8 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
 
-func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
-	return s.eventRepo.ListByOrganization(organizationID)
+func (s *EventService) ListByOrganization(orgId uuid.UUID) ([]*model.EventModel, error) {
+	return s.eventRepo.ListByOrganization(orgId)
 }
 
 // managesOrganization reports whether org is one of keycloakOrgIDs, which tokens identify by

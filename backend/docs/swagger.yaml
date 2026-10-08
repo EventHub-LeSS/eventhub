@@ -1141,6 +1141,46 @@ paths:
       summary: Save event as draft
       tags:
       - events
+  /events/org/{id}:
+    get:
+      description: Returns events from the requested organization. Requires organization
+        membership, regardless of role.
+      parameters:
+      - description: Organization ID (database UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get organization events by the given id
+      tags:
+      - events
   /events/self:
     get:
       description: Returns the events of all organizations in which the caller holds

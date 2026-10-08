@@ -79,7 +79,7 @@ func main() {
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
-	eventHandler := handler.NewEventHandler(eventService)
+	eventHandler := handler.NewEventHandler(eventService, keycloakService, orgRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
@@ -111,6 +111,7 @@ func main() {
 		{
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
+			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)

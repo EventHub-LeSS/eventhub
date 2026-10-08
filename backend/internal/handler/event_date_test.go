@@ -35,7 +35,7 @@ func TestPublishedEventsDateValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &publishedEventsStub{}
 			router := gin.New()
-			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil)).ListPublishedEventsHandler)
+			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil), nil, nil).ListPublishedEventsHandler)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?date="+url.QueryEscape(tc.input), nil))
 			if !tc.valid {

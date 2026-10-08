@@ -39,7 +39,7 @@ func TestPublishedEventDetailsResponses(t *testing.T) {
 		{"database error", uuid.NewString(), &eventDetailsStub{err: errors.New("private database error")}, http.StatusInternalServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewEventHandler(service.NewEventService(tc.repo, nil, nil))
+			h := NewEventHandler(service.NewEventService(tc.repo, nil, nil), nil, nil)
 			router := gin.New()
 			router.GET("/api/v1/events/:eventId", h.GetPublishedEventDetailsHandler)
 			rec := httptest.NewRecorder()
