@@ -11,7 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/model"
 	"backend/internal/service"
+
+	"github.com/google/uuid"
 )
 
 // Fake serves the Keycloak admin endpoints reached through the backend
@@ -37,6 +40,8 @@ type Fake struct {
 	RejectAdminRequests int
 	// AdminDelay delays every admin response, e.g. to exercise timeouts.
 	AdminDelay time.Duration
+	// Audit records the audited operations of the service returned by KeycloakService.
+	Audit AuditLog
 }
 
 // New returns a fake with two members: alice (org_admin of org-1) and bob
@@ -231,7 +236,8 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 	return srv
 }
 
-// KeycloakService returns a service wired to a fresh fake server.
+// KeycloakService returns a service wired to a fresh fake server and to the in-memory audit log of
+// the fake.
 func (f *Fake) KeycloakService(t testing.TB) *service.KeycloakService {
 	t.Helper()
 	return service.NewKeycloakService(service.KeycloakClientConfig{
@@ -240,5 +246,72 @@ func (f *Fake) KeycloakService(t testing.TB) *service.KeycloakService {
 		UserRealm:    "eventhub",
 		ClientID:     "backend",
 		ClientSecret: "dev-secret",
-	})
+	}).WithAuditLog(&f.Audit)
+}
+
+// AuditLog is an in-memory repository.AuditLogRepository. Fail, when set, makes Append fail for
+// the entries it returns an error for.
+type AuditLog struct {
+	Mu      sync.Mutex
+	Entries []model.AuditLogModel
+	Fail    func(entry *model.AuditLogModel) error
+}
+
+func (a *AuditLog) Append(entry *model.AuditLogModel) error {
+	a.Mu.Lock()
+	defer a.Mu.Unlock()
+	if a.Fail != nil {
+		if err := a.Fail(entry); err != nil {
+			return err
+		}
+	}
+	stored := *entry
+	// Round-trip through JSON like the database does, so tests see what a reader would see.
+	raw, err := json.Marshal(entry.Changes)
+	if err != nil {
+		return err
+	}
+	stored.Changes = model.AuditChanges{}
+	if err := json.Unmarshal(raw, &stored.Changes); err != nil {
+		return err
+	}
+	stored.AuditLogID = uuid.New()
+	// Strictly increasing, so that ordering by time is unambiguous in tests.
+	stored.OccurredAt = time.Now().UTC()
+	if n := len(a.Entries); n > 0 && !stored.OccurredAt.After(a.Entries[n-1].OccurredAt) {
+		stored.OccurredAt = a.Entries[n-1].OccurredAt.Add(time.Microsecond)
+	}
+	a.Entries = append(a.Entries, stored)
+	return nil
+}
+
+func (a *AuditLog) ListByOrganization(keycloakOrgID string, limit int, cursor *model.AuditLogCursor) ([]model.AuditLogModel, error) {
+	a.Mu.Lock()
+	defer a.Mu.Unlock()
+	var matching []model.AuditLogModel
+	for i := len(a.Entries) - 1; i >= 0; i-- {
+		e := a.Entries[i]
+		if e.OrganizationID != keycloakOrgID {
+			continue
+		}
+		if cursor != nil && !(e.OccurredAt.Before(cursor.OccurredAt) ||
+			(e.OccurredAt.Equal(cursor.OccurredAt) && e.AuditLogID.String() < cursor.ID.String())) {
+			continue
+		}
+		matching = append(matching, e)
+		if len(matching) == limit {
+			break
+		}
+	}
+	if matching == nil {
+		matching = []model.AuditLogModel{}
+	}
+	return matching, nil
+}
+
+// Snapshot returns a copy of the recorded entries in order.
+func (a *AuditLog) Snapshot() []model.AuditLogModel {
+	a.Mu.Lock()
+	defer a.Mu.Unlock()
+	return append([]model.AuditLogModel(nil), a.Entries...)
 }

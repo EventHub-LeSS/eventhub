@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
+	_ "time/tzdata"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -69,7 +71,7 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 		return
 	}
 
-	created, err := h.eventService.CreateDraft(managedOrgIDs, req)
+	created, err := h.eventService.CreateDraft(c.Request.Context(), managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -112,7 +114,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.eventService.UpdateEvent(eventID, managedOrgIDs, req)
+	updated, err := h.eventService.UpdateEvent(c.Request.Context(), eventID, managedOrgIDs, req)
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -147,7 +149,7 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.eventService.PublishEvent(eventID, managedOrgIDs); err != nil {
+	if err := h.eventService.PublishEvent(c.Request.Context(), eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -181,7 +183,7 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.eventService.WithdrawEvent(eventID, managedOrgIDs); err != nil {
+	if err := h.eventService.WithdrawEvent(c.Request.Context(), eventID, managedOrgIDs); err != nil {
 		writeEventActionError(c, err)
 		return
 	}
@@ -192,6 +194,8 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrEventNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrOrganizationNotFound):
 		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(c, http.StatusForbidden, err.Error())
@@ -241,6 +245,44 @@ func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
 	}
 
 	events, err := h.eventService.ListOwnEvents(managedOrgIDs, status)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	if events == nil {
+		events = []*model.EventModel{}
+	}
+
+	c.JSON(http.StatusOK, events)
+}
+
+// EVENTHUB-79: Veranstaltungen einer Organisation anzeigen
+// @Summary      List organization events
+// @Description  Returns all events of the organization, in every status including drafts. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id path string true "Organization ID (database UUID)"
+// @Success      200 {array}  model.EventModel "Events of the organization; an empty array if there are none"
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/org/{id} [get]
+func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
+	organizationID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+
+	events, err := h.eventService.ListByOrganization(organizationID, principal.OrganizationIDs())
 	if err != nil {
 		writeEventActionError(c, err)
 		return
@@ -328,11 +370,12 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 	return statistics, true
 }
 
-// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207 and EVENTHUB-208.
+// ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207, EVENTHUB-208 and EVENTHUB-210.
 // @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
+// @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. Both filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse
@@ -346,6 +389,19 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 		return
 	}
 	filter := model.PublishedEventFilter{Location: location}
+	if date := strings.TrimSpace(c.Query("date")); date != "" {
+		calendarLocation, err := time.LoadLocation("Europe/Berlin")
+		if err != nil {
+			writeProblem(c, http.StatusInternalServerError, "internal error")
+			return
+		}
+		startDate, err := time.ParseInLocation(time.DateOnly, date, calendarLocation)
+		if err != nil {
+			writeProblem(c, http.StatusBadRequest, "date must be a valid date in YYYY-MM-DD format")
+			return
+		}
+		filter.Date = &startDate
+	}
 	if category := strings.TrimSpace(c.Query("categoryId")); category != "" {
 		categoryID, err := uuid.Parse(category)
 		if err != nil {
@@ -360,4 +416,29 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, events)
+}
+
+// GetPublishedEventDetailsHandler handles EVENTHUB-211 and EVENTHUB-212.
+// @Summary Get published event details
+// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
+// @Tags events
+// @Produce json
+// @Param eventId path string true "Event UUID"
+// @Success 200 {object} model.PublishedEventDetailsResponse
+// @Failure 400 {object} model.ErrorResponse
+// @Failure 404 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /events/{eventId} [get]
+func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("eventId"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		return
+	}
+	details, err := h.eventService.GetPublishedEventDetails(eventID)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, details)
 }

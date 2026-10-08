@@ -72,6 +72,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push API database (PostgreSQL with pg_cron)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./core
+          file: ./core/Dockerfile.api-db
+          push: true
+          tags: ghcr.io/${{ steps.owner.outputs.owner }}/api-db:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"backend/internal/audit"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
@@ -256,6 +257,10 @@ func orgRolesBindingMessage(err error) string {
 // used by the auth middleware across the API.
 func writeOrgRolesError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, audit.ErrResultNotRecorded):
+		writeProblem(c, http.StatusInternalServerError, "the role change may have been applied but its result could not be recorded in the audit log; check the current roles before retrying")
+	case errors.Is(err, audit.ErrUnavailable), errors.Is(err, audit.ErrMissingContext):
+		writeProblem(c, http.StatusInternalServerError, "the audit log is unavailable, the role change was not performed")
 	case errors.Is(err, service.ErrActorNotOrgAdmin):
 		middleware.AbortForbidden(c)
 	case errors.Is(err, service.ErrUserNotFound),

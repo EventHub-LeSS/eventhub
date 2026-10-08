@@ -1,11 +1,14 @@
 package service
 
 import (
+	"backend/internal/audit"
 	"backend/internal/model"
+	"backend/internal/repository"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -29,6 +32,7 @@ type KeycloakClientConfig struct {
 type KeycloakService struct {
 	cfg    KeycloakClientConfig
 	client *gocloak.GoCloak
+	audit  repository.AuditLogRepository
 
 	// Cached service-account token for admin operations (EVENTHUB-188).
 	adminTokenMu      sync.Mutex
@@ -48,6 +52,13 @@ func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 		client:         gocloak.NewClient(cfg.Host),
 		adminLoginGate: make(chan struct{}, 1),
 	}
+}
+
+// WithAuditLog sets where audited operations such as role changes are recorded. Without it those
+// operations are refused: there is no silent fallback to unrecorded changes.
+func (k *KeycloakService) WithAuditLog(repo repository.AuditLogRepository) *KeycloakService {
+	k.audit = repo
+	return k
 }
 
 // adminToken returns the service-account token for admin operations, caching it
@@ -901,7 +912,18 @@ func (k *KeycloakService) ResolveOrganization(ctx context.Context, organizationI
 // old and new roles; on such a failure the changes already applied are returned together with
 // the error, and the request is idempotent and safe to retry. Keycloak calls run with the backend
 // service account and are bounded by orgRoleChangeTimeout (EVENTHUB-188).
+//
+// Effective changes are written to the audit log (audit.Meta from ctx is required): a "started"
+// entry before the first Keycloak mutation and a result entry afterwards, sharing one operation ID.
 func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, organizationIDOrAlias, username string, requestedRoles []model.OrganizationRole, actor OrgRoleActor) (change *OrgRoleChange, err error) {
+	parentCtx := ctx
+	meta, err := audit.MetaFromContext(ctx, audit.OrganizationMemberRolesChange)
+	if err != nil {
+		return nil, err
+	}
+	if k.audit == nil {
+		return nil, fmt.Errorf("%w: no audit log configured", audit.ErrUnavailable)
+	}
 	ctx, cancel := context.WithTimeout(ctx, orgRoleChangeTimeout)
 	defer cancel()
 	orgAdminRole := string(model.RoleOrganizationAdmin)
@@ -973,34 +995,150 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 	}
 
 	change = &OrgRoleChange{OrganizationID: keycloakOrgID}
-	// Two separate loops on purpose: all revokes complete before the first
-	// grant, so a failure can never leave the union of old and new roles.
+	var toRevoke, toGrant []string
 	for _, role := range model.OrganizationRoles {
 		name := string(role)
-		if !requested[name] && currentRoles[name] {
-			if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return change, fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
-			}
-			change.Revoked = append(change.Revoked, name)
+		switch {
+		case !requested[name] && currentRoles[name]:
+			toRevoke = append(toRevoke, name)
+		case requested[name] && !currentRoles[name]:
+			toGrant = append(toGrant, name)
 		}
 	}
-	for _, role := range model.OrganizationRoles {
-		name := string(role)
-		if requested[name] && !currentRoles[name] {
-			if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return change, fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
-			}
-			change.Granted = append(change.Granted, name)
-		}
-	}
-
 	change.Applied = make([]string, 0, len(model.OrganizationRoles))
 	for _, role := range model.OrganizationRoles {
 		if requested[string(role)] {
 			change.Applied = append(change.Applied, string(role))
 		}
 	}
-	return change, nil
+	if len(toRevoke) == 0 && len(toGrant) == 0 {
+		return change, nil
+	}
+
+	// Keycloak cannot take part in a database transaction. The operation is therefore recorded
+	// durably before the first change: if that fails, nothing has been changed yet. The result
+	// follows as a second entry; without it the outcome of the operation is unconfirmed.
+	trail := roleChangeAudit{
+		k: k, meta: meta, orgID: keycloakOrgID, targetUserID: userID, targetUsername: username,
+		details: model.AuditChanges{
+			"targetUsername": username,
+			"targetUserId":   userID,
+			"rolesBefore":    rolesOf(currentRoles),
+			"rolesRequested": change.Applied,
+			"toGrant":        nonNilStrings(toGrant),
+			"toRevoke":       nonNilStrings(toRevoke),
+		},
+	}
+	if err := trail.record(audit.PhaseStarted, nil); err != nil {
+		return nil, fmt.Errorf("%w: %v", audit.ErrUnavailable, err)
+	}
+
+	// Two separate loops on purpose: all revokes complete before the first
+	// grant, so a failure can never leave the union of old and new roles.
+	for _, name := range toRevoke {
+		if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+			stepErr := fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
+			return change, trail.conclude(parentCtx, change, "revoke", name, stepErr)
+		}
+		change.Revoked = append(change.Revoked, name)
+	}
+	for _, name := range toGrant {
+		if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+			stepErr := fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
+			return change, trail.conclude(parentCtx, change, "grant", name, stepErr)
+		}
+		change.Granted = append(change.Granted, name)
+	}
+	return change, trail.conclude(parentCtx, change, "", "", nil)
+}
+
+// roleChangeAudit writes the audit entries of one role change under a common operation ID.
+type roleChangeAudit struct {
+	k              *KeycloakService
+	meta           audit.Meta
+	orgID          string
+	targetUserID   string
+	targetUsername string
+	details        model.AuditChanges
+}
+
+func (a *roleChangeAudit) record(phase string, extra model.AuditChanges) error {
+	changes := make(model.AuditChanges, len(a.details)+len(extra))
+	for key, value := range a.details {
+		changes[key] = value
+	}
+	for key, value := range extra {
+		changes[key] = value
+	}
+	return a.k.audit.Append(&model.AuditLogModel{
+		OperationID:    a.meta.OperationID,
+		ActorSubject:   a.meta.ActorSubject,
+		ActorUsername:  a.meta.ActorUsername,
+		OrganizationID: a.orgID,
+		Action:         string(a.meta.Action),
+		ResourceType:   audit.ResourceOrganizationMember,
+		ResourceID:     a.targetUserID,
+		Phase:          phase,
+		Changes:        changes,
+	})
+}
+
+// conclude records the result and returns opErr, joined with audit.ErrResultNotRecorded if the
+// result could not be persisted. A failed step is recorded as unconfirmed: the request may have
+// reached Keycloak before the error occurred. The result is written even if the caller went away.
+func (a *roleChangeAudit) conclude(parentCtx context.Context, change *OrgRoleChange, failedStep, failedRole string, opErr error) error {
+	phase := audit.PhaseSucceeded
+	extra := model.AuditChanges{
+		"granted": nonNilStrings(change.Granted),
+		"revoked": nonNilStrings(change.Revoked),
+	}
+	if opErr != nil {
+		phase = audit.PhaseIncomplete
+		extra["failedStep"] = failedStep
+		extra["failedRole"] = failedRole
+		extra["failedStepOutcome"] = "unconfirmed"
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parentCtx), auditResultTimeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- a.record(phase, extra) }()
+	var recordErr error
+	select {
+	case recordErr = <-done:
+	case <-ctx.Done():
+		recordErr = ctx.Err()
+	}
+	if recordErr != nil {
+		slog.Error("audit result of organization role change could not be recorded",
+			"operation_id", a.meta.OperationID,
+			"organization_id", a.orgID,
+			"phase", phase,
+			"error", recordErr.Error(),
+		)
+		return errors.Join(opErr, audit.ErrResultNotRecorded)
+	}
+	return opErr
+}
+
+// auditResultTimeout bounds how long the result of a role change may take to be recorded.
+const auditResultTimeout = 5 * time.Second
+
+func rolesOf(set map[string]bool) []string {
+	roles := make([]string, 0, len(model.OrganizationRoles))
+	for _, role := range model.OrganizationRoles {
+		if set[string(role)] {
+			roles = append(roles, string(role))
+		}
+	}
+	return roles
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // currentUserRoles returns which of the organization's role groups the user belongs to by
