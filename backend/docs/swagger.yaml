@@ -272,6 +272,40 @@ definitions:
     - startTime
     - title
     type: object
+  model.CreateEventRequestModel:
+    properties:
+      capacity:
+        minimum: 1
+        type: integer
+      categoryId:
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      endTime:
+        type: string
+      locationId:
+        type: string
+      organizerId:
+        type: string
+      price:
+        minimum: 0
+        type: number
+      startTime:
+        type: string
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - capacity
+    - categoryId
+    - endTime
+    - locationId
+    - organizerId
+    - startTime
+    - title
+    type: object
   model.CreateOrganizationRequest:
     properties:
       alias:
@@ -828,6 +862,58 @@ paths:
           schema:
             $ref: '#/definitions/model.ErrorResponse'
       summary: List published events
+      tags:
+      - events
+    post:
+      consumes:
+      - application/json
+      description: Creates an event in status draft and returns its UUID as plain
+        text. Requires the event_manager role in the owning organization. organizerId
+        is the organization's database UUID. The start time must be in the future,
+        the end time must be after the start time, capacity must be positive and price
+        must be non-negative. The event can be edited (PUT /events/{id}) and published
+        (POST /events/{id}/publish) later.
+      parameters:
+      - description: Event data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateEventRequestModel'
+      produces:
+      - text/plain
+      responses:
+        "201":
+          description: Created event UUID
+          schema:
+            type: string
+        "400":
+          description: Invalid event data
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Missing event_manager role in the owning organization
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Unknown organizerId
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "422":
+          description: Unknown categoryId or locationId
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create event
       tags:
       - events
   /events/{eventId}:

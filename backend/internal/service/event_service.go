@@ -37,7 +37,22 @@ func NewEventService(eventRepo repository.EventRepository, orgRepo repository.Or
 	return &EventService{eventRepo: eventRepo, orgRepo: orgRepo, tx: tx}
 }
 
-func (s *EventService) CreateEvent(event *model.EventModel) error {
+func (s *EventService) CreateEvent(event *model.EventModel, keycloakOrgIDs []string) error {
+	if event.OrganizerID == nil {
+		return ErrOrganizationRequired
+	}
+
+	org, err := s.orgRepo.GetByID(*event.OrganizerID)
+	if err != nil {
+		return err
+	}
+	if org == nil {
+		return ErrOrganizationNotFound
+	}
+	if !managesOrganization(org, keycloakOrgIDs) {
+		return ErrForbidden
+	}
+
 	return s.eventRepo.CreateEvent(event)
 }
 

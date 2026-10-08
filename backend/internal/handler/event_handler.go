@@ -41,7 +41,57 @@ func managedOrganizationIDs(c *gin.Context) ([]string, bool) {
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
-func CreateEventHandler(c *gin.Context) {
+// @Summary      Create event
+// @Description  Creates an event in status draft and returns its UUID as plain text. Requires the event_manager role in the owning organization. organizerId is the organization's database UUID. The start time must be in the future, the end time must be after the start time, capacity must be positive and price must be non-negative. The event can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later.
+// @Tags         events
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      plain
+// @Param        request body model.CreateEventRequestModel true "Event data"
+// @Success      201 {string} string "Created event UUID"
+// @Failure      400 {object} model.ErrorResponse "Invalid event data"
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse "Missing event_manager role in the owning organization"
+// @Failure      404 {object} model.ErrorResponse "Unknown organizerId"
+// @Failure      422 {object} model.ErrorResponse "Unknown categoryId or locationId"
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events [post]
+func (h *EventHandler) CreateEventHandler(c *gin.Context) {
+	managed, ok := managedOrganizationIDs(c)
+	if !ok {
+		return
+	}
+
+	var req model.CreateEventRequestModel
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	eventId := uuid.New()
+
+	err := h.eventService.CreateEvent(&model.EventModel{
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		Capacity:    req.Capacity,
+		Price:       req.Price,
+		CategoryID:  &req.CategoryID,
+		LocationID:  &req.LocationID,
+		Status:      model.EventStatusDraft,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		OrganizerID: &req.OrganizerID,
+		EventID:     eventId,
+	}, managed)
+
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.String(http.StatusCreated, eventId.String())
 }
 
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
