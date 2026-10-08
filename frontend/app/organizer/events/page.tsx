@@ -6,6 +6,7 @@ import {
   type Event,
   EventApiError,
   listOwnEvents,
+  OrganizerEventList,
   PublishDraftButton,
 } from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
@@ -106,6 +107,8 @@ export default async function OrganizerDraftsPage() {
           ))}
         </ul>
       )}
+
+      <OrganizerEventList />
     </div>
   )
 }

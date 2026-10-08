@@ -258,31 +258,24 @@ func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
 
 // EVENTHUB-79: Veranstaltungen einer Organisation anzeigen
 // @Summary      List organization events
-// @Description  Returns all events of the organization, in every status including drafts. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.
+// @Description  Returns all events of the organization, in every status including drafts. The organization is addressed by its database UUID or by its alias, which is what tokens carry. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
-// @Param        id path string true "Organization ID (database UUID)"
+// @Param        id path string true "Organization database UUID or alias"
 // @Success      200 {array}  model.EventModel "Events of the organization; an empty array if there are none"
-// @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
 // @Failure      404 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /events/org/{id} [get]
 func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
-	organizationID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		writeProblem(c, http.StatusBadRequest, "invalid organization id")
-		return
-	}
-
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
 		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
 
-	events, err := h.eventService.ListByOrganization(organizationID, principal.OrganizationIDs())
+	events, err := h.eventService.ListByOrganizationRef(c.Param("id"), principal.OrganizationIDs())
 	if err != nil {
 		writeEventActionError(c, err)
 		return

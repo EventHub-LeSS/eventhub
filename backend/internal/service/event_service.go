@@ -212,6 +212,23 @@ func (s *EventService) ListByOrganization(organizationID uuid.UUID, keycloakOrgI
 	return s.eventRepo.ListByOrganization(organizationID)
 }
 
+// ListByOrganizationRef is ListByOrganization for an organization addressed by its database UUID or
+// by its alias. Tokens only carry the alias, so that is the reference a frontend can send.
+func (s *EventService) ListByOrganizationRef(ref string, keycloakOrgIDs []string) ([]*model.EventModel, error) {
+	if organizationID, err := uuid.Parse(ref); err == nil {
+		return s.ListByOrganization(organizationID, keycloakOrgIDs)
+	}
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases([]string{ref})
+	if err != nil {
+		return nil, err
+	}
+	// The alias column has no unique constraint, so an ambiguous match is not trusted.
+	if len(orgs) != 1 {
+		return nil, ErrOrganizationNotFound
+	}
+	return s.ListByOrganization(orgs[0].OrganizationID, keycloakOrgIDs)
+}
+
 // managesOrganization reports whether org is one of keycloakOrgIDs, which tokens identify by
 // Keycloak ID or, when the claim carries no ID, by alias.
 func managesOrganization(org *model.OrganizationModel, keycloakOrgIDs []string) bool {
