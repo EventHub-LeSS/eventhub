@@ -9,6 +9,7 @@ import (
 	"backend/internal/testdb"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -94,6 +95,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.POST("/api/v1/events/draft", setPrincipal, middleware.Audit(audit.EventCreated), h.SaveEventAsDraftHandler)
 	r.GET("/api/v1/events/:eventId", h.GetPublishedEventDetailsHandler)
 	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
+	r.GET("/api/v1/events/org/:id", setPrincipal, h.ListOrganizationEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
@@ -127,6 +129,100 @@ func postWithdraw(t *testing.T, router http.Handler, eventID string) *httptest.R
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+func getOrganizationEvents(router http.Handler, orgID string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/org/"+orgID, nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func assertOrganizationEventsProblem(t *testing.T, rec *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("expected %d, got %d: %s", status, rec.Code, rec.Body.String())
+	}
+	var problem model.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode problem: %v; body: %s", err, rec.Body.String())
+	}
+	if problem.Status != status || problem.Type != "about:blank" || problem.Title != http.StatusText(status) || problem.Detail == "" {
+		t.Errorf("unexpected problem response: %+v", problem)
+	}
+}
+
+func TestListOrganizationEventsHandler_OnlyRequestedOrganization(t *testing.T) {
+	db := testdb.Open(t)
+	want := map[uuid.UUID]seededEvent{}
+	var orgID uuid.UUID
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		event := seedEventForOrg(t, db, "kc-org-a", status)
+		want[event.eventID] = event
+		orgID = event.ownerOrgID
+	}
+	seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	seedEventForOrg(t, db, "kc-org-foreign", model.EventStatusPublished)
+	principal := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{
+		{ID: "kc-org-a", Alias: "alias-a"},
+		{ID: "kc-org-b", Alias: "alias-b"},
+	}}
+	principal.ActiveOrganization = principal.Organizations[1]
+	rec := getOrganizationEvents(newEventRouter(db, principal), orgID.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var events []model.EventModel
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
+	if len(events) != len(want) {
+		t.Fatalf("expected %d events, got %d: %s", len(want), len(events), rec.Body.String())
+	}
+	for _, event := range events {
+		seeded, ok := want[event.EventID]
+		if !ok {
+			t.Fatalf("unexpected or duplicate event %s", event.EventID)
+		}
+		if event.OrganizerID == nil || *event.OrganizerID != seeded.ownerOrgID {
+			t.Errorf("event %s has unexpected organizer %v", event.EventID, event.OrganizerID)
+		}
+		delete(want, event.EventID)
+	}
+}
+
+func TestListOrganizationEventsHandler_EmptyArray(t *testing.T) {
+	db := testdb.Open(t)
+	orgID := uuid.New()
+	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", orgID, "org-1", "Empty organization").Error; err != nil {
+		t.Fatalf("seed organization: %v", err)
+	}
+	seedEventForOrg(t, db, "foreign-org", model.EventStatusPublished)
+	principal := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{{ID: "org-1"}}}
+	rec := getOrganizationEvents(newEventRouter(db, principal), orgID.String())
+	if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+		t.Fatalf("expected 200 with [], got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListOrganizationEventsHandler_DatabaseFailure(t *testing.T) {
+	for _, table := range []string{"organizations", "events"} {
+		t.Run(table, func(t *testing.T) {
+			db := testdb.Open(t)
+			seeded := seedEventForOrg(t, db, "org-1", model.EventStatusPublished)
+			const callback = "test:list_organization_events_failure"
+			if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+				if tx.Statement.Table == table {
+					_ = tx.AddError(errors.New("query failed"))
+				}
+			}); err != nil {
+				t.Fatalf("register query failure: %v", err)
+			}
+			t.Cleanup(func() { db.Callback().Query().Remove(callback) })
+			rec := getOrganizationEvents(newEventRouter(db, principalManaging("org-1")), seeded.ownerOrgID.String())
+			assertOrganizationEventsProblem(t, rec, http.StatusInternalServerError)
+		})
+	}
 }
 
 func validBody(s seededEvent) map[string]any {

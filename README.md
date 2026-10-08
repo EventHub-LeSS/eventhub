@@ -171,6 +171,49 @@ PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
 zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
 Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
 
+### Veranstaltungen einer Organisation (EVENTHUB-79)
+
+`GET /api/v1/events/org/{id}` liefert alle Veranstaltungen einer Organisation in jedem Status,
+also auch Entwürfe sowie abgesagte und abgeschlossene Events. `{id}` ist die Datenbank-UUID der
+Organisation (wie im Feld `organizerId` der Events), **nicht** die Keycloak-ID aus `GET /users/me`.
+
+**Berechtigung:** Jedes Mitglied der Organisation, unabhängig von der Rolle (`org_admin`,
+`event_manager`, `finance_viewer` oder ohne Rolle). Die Mitgliedschaft stammt aus dem Token und
+wird wie bei den übrigen Event-Endpunkten über Keycloak-ID oder Alias der Organisation geprüft.
+
+**Antworten:**
+
+| Status | Bedeutung                                                                            |
+| ------ | ------------------------------------------------------------------------------------ |
+| `200`  | Array der Events; `[]`, wenn die Organisation keine hat. Die Reihenfolge ist nicht festgelegt. |
+| `400`  | `{id}` ist keine gültige UUID                                                         |
+| `401`  | nicht angemeldet                                                                      |
+| `404`  | Organisation existiert nicht **oder** der Aufrufer ist kein Mitglied                  |
+| `500`  | Datenbankfehler                                                                       |
+
+Nicht-Mitglieder bekommen bewusst `404` statt `403`, damit sich fremde Organisationen nicht von
+unbekannten unterscheiden lassen.
+
+**Abgrenzung:** `GET /api/v1/events/self?status=…` liefert die Events aller Organisationen, in
+denen der Aufrufer `event_manager` ist (z. B. die eigenen Entwürfe), sortiert nach Startzeit.
+
+**Code:** `EventHandler.ListOrganizationEventsHandler` übergibt `principal.OrganizationIDs()` an
+`EventService.ListByOrganization`; der Service prüft die Mitgliedschaft mit `managesOrganization`
+wie `UpdateEvent`, `PublishEvent`, `WithdrawEvent` und `GetEventStatistics`.
+
+**Getestet:** Automatisch über `TestListOrganizationEventsHandler_*` in `backend/internal/handler`
+(Mitgliedschaft je Rolle, Nicht-Mitglied, unbekannte und ungültige ID, ohne Anmeldung, leere
+Organisation, Datenbankfehler). Zusätzlich wurde der Endpunkt vor dem Merge von PR #41 manuell mit
+dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten getestet:
+
+- Mitglieder mit `event_manager`, `finance_viewer` und `org_admin` erhalten alle Events ihrer
+  Organisation, inklusive Entwürfen.
+- Nicht-Mitglieder, Besucher ohne Organisation und unbekannte UUIDs erhalten `404`, eine ungültige
+  ID `400` und Aufrufe ohne Token `401`.
+- Benutzer in mehreren Organisationen sehen nur die Events der Organisationen, in denen sie Mitglied
+  sind.
+- `GET /events/self` und `GET /events` verhalten sich unverändert.
+
 ### Audit Log der Organisationen
 
 Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.

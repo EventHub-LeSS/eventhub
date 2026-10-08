@@ -198,7 +198,17 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
 
-func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
+// ListByOrganization returns the events of the organization, in every status. keycloakOrgIDs are
+// the organizations the caller is a member of; any other organization is reported as not found, so
+// that non-members cannot tell existing organizations from unknown ones.
+func (s *EventService) ListByOrganization(organizationID uuid.UUID, keycloakOrgIDs []string) ([]*model.EventModel, error) {
+	org, err := s.orgRepo.GetByID(organizationID)
+	if err != nil {
+		return nil, err
+	}
+	if !managesOrganization(org, keycloakOrgIDs) {
+		return nil, ErrOrganizationNotFound
+	}
 	return s.eventRepo.ListByOrganization(organizationID)
 }
 
