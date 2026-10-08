@@ -1,6 +1,14 @@
-import { EventList } from "@/features/catalog"
+import { Suspense } from "react"
 
-export default function Page() {
+import { EventFilters, EventList } from "@/features/catalog"
+
+interface PageProps {
+  searchParams: Promise<{ location?: string; date?: string }>
+}
+
+export default async function Page({ searchParams }: PageProps) {
+  const { location, date } = await searchParams
+
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
       <div>
@@ -8,7 +16,10 @@ export default function Page() {
           Entdecke Veranstaltungen in deiner Region
         </h1>
       </div>
-      <EventList />
+      <Suspense fallback={null}>
+        <EventFilters />
+      </Suspense>
+      <EventList filter={{ location, date }} />
     </div>
   )
 }

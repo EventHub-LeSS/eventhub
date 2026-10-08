@@ -1,5 +1,8 @@
 import { EventCard } from "@/features/catalog/components/event-card"
-import { getPublishedEvents } from "@/features/catalog/lib/get-published-events"
+import {
+  getPublishedEvents,
+  type PublishedEventsFilter,
+} from "@/features/catalog/lib/get-published-events"
 import { Card, CardContent } from "@/features/shared/components/ui/card"
 
 function EmptyState({ children }: { children: React.ReactNode }) {
@@ -12,8 +15,13 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   )
 }
 
-export async function EventList() {
-  const { events, unavailable } = await getPublishedEvents()
+interface EventListProps {
+  filter?: PublishedEventsFilter
+}
+
+export async function EventList({ filter }: EventListProps) {
+  const hasActiveFilter = Boolean(filter?.location || filter?.date)
+  const { events, unavailable } = await getPublishedEvents(filter)
 
   if (unavailable) {
     return (
@@ -27,7 +35,9 @@ export async function EventList() {
   if (events.length === 0) {
     return (
       <EmptyState>
-        Aktuell sind keine Veranstaltungen veröffentlicht.
+        {hasActiveFilter
+          ? "Keine Veranstaltungen gefunden, die zu deinem Filter passen."
+          : "Aktuell sind keine Veranstaltungen veröffentlicht."}
       </EmptyState>
     )
   }
