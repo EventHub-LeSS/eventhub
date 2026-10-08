@@ -385,3 +385,42 @@ func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.Publi
 	}
 	return details, nil
 }
+
+// GetSalesDashboard returns sales figures for all events of managed organizations.
+// Only confirmed bookings count as sold tickets.
+func (s *EventService) GetSalesDashboard(
+	keycloakOrgIDs []string,
+) ([]model.SalesDashboardEventResponse, error) {
+	if len(keycloakOrgIDs) == 0 {
+		return nil, ErrForbidden
+	}
+
+	events, err := s.ListOwnEvents(keycloakOrgIDs, "")
+	if err != nil {
+		return nil, err
+	}
+
+	dashboard := make([]model.SalesDashboardEventResponse, 0, len(events))
+
+	for _, event := range events {
+		soldTickets, err := s.eventRepo.GetConfirmedTicketCount(event.EventID)
+		if err != nil {
+			return nil, err
+		}
+
+		availableSeats := int64(event.Capacity) - soldTickets
+		if availableSeats < 0 {
+			availableSeats = 0
+		}
+
+		dashboard = append(dashboard, model.SalesDashboardEventResponse{
+			EventID:        event.EventID,
+			Title:          event.Title,
+			Capacity:       event.Capacity,
+			SoldTickets:    soldTickets,
+			AvailableSeats: availableSeats,
+		})
+	}
+
+	return dashboard, nil
+}

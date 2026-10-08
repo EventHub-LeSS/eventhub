@@ -25,6 +25,9 @@ type fakeEventRepo struct {
 	listed     []*model.EventModel
 	listOrgIDs []uuid.UUID
 	listStatus model.EventStatus
+
+	ticketCounts   map[uuid.UUID]int64
+	ticketCountErr error
 }
 
 func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
@@ -57,8 +60,11 @@ func (f *fakeEventRepo) ListByOrganizers(organizationIDs []uuid.UUID, status mod
 	return f.listed, nil
 }
 
-func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
-	return 0, nil
+func (f *fakeEventRepo) GetConfirmedTicketCount(eventID uuid.UUID) (int64, error) {
+	if f.ticketCountErr != nil {
+		return 0, f.ticketCountErr
+	}
+	return f.ticketCounts[eventID], nil
 }
 
 func (f *fakeEventRepo) LockEvent(uuid.UUID) (*model.EventModel, error) {
@@ -601,4 +607,147 @@ func TestListOwnEvents_ListsManagedOrganizations(t *testing.T) {
 
 func (f *fakeEventRepo) GetPublishedEventDetails(uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
 	return nil, nil
+}
+
+func TestGetSalesDashboard_ReturnsSalesFigures(t *testing.T) {
+	eventA := eventOwnedBy(orgA, model.EventStatusPublished)
+	eventA.Title = "Konzert A"
+	eventA.Capacity = 100
+
+	eventB := eventOwnedBy(orgB, model.EventStatusPublished)
+	eventB.Title = "Konzert B"
+	eventB.Capacity = 50
+
+	svc, repo := newTestService(nil)
+	repo.listed = []*model.EventModel{eventA, eventB}
+	repo.ticketCounts = map[uuid.UUID]int64{
+		eventA.EventID: 30,
+		eventB.EventID: 50,
+	}
+
+	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a", "kc-org-b"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dashboard) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(dashboard))
+	}
+
+	want := []model.SalesDashboardEventResponse{
+		{
+			EventID:        eventA.EventID,
+			Title:          "Konzert A",
+			Capacity:       100,
+			SoldTickets:    30,
+			AvailableSeats: 70,
+		},
+		{
+			EventID:        eventB.EventID,
+			Title:          "Konzert B",
+			Capacity:       50,
+			SoldTickets:    50,
+			AvailableSeats: 0,
+		},
+	}
+
+	for i := range want {
+		if dashboard[i] != want[i] {
+			t.Errorf("event %d: got %+v, want %+v", i, dashboard[i], want[i])
+		}
+	}
+}
+
+func TestGetSalesDashboard_PassesOnlyManagedOrganizations(t *testing.T) {
+	svc, repo := newTestService(nil)
+
+	_, err := svc.GetSalesDashboard([]string{"alias-a"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(repo.listOrgIDs) != 1 || repo.listOrgIDs[0] != orgA.OrganizationID {
+		t.Fatalf("expected only organization A, got %v", repo.listOrgIDs)
+	}
+	if repo.listStatus != "" {
+		t.Fatalf("expected no status filter, got %q", repo.listStatus)
+	}
+}
+
+func TestGetSalesDashboard_ReturnsEmptySlice(t *testing.T) {
+	svc, _ := newTestService(nil)
+
+	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dashboard == nil {
+		t.Fatal("expected a non-nil empty slice")
+	}
+	if len(dashboard) != 0 {
+		t.Fatalf("expected no events, got %d", len(dashboard))
+	}
+}
+
+func TestGetSalesDashboard_NoSales(t *testing.T) {
+	event := eventOwnedBy(orgA, model.EventStatusPublished)
+	event.Capacity = 100
+
+	svc, repo := newTestService(nil)
+	repo.listed = []*model.EventModel{event}
+
+	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dashboard) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(dashboard))
+	}
+	if dashboard[0].SoldTickets != 0 || dashboard[0].AvailableSeats != 100 {
+		t.Fatalf("unexpected sales figures: %+v", dashboard[0])
+	}
+}
+
+func TestGetSalesDashboard_ClampsAvailableSeatsToZero(t *testing.T) {
+	event := eventOwnedBy(orgA, model.EventStatusPublished)
+	event.Capacity = 10
+
+	svc, repo := newTestService(nil)
+	repo.listed = []*model.EventModel{event}
+	repo.ticketCounts = map[uuid.UUID]int64{
+		event.EventID: 12,
+	}
+
+	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dashboard) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(dashboard))
+	}
+	if dashboard[0].SoldTickets != 12 || dashboard[0].AvailableSeats != 0 {
+		t.Fatalf("unexpected sales figures: %+v", dashboard[0])
+	}
+}
+
+func TestGetSalesDashboard_RejectsMissingManagedOrganizations(t *testing.T) {
+	svc, _ := newTestService(nil)
+
+	_, err := svc.GetSalesDashboard(nil)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestGetSalesDashboard_PropagatesTicketCountError(t *testing.T) {
+	event := eventOwnedBy(orgA, model.EventStatusPublished)
+	svc, repo := newTestService(nil)
+	repo.listed = []*model.EventModel{event}
+
+	wantErr := errors.New("ticket count failed")
+	repo.ticketCountErr = wantErr
+
+	_, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
 }

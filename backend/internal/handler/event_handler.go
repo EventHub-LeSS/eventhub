@@ -402,3 +402,29 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, details)
 }
+
+// EVENTHUB-241: Verkaufsdashboard anzeigen
+// @Summary      Get sales dashboard
+// @Description  Returns sales figures for events of all organizations in which the caller holds the event_manager role. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if there are no own events.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200 {array} model.SalesDashboardEventResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/self/dashboard [get]
+func (h *EventHandler) GetSalesDashboardHandler(c *gin.Context) {
+	managedOrgIDs, ok := managedOrganizationIDs(c)
+	if !ok {
+		return
+	}
+
+	dashboard, err := h.eventService.GetSalesDashboard(managedOrgIDs)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dashboard)
+}

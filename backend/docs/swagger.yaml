@@ -506,6 +506,19 @@ definitions:
       title:
         type: string
     type: object
+  model.SalesDashboardEventResponse:
+    properties:
+      availableSeats:
+        type: integer
+      capacity:
+        type: integer
+      eventId:
+        type: string
+      soldTickets:
+        type: integer
+      title:
+        type: string
+    type: object
   model.SoldTicketsResponse:
     properties:
       eventId:
@@ -1184,6 +1197,38 @@ paths:
       security:
       - BearerAuth: []
       summary: List own events
+      tags:
+      - events
+  /events/self/dashboard:
+    get:
+      description: Returns sales figures for events of all organizations in which
+        the caller holds the event_manager role. Sold tickets count only confirmed
+        bookings. Available seats are capacity minus confirmed tickets, with a minimum
+        of zero. Returns an empty array if there are no own events.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.SalesDashboardEventResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get sales dashboard
       tags:
       - events
   /organizations/:
