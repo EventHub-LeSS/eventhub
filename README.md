@@ -201,6 +201,19 @@ denen der Aufrufer `event_manager` ist (z. B. die eigenen Entwürfe), sortiert n
 `EventService.ListByOrganization`; der Service prüft die Mitgliedschaft mit `managesOrganization`
 wie `UpdateEvent`, `PublishEvent`, `WithdrawEvent` und `GetEventStatistics`.
 
+**Getestet:** Automatisch über `TestListOrganizationEventsHandler_*` in `backend/internal/handler`
+(Mitgliedschaft je Rolle, Nicht-Mitglied, unbekannte und ungültige ID, ohne Anmeldung, leere
+Organisation, Datenbankfehler). Zusätzlich wurde der Endpunkt vor dem Merge von PR #41 manuell mit
+dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten getestet:
+
+- Mitglieder mit `event_manager`, `finance_viewer` und `org_admin` erhalten alle Events ihrer
+  Organisation, inklusive Entwürfen.
+- Nicht-Mitglieder, Besucher ohne Organisation und unbekannte UUIDs erhalten `404`, eine ungültige
+  ID `400` und Aufrufe ohne Token `401`.
+- Benutzer in mehreren Organisationen sehen nur die Events der Organisationen, in denen sie Mitglied
+  sind.
+- `GET /events/self` und `GET /events` verhalten sich unverändert.
+
 ### Audit Log der Organisationen
 
 Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
