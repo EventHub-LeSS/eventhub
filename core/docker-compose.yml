@@ -108,6 +108,15 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local dev-only SMTP catcher so Keycloak's org-invite emails (and any other realm
+  # mail) are visible without real delivery. Web UI at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+
   keycloak-postgres:
     image: postgres:16-alpine
     container_name: keycloak_db
@@ -138,6 +147,7 @@ services:
       - "${KEYCLOAK_PORT:-8081}:8080"
     depends_on:
       - keycloak-postgres
+      - mailpit
 
   keycloak-swagger:
     build:
@@ -147,7 +157,7 @@ services:
     environment:
       - APP_ENV=${APP_ENV:-dev}
     ports:
-      - "8088:8080"
+      - "${KEYCLOAK_SWAGGER_PORT:-8082}:8080"
 
 volumes:
   keycloak_postgres_data:

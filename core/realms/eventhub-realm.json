@@ -15,6 +15,15 @@
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "noreply@eventhub.local",
+    "fromDisplayName": "EventHub",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
   "organizations": [
     {
       "name": "Provadis Hochschule",
@@ -72,6 +81,7 @@
       "defaultClientScopes": [
         "basic",
         "profile",
+        "email",
         "roles",
         "backend-audience"
       ],
@@ -213,6 +223,32 @@
           "config": {
             "user.attribute": "username",
             "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "EventHub user email claim",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
             "jsonType.label": "String",
             "id.token.claim": "true",
             "access.token.claim": "true",
