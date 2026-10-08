@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -20,12 +21,24 @@ type listOrganizationRepo struct {
 	err       error
 	requested uuid.UUID
 	calls     int
+	lookups   []string
 }
 
 func (r *listOrganizationRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	r.requested = id
 	r.calls++
 	return r.org, r.err
+}
+
+func (r *listOrganizationRepo) ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error) {
+	r.lookups = append(r.lookups, refs...)
+	if r.err != nil || r.org == nil {
+		return nil, r.err
+	}
+	if slices.Contains(refs, r.org.KeycloakOrgID) || slices.Contains(refs, r.org.Alias) {
+		return []*model.OrganizationModel{r.org}, nil
+	}
+	return nil, nil
 }
 
 type listEventRepo struct {
@@ -59,7 +72,10 @@ func TestListOrganizationEventsHandler_Membership(t *testing.T) {
 		eventCalls int
 	}{
 		{name: "unauthenticated", id: orgID.String(), want: http.StatusUnauthorized},
-		{name: "invalid organization ID", id: "invalid", principal: principalManaging("kc-org"), want: http.StatusBadRequest},
+		{name: "unknown alias", id: "invalid", principal: principalManaging("kc-org"), org: org, want: http.StatusNotFound},
+		{name: "by alias", id: "org-alias", principal: principalManaging("kc-org"), org: org, want: http.StatusOK, orgCalls: 1, eventCalls: 1},
+		{name: "by alias without membership", id: "org-alias", principal: principalManaging("other-org"), org: org, want: http.StatusNotFound, orgCalls: 1},
+		{name: "alias lookup fails", id: "org-alias", principal: principalManaging("kc-org"), orgErr: errors.New("lookup failed"), want: http.StatusInternalServerError},
 		{name: "no membership", id: orgID.String(), principal: &middleware.Principal{Subject: "user"}, org: org, want: http.StatusNotFound, orgCalls: 1},
 		{name: "role in another org", id: orgID.String(), principal: principalManaging("other-org"), org: org, want: http.StatusNotFound, orgCalls: 1},
 		{name: "unknown organization", id: orgID.String(), principal: principalManaging("kc-org"), want: http.StatusNotFound, orgCalls: 1},

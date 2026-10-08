@@ -493,7 +493,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all events of the organization, in every status including drafts. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.",
+                "description": "Returns all events of the organization, in every status including drafts. The organization is addressed by its database UUID or by its alias, which is what tokens carry. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.",
                 "produces": [
                     "application/json"
                 ],
@@ -504,7 +504,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Organization ID (database UUID)",
+                        "description": "Organization database UUID or alias",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -518,12 +518,6 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/model.EventModel"
                             }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "401": {
