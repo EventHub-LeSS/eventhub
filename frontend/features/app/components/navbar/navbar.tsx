@@ -1,11 +1,15 @@
 "use client"
 
 import {
+  BarChart3Icon,
   CalendarDaysIcon,
+  ClipboardListIcon,
   CompassIcon,
+  FlagIcon,
   HeartIcon,
   LayoutDashboardIcon,
   MenuIcon,
+  ShieldIcon,
   TagsIcon,
   TicketIcon,
   type LucideIcon,
@@ -39,12 +43,14 @@ interface NavbarProps {
 
 const visitorLinks: NavLink[] = [
   { label: "Discover", href: "/", icon: CompassIcon },
-  { label: "My Tickets", href: "/tickets", icon: TicketIcon },
+  { label: "Bookings", href: "/bookings", icon: ClipboardListIcon },
+  { label: "Tickets", href: "/tickets", icon: TicketIcon },
   { label: "Favorites", href: "/favorites", icon: HeartIcon },
   { label: "Calendar", href: "/calendar", icon: CalendarDaysIcon },
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
+  // Anonymous users must sign in before they get visitor functions, so their nav stays minimal.
   guest: [
     { label: "Discover", href: "/", icon: CompassIcon },
     { label: "Categories", href: "/categories", icon: TagsIcon },
@@ -53,9 +59,22 @@ const navigationByRole: Record<UserRole, NavLink[]> = {
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [
     ...visitorLinks,
-    { label: "Organizer", href: "/organizer", icon: LayoutDashboardIcon },
+    { label: "Event Management", href: "/organizer", icon: LayoutDashboardIcon },
+    { label: "Sales", href: "/organizer/sales", icon: BarChart3Icon },
   ],
 }
+
+// Admins and moderators are platform-wide flags independent of `role` (see SessionUser),
+// so their nav replaces the role-based links entirely instead of being keyed by UserRole.
+const adminLinks: NavLink[] = [
+  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Administration", href: "/admin", icon: ShieldIcon },
+]
+
+const moderatorLinks: NavLink[] = [
+  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Moderation", href: "/moderation", icon: FlagIcon },
+]
 
 /** Returns the most specific matching href, so /organizer/events/new does not also light up /organizer/events. */
 function activeHref(pathname: string, links: NavLink[]) {
@@ -76,7 +95,11 @@ function activeHref(pathname: string, links: NavLink[]) {
 export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
-  const links = navigationByRole[role]
+  const links = user?.isAdmin
+    ? adminLinks
+    : user?.isModerator
+      ? moderatorLinks
+      : navigationByRole[role]
   const active = activeHref(pathname, links)
 
   return (

@@ -6,6 +6,7 @@ import { readActiveOrganization } from "@/features/auth/lib/active-organization"
 import { readSession, type Session } from "@/features/auth/lib/session"
 import {
   isAdminFromAccessToken,
+  isModeratorFromAccessToken,
   roleFor,
   type SessionUser,
 } from "@/features/auth/lib/user"
@@ -29,6 +30,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     activeOrganization: await readActiveOrganization(session.organizations),
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
+    isModerator: isModeratorFromAccessToken(session.accessToken),
   }
 }
 
@@ -56,6 +58,16 @@ export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireSession()
 
   if (!user.isAdmin) {
+    redirect("/")
+  }
+
+  return user
+}
+
+export async function requireModerator(): Promise<SessionUser> {
+  const user = await requireSession()
+
+  if (!user.isModerator) {
     redirect("/")
   }
 
