@@ -55,21 +55,33 @@ function adminBaseUrl(): string {
   return envConfig.keycloakIssuer.replace("/realms/", "/admin/realms/");
 }
 
-async function keycloakFetch<T>(
+async function keycloakRequest(
   accessToken: string,
   path: string,
-): Promise<T> {
+  init: RequestInit = {},
+): Promise<Response> {
   const response = await fetch(`${adminBaseUrl()}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    ...init,
+    headers: { Authorization: `Bearer ${accessToken}`, ...init.headers },
     cache: "no-store",
   });
 
   if (!response.ok) {
+    const detail = await response.text().catch(() => "");
     throw new KeycloakAdminError(
-      `Keycloak admin request to ${path} failed`,
+      detail || `Keycloak admin request to ${path} failed`,
       response.status,
     );
   }
+
+  return response;
+}
+
+async function keycloakFetch<T>(
+  accessToken: string,
+  path: string,
+): Promise<T> {
+  const response = await keycloakRequest(accessToken, path);
 
   return (await response.json()) as T;
 }
@@ -171,4 +183,69 @@ export async function getOrganizationMembersWithRights(
       : null,
     rights: rightsByUserId.get(member.id) ?? [],
   }));
+}
+
+/**
+ * Invites someone to the organization by email via Keycloak's own Organizations
+ * invitation flow (POST .../members/invite-user). New emails get an account-setup
+ * invite, existing users get a join invite; either way membership is pending until
+ * they accept, matching "Scheidet ein Mitarbeitender aus, bleiben Daten bei der
+ * Organisation" — nothing is granted to this app until Keycloak confirms it.
+ */
+export async function inviteOrganizationMember(
+  accessToken: string,
+  orgId: string,
+  email: string,
+  name?: string,
+): Promise<void> {
+  const form = new FormData();
+  form.set("email", email);
+
+  const trimmedName = name?.trim();
+  if (trimmedName) {
+    const [firstName, ...rest] = trimmedName.split(/\s+/);
+    form.set("firstName", firstName);
+    if (rest.length > 0) {
+      form.set("lastName", rest.join(" "));
+    }
+  }
+
+  await keycloakRequest(accessToken, `/organizations/${orgId}/members/invite-user`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+/**
+ * Removes someone's membership only — their events, sales figures and billing
+ * records live on the organization itself, not on the Keycloak user, so this
+ * cannot and does not touch them.
+ */
+export async function removeOrganizationMember(
+  accessToken: string,
+  orgId: string,
+  userId: string,
+): Promise<void> {
+  await keycloakRequest(accessToken, `/organizations/${orgId}/members/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+/** The members API is keyed by username, but Keycloak's endpoint takes the user's ID. */
+export async function removeOrganizationMemberByUsername(
+  accessToken: string,
+  orgId: string,
+  username: string,
+): Promise<void> {
+  const members = await getOrganizationMembersWithRights(accessToken, orgId);
+  const member = members.find((candidate) => candidate.username === username);
+
+  if (!member) {
+    throw new KeycloakAdminError(
+      `"${username}" is not a member of this organization`,
+      404,
+    );
+  }
+
+  await removeOrganizationMember(accessToken, orgId, member.id);
 }
