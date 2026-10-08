@@ -78,7 +78,7 @@ func TestListOrganizationEventsHandler_Membership(t *testing.T) {
 			if !tt.empty {
 				eventRepo.events = []*model.EventModel{event}
 			}
-			h := NewEventHandler(service.NewEventService(eventRepo, orgRepo, nil), nil, orgRepo)
+			h := NewEventHandler(service.NewEventService(eventRepo, orgRepo, nil))
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
 			router.GET("/api/v1/events/org/:id", func(c *gin.Context) {

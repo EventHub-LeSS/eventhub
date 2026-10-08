@@ -493,14 +493,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns events from the requested organization. Requires organization membership, regardless of role.",
+                "description": "Returns all events of the organization, in every status including drafts. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "events"
                 ],
-                "summary": "Get organization events by the given id",
+                "summary": "List organization events",
                 "parameters": [
                     {
                         "type": "string",
@@ -512,7 +512,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Events of the organization; an empty array if there are none",
                         "schema": {
                             "type": "array",
                             "items": {
@@ -529,7 +529,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
+                            "$ref": "#/definitions/model.APIError"
                         }
                     },
                     "404": {

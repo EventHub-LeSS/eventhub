@@ -3,7 +3,6 @@ package handler
 import (
 	"backend/internal/middleware"
 	"backend/internal/model"
-	"backend/internal/repository"
 	"backend/internal/service"
 	"errors"
 	"net/http"
@@ -17,13 +16,11 @@ import (
 )
 
 type EventHandler struct {
-	eventService    *service.EventService
-	keycloakService *service.KeycloakService
-	orgRepo         repository.OrganizationRepository
+	eventService *service.EventService
 }
 
-func NewEventHandler(eventService *service.EventService, keycloakService *service.KeycloakService, orgRepo repository.OrganizationRepository) *EventHandler {
-	return &EventHandler{eventService: eventService, keycloakService: keycloakService, orgRepo: orgRepo}
+func NewEventHandler(eventService *service.EventService) *EventHandler {
+	return &EventHandler{eventService: eventService}
 }
 
 // managedOrganizationIDs returns the organizations in which the caller holds the event_manager
@@ -198,6 +195,8 @@ func writeEventActionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrEventNotFound):
 		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrOrganizationNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, service.ErrInvalidStatus):
@@ -258,85 +257,41 @@ func (h *EventHandler) ListOwnEventsHandler(c *gin.Context) {
 }
 
 // EVENTHUB-79: Veranstaltungen einer Organisation anzeigen
-// ListOrganizationEventsHandler
-// @Summary      Get organization events by the given id
-// @Description  Returns events from the requested organization. Requires organization membership, regardless of role.
+// @Summary      List organization events
+// @Description  Returns all events of the organization, in every status including drafts. Requires membership in the organization, regardless of role. Organizations the caller is not a member of return 404, like unknown ones.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
 // @Param        id path string true "Organization ID (database UUID)"
-// @Success      200 {array} model.EventModel
+// @Success      200 {array}  model.EventModel "Events of the organization; an empty array if there are none"
 // @Failure      400 {object} model.ErrorResponse
-// @Failure      401 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
 // @Failure      404 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /events/org/{id} [get]
 func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
-	orgID, err := uuid.Parse(c.Param("id"))
+	organizationID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		writeProblem(c, http.StatusBadRequest, "invalid organization id")
 		return
 	}
-	principal, rsp := checkPreconditions(c, nil)
-	if rsp != nil {
-		c.AbortWithStatusJSON(rsp.Status, rsp)
-		return
-	}
 
-	org, err := h.orgRepo.GetByID(orgID)
-	if err != nil {
-		writeProblem(c, http.StatusInternalServerError, "error getting organization")
-		return
-	}
-
-	if org == nil {
-		writeProblem(c, http.StatusNotFound, "organization not found")
-		return
-	}
-
-	for _, userOrg := range principal.Organizations {
-		if userOrg != nil && (userOrg.ID == org.KeycloakOrgID ||
-			(org.Alias != "" && (userOrg.ID == org.Alias || userOrg.Alias == org.Alias))) {
-			events, err := h.eventService.ListByOrganization(orgID)
-			if err != nil {
-				writeEventActionError(c, err)
-				return
-			}
-			if events == nil {
-				events = make([]*model.EventModel, 0)
-			}
-			c.JSON(http.StatusOK, events)
-			return
-		}
-	}
-
-	writeProblem(c, http.StatusNotFound, "organization not found")
-}
-
-func checkPreconditions(c *gin.Context, role *middleware.OrganizationRole) (*middleware.Principal, *model.ErrorResponse) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
-		return nil, &model.ErrorResponse{
-			Status: 401,
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusUnauthorized),
-			Detail: "Authentication is required!",
-		}
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
 	}
 
-	if role == nil {
-		return principal, nil
+	events, err := h.eventService.ListByOrganization(organizationID, principal.OrganizationIDs())
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	if events == nil {
+		events = []*model.EventModel{}
 	}
 
-	if !principal.HasOrganizationRole(*role) {
-		return principal, &model.ErrorResponse{
-			Status: 403,
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusForbidden),
-			Detail: "Insufficient organization role",
-		}
-	}
-	return principal, nil
+	c.JSON(http.StatusOK, events)
 }
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen

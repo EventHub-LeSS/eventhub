@@ -42,7 +42,7 @@ func TestListPublishedEventsResponses(t *testing.T) {
 		{"database error", &publishedEventsStub{err: errors.New("private database details")}, http.StatusInternalServerError, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewEventHandler(service.NewEventService(tc.repo, nil, nil), nil, nil)
+			h := NewEventHandler(service.NewEventService(tc.repo, nil, nil))
 			router := gin.New()
 			router.GET("/api/v1/events", h.ListPublishedEventsHandler)
 			rec := httptest.NewRecorder()
@@ -191,7 +191,7 @@ func TestPublishedEventsLocationValidation(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			repo := &publishedEventsStub{}
 			router := gin.New()
-			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil), nil, nil).ListPublishedEventsHandler)
+			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil)).ListPublishedEventsHandler)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?location="+url.QueryEscape(tc.input), nil))
 			if rec.Code != tc.status {
@@ -269,7 +269,7 @@ func TestPublishedEventsCategoryValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &publishedEventsStub{}
 			router := gin.New()
-			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil), nil, nil).ListPublishedEventsHandler)
+			router.GET("/api/v1/events", NewEventHandler(service.NewEventService(repo, nil, nil)).ListPublishedEventsHandler)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?categoryId="+url.QueryEscape(tc.input), nil))
 			if !tc.valid {

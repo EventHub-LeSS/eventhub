@@ -81,7 +81,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 		repository.NewOrganizationRepository(db),
 		repository.NewTransactor(db),
 	)
-	h := NewEventHandler(eventService, nil, repository.NewOrganizationRepository(db))
+	h := NewEventHandler(eventService)
 
 	setPrincipal := func(c *gin.Context) {
 		if principal != nil {

@@ -79,7 +79,7 @@ func main() {
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
-	eventHandler := handler.NewEventHandler(eventService, keycloakService, orgRepo)
+	eventHandler := handler.NewEventHandler(eventService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
