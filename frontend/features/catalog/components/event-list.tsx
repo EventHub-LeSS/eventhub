@@ -21,7 +21,7 @@ interface EventListProps {
 
 export async function EventList({ filter }: EventListProps) {
   const hasActiveFilter = Boolean(
-    filter?.location || filter?.date || filter?.categoryId
+    filter?.title || filter?.location || filter?.date || filter?.categoryId
   )
   const { events, unavailable } = await getPublishedEvents(filter)
 

@@ -4,6 +4,7 @@ import { EventFilters, EventList, getEventCategories } from "@/features/catalog"
 
 interface PageProps {
   searchParams: Promise<{
+    title?: string
     location?: string
     date?: string
     categoryId?: string
@@ -11,7 +12,7 @@ interface PageProps {
 }
 
 export default async function Page({ searchParams }: PageProps) {
-  const { location, date, categoryId } = await searchParams
+  const { title, location, date, categoryId } = await searchParams
   const categories = await getEventCategories()
 
   return (
@@ -24,7 +25,7 @@ export default async function Page({ searchParams }: PageProps) {
       <Suspense fallback={null}>
         <EventFilters categories={categories} />
       </Suspense>
-      <EventList filter={{ location, date, categoryId }} />
+      <EventList filter={{ title, location, date, categoryId }} />
     </div>
   )
 }

@@ -26,6 +26,7 @@ export function EventFilters({ categories }: EventFiltersProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  const [title, setTitle] = useState(searchParams.get("title") ?? "")
   const [location, setLocation] = useState(searchParams.get("location") ?? "")
   const [date, setDate] = useState(searchParams.get("date") ?? "")
   const [categoryId, setCategoryId] = useState(
@@ -33,6 +34,7 @@ export function EventFilters({ categories }: EventFiltersProps) {
   )
 
   const hasActiveFilter =
+    searchParams.has("title") ||
     searchParams.has("location") ||
     searchParams.has("date") ||
     searchParams.has("categoryId")
@@ -45,11 +47,18 @@ export function EventFilters({ categories }: EventFiltersProps) {
   }
 
   function applyFilters(next: {
+    title: string
     location: string
     date: string
     categoryId: string
   }) {
     const params = new URLSearchParams(searchParams)
+
+    if (next.title) {
+      params.set("title", next.title)
+    } else {
+      params.delete("title")
+    }
 
     if (next.location) {
       params.set("location", next.location)
@@ -75,14 +84,15 @@ export function EventFilters({ categories }: EventFiltersProps) {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    applyFilters({ location, date, categoryId })
+    applyFilters({ title, location, date, categoryId })
   }
 
   function handleReset() {
+    setTitle("")
     setLocation("")
     setDate("")
     setCategoryId(ALL_CATEGORIES)
-    applyFilters({ location: "", date: "", categoryId: "" })
+    applyFilters({ title: "", location: "", date: "", categoryId: "" })
   }
 
   return (
@@ -90,7 +100,21 @@ export function EventFilters({ categories }: EventFiltersProps) {
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-end"
     >
-      <div className="flex flex-1 flex-col gap-1.5">
+      <div className="flex min-w-[180px] flex-[2] flex-col gap-1.5">
+        <label
+          htmlFor="event-filter-title"
+          className="text-xs font-medium text-muted-foreground"
+        >
+          Titel
+        </label>
+        <Input
+          id="event-filter-title"
+          placeholder="Nach Titel suchen…"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </div>
+      <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
         <label
           htmlFor="event-filter-location"
           className="text-xs font-medium text-muted-foreground"

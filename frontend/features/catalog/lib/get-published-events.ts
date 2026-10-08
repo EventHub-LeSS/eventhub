@@ -9,6 +9,9 @@ export interface PublishedEventsFilter {
   date?: string
   /** Exact category UUID. */
   categoryId?: string
+  /** Case-insensitive substring of the event title. Applied client-side
+   * (see below), the backend has no `title`/search query param. */
+  title?: string
 }
 
 export interface PublishedEventsResult {
@@ -33,6 +36,9 @@ export interface PublishedEventsResult {
  * "unavailable" rather than thrown, so this page keeps rendering even if
  * the backend is unreachable or a filter value is rejected (e.g. an
  * invalid date or category UUID).
+ *
+ * `title` has no backend equivalent, so it's applied afterwards on the
+ * already-filtered result instead.
  */
 export async function getPublishedEvents(
   filter: PublishedEventsFilter = {}
@@ -59,11 +65,16 @@ export async function getPublishedEvents(
       return { events: [], unavailable: true }
     }
 
+    const title = filter.title?.trim().toLowerCase()
+
     return {
-      // Defense in depth: the endpoint only returns published events, but
-      // this keeps that acceptance criterion true even if that ever changes.
       events: (payload as PublishedEvent[]).filter(
-        (event) => event?.status === "published"
+        (event) =>
+          // Defense in depth: the endpoint only returns published events,
+          // but this keeps that acceptance criterion true even if that
+          // ever changes.
+          event?.status === "published" &&
+          (!title || event.title.toLowerCase().includes(title))
       ),
       unavailable: false,
     }
