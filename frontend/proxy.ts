@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import {
+  organizationsFromClaims,
   refreshAccessToken,
   sealSession,
   sessionCookieOptions,
@@ -55,6 +56,11 @@ async function withRefreshedSession(
 
     const updated: Session = {
       ...session,
+      // Keycloak recomputes claims from current state, so a refresh also picks up
+      // organizations created or joined after the session was issued.
+      organizations: refreshed.claims
+        ? organizationsFromClaims(refreshed.claims.organization)
+        : session.organizations,
       accessToken: refreshed.accessToken,
       refreshToken: refreshed.refreshToken,
       accessTokenExpiresAt: Date.now() + (refreshed.expiresIn ?? 0) * 1000,

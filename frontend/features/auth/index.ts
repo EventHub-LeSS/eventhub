@@ -1,3 +1,4 @@
+export { setActiveOrganizationCookie } from "@/features/auth/lib/active-organization"
 export {
   handleCallback,
   handleLogout,
@@ -7,6 +8,8 @@ export {
 export {
   getCurrentUser,
   getSession,
+  requireAdmin,
+  requireModerator,
   requireOrganizer,
   requireSession,
 } from "@/features/auth/lib/dal"
@@ -14,6 +17,7 @@ export { organizationsFromClaims, roleFor } from "@/features/auth/lib/user"
 export type { SessionUser, UserRole } from "@/features/auth/lib/user"
 export { refreshAccessToken } from "@/features/auth/lib/oidc"
 export {
+  createSessionCookie,
   sealSession,
   sessionCookieOptions,
   unsealSession,
