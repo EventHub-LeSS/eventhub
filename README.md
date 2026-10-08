@@ -93,7 +93,7 @@ werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden 
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
 per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur die Rollen
-`manage-organizations` und `manage-users` aus `realm-management`, kein `realm-admin`.
+`manage-organizations`, `manage-users` und `view-clients` aus `realm-management`, kein `realm-admin`.
 Frische Realms bekommen es über `core/realms/eventhub-realm.json`. Bei einem bestehenden
 Keycloak-Volume richtet `docker compose up api-seed` das Service-Konto nachträglich ein.
 
@@ -141,3 +141,51 @@ bun dev
 ```
 
 Das Frontend läuft auf <http://localhost:3000>.
+
+### Event-Empfehlungen
+
+`GET /api/v1/recommendations` liefert für angemeldete Nutzer veröffentlichte,
+noch nicht gestartete Events mit freien Plätzen. Bestätigte eigene Buchungen
+werden ausgeschlossen. Bei der Verfügbarkeit zählen bestätigte Tickets und
+noch gültige Reservierungen; abgelaufene Reservierungen blockieren keine Plätze.
+Die Prüfung ist eine Momentaufnahme, keine Platzgarantie bei späterer Buchung.
+
+Das Ranking gewichtet Kategorie-Affinität mit 50 %, bestätigte Tickets relativ
+zur Kapazität mit 40 % und die durchschnittliche Veranstalterbewertung mit 10 %.
+Für die Kategorie-Affinität zählt jedes vergangene, bestätigt gebuchte Event
+einmal. Events ohne Kategorie bleiben im Nenner, tragen aber zu keiner Kategorie
+bei. Veranstalterbewertungen stammen wie bisher aus abgeschlossenen Events.
+Ohne Historie oder Bewertungen ist der jeweilige Anteil null. Bei gleichem Score
+entscheiden Startzeit und Event-ID. Es werden höchstens drei SQL-Abfragen pro
+Anfrage ausgeführt. Datenbankfehler führen zu HTTP 500 statt zu einem unbemerkt
+unvollständigen Ranking; Details werden nur serverseitig protokolliert.
+
+Migration 000005 erzwingt positive Event-Kapazitäten und ergänzt einen Index für
+bestätigte Nutzerbuchungen. Bestehende Kapazitäten kleiner oder gleich null müssen
+vor dem Einspielen fachlich korrigiert werden; die Migration verändert sie nicht
+automatisch.
+
+Backend-Tests laufen im Backend-Verzeichnis mit `go test ./...`. Die
+PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
+`go test -p 1 ./...` ausgeführt werden, weil mehrere Pakete dieselben Testtabellen
+zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
+Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
+
+### Audit Log der Organisationen
+
+Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
+
+**Einsicht:** `GET /api/v1/organizations/{organizationID}/audit-logs?limit=50&cursor=…` (neueste zuerst, max. 100 pro Seite, Cursor-Paginierung). Zugriff haben `org_admin` der Organisation und globale Admins. `organizationID` ist die Keycloak-Organisations-ID.
+
+**Garantien:** Event-Änderungen und Audit-Eintrag werden in einer Transaktion geschrieben; kann der Eintrag nicht geschrieben werden, wird die Änderung zurückgerollt. Keycloak-Rollenänderungen sind nicht transaktional: vor der ersten Änderung wird ein `started`-Eintrag geschrieben, danach ein Ergebniseintrag (`succeeded`/`incomplete`) mit derselben `operation_id`. Ein `started` ohne Ergebnis bedeutet „Ausgang unbestätigt“.
+
+**Grenzen:** Das Log belegt das verwendete Konto, nicht die reale Person hinter geteilten Zugangsdaten. Backups, Anwendungslogs und privilegierte Datenbankadministratoren sind nicht Teil der Garantie.
+
+**Neue Aktion ergänzen:**
+1. Aktion in `backend/internal/audit/audit.go` definieren.
+2. Route in `cmd/api/main.go` mit `middleware.Audit(audit.<Action>)` versehen (nach der Authentifizierung).
+3. Im Service Organisation autorisieren und `audit.MetaFromContext` auswerten, Eintrag in derselben Transaktion schreiben (`Tx.Audit`). Bei externen Systemen Start-/Ergebniseintrag wie in `ConfigureOrganizationMemberRoles`.
+
+**Aufbewahrung:** Einträge werden nach 10 Jahren täglich um 03:00 UTC per `pg_cron` (Migration `000007`) gelöscht. Die API-Datenbank braucht daher das Image aus `core/Dockerfile.api-db` und die Einstellungen `shared_preload_libraries=pg_cron`, `cron.database_name=<DB-Name>` (siehe `core/docker-compose.yml`). Ohne pg_cron bricht die Migration mit einer klaren Fehlermeldung ab. Bestehende Volumes bleiben erhalten; den `api-db`-Container mit `docker compose up -d --build api-db` neu erzeugen. Für externe Deployments (z. B. Dockhand) das Image `ghcr.io/<owner>/api-db` mit denselben Parametern verwenden.
+
+**Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.

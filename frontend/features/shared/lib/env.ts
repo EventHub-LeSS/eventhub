@@ -5,6 +5,7 @@ const devDefaults: Record<string, string> = {
   KEYCLOAK_CLIENT_ID: "frontend",
   APP_BASE_URL: "http://localhost:3000",
   SESSION_SECRET: "replace-me-with-32-random-bytes-base64",
+  API_BASE_URL: "http://localhost:8080/api/v1",
 }
 
 const isProduction = process.env.NODE_ENV === "production"
@@ -44,5 +45,8 @@ export const envConfig = {
   },
   get sessionSecret() {
     return get("SESSION_SECRET")
+  },
+  get apiBaseUrl() {
+    return get("API_BASE_URL")
   },
 }
