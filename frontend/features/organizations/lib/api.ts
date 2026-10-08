@@ -162,3 +162,69 @@ async function updateMemberRoles(
 
   return body as UpdateMemberRolesResponse;
 }
+
+export interface InviteMemberVariables {
+  email: string;
+  name?: string;
+}
+
+export interface InviteMemberResponse {
+  message: string;
+}
+
+export function useInviteMember(alias: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<InviteMemberResponse, Error, InviteMemberVariables>({
+    mutationFn: (variables) => inviteMember(alias, variables),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["organization", alias, "members"],
+      });
+    },
+  });
+}
+
+async function inviteMember(
+  alias: string,
+  variables: InviteMemberVariables,
+): Promise<InviteMemberResponse> {
+  const response = await fetch(`/api/organizations/${alias}/members`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(variables),
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status));
+  }
+
+  return body as InviteMemberResponse;
+}
+
+export function useRemoveMember(alias: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: (username) => removeMember(alias, username),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["organization", alias, "members"],
+      });
+    },
+  });
+}
+
+async function removeMember(alias: string, username: string): Promise<void> {
+  const response = await fetch(
+    `/api/organizations/${alias}/members/${username}`,
+    { method: "DELETE" },
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(errorMessage(body, response.status));
+  }
+}

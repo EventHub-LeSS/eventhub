@@ -1,9 +1,12 @@
 "use client"
 
-import { PencilIcon } from "lucide-react"
+import { PencilIcon, UserMinusIcon } from "lucide-react"
 import { useState } from "react"
 
-import { useUpdateMemberRoles } from "@/features/organizations/lib/api"
+import {
+  useRemoveMember,
+  useUpdateMemberRoles,
+} from "@/features/organizations/lib/api"
 import type {
   OrganizationMember,
   OrganizationRight,
@@ -77,8 +80,12 @@ export function MembersTable({
   )
   const [draftRights, setDraftRights] = useState<OrganizationRight[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [removingMember, setRemovingMember] =
+    useState<OrganizationMember | null>(null)
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
   const updateMemberRoles = useUpdateMemberRoles(alias)
+  const removeMember = useRemoveMember(alias)
 
   function openEditDialog(member: OrganizationMember) {
     setError(null)
@@ -109,6 +116,22 @@ export function MembersTable({
         onError: (mutationError) => setError(mutationError.message),
       }
     )
+  }
+
+  function closeRemoveDialog(open: boolean) {
+    if (!open) {
+      setRemovingMember(null)
+      setRemoveError(null)
+    }
+  }
+
+  function handleConfirmRemove() {
+    if (!removingMember) return
+    setRemoveError(null)
+    removeMember.mutate(removingMember.username, {
+      onSuccess: () => setRemovingMember(null),
+      onError: (mutationError) => setRemoveError(mutationError.message),
+    })
   }
 
   return (
@@ -159,14 +182,26 @@ export function MembersTable({
                 {formatDate(member.joinedAt)}
               </TableCell>
               <TableCell>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => openEditDialog(member)}
-                >
-                  <PencilIcon />
-                  <span className="sr-only">Edit rights for {member.name}</span>
-                </Button>
+                <div className="flex justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => openEditDialog(member)}
+                  >
+                    <PencilIcon />
+                    <span className="sr-only">
+                      Edit rights for {member.name}
+                    </span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setRemovingMember(member)}
+                  >
+                    <UserMinusIcon />
+                    <span className="sr-only">Remove {member.name}</span>
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -220,6 +255,40 @@ export function MembersTable({
               disabled={updateMemberRoles.isPending}
             >
               {updateMemberRoles.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={removingMember !== null} onOpenChange={closeRemoveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove member</DialogTitle>
+            <DialogDescription>
+              {removingMember?.name} will lose access to this organization.
+              Events, sales figures and billing they worked on stay with the
+              organization.
+            </DialogDescription>
+          </DialogHeader>
+
+          {removeError ? (
+            <p className="text-sm text-destructive">{removeError}</p>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRemovingMember(null)}
+              disabled={removeMember.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmRemove}
+              disabled={removeMember.isPending}
+            >
+              {removeMember.isPending ? "Removing…" : "Remove member"}
             </Button>
           </DialogFooter>
         </DialogContent>

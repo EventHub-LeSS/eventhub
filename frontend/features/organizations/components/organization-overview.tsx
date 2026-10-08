@@ -126,6 +126,7 @@ export function OrganizationOverview({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
         <OrganizationHeader
           organization={organization}
+          alias={alias}
           isEditing={isEditing}
           onEditClick={handleEditClick}
           onSaveClick={handleSaveClick}
