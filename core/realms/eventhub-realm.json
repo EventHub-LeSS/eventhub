@@ -165,6 +165,24 @@
       }
     },
     {
+      "username": "moderator@eventhub.de",
+      "email": "moderator@eventhub.de",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Eventhub",
+      "lastName": "Moderator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "backend": ["moderator"]
+      }
+    },
+    {
       "username": "service-account-backend",
       "enabled": true,
       "serviceAccountClientId": "backend",
