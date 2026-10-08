@@ -126,6 +126,30 @@
           }
         ]
       }
+    },
+    {
+      "files": ["features/events/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/events/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }
