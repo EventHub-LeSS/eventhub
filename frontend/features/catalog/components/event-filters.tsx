@@ -157,7 +157,7 @@ export function EventFilters({ categories }: EventFiltersProps) {
           <SelectTrigger id="event-filter-category" className="w-full">
             <SelectValue placeholder="Alle Kategorien" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false}>
             <SelectItem value={ALL_CATEGORIES}>Alle Kategorien</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.categoryId} value={category.categoryId}>
