@@ -25,6 +25,9 @@ const lockKey = 770077
 // Open returns a migrated, empty database for the test, or skips the test when
 // TEST_DATABASE_DSN is not set.
 //
+// The database must provide pg_cron (migration 000007): use the image of core/Dockerfile.api-db and
+// start it with -c shared_preload_libraries=pg_cron -c cron.database_name=<database>.
+//
 // Every call truncates all tables, so point TEST_DATABASE_DSN at a throwaway instance and never
 // at your development database, e.g.:
 //
@@ -52,7 +55,7 @@ func Open(t *testing.T) *gorm.DB {
 			gormDB.Close()
 		}
 	})
-	if err := db.Exec("TRUNCATE bookings, events, organizations, users, categories, locations CASCADE").Error; err != nil {
+	if err := db.Exec("TRUNCATE bookings, events, organizations, users, categories, locations, audit_logs CASCADE").Error; err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return db

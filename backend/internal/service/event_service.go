@@ -1,9 +1,12 @@
 package service
 
 import (
+	"backend/internal/audit"
 	"backend/internal/model"
 	"backend/internal/repository"
+	"context"
 	"errors"
+	"math"
 	"slices"
 
 	"github.com/google/uuid"
@@ -40,7 +43,11 @@ func (s *EventService) CreateEvent(event *model.EventModel) error {
 
 // CreateDraft saves a new event in status draft. keycloakOrgIDs are the organizations in which the
 // caller may manage events; req.OrganizationID picks one of them and may be omitted if there is only one.
-func (s *EventService) CreateDraft(keycloakOrgIDs []string, req model.CreateDraftRequest) (*model.EventModel, error) {
+func (s *EventService) CreateDraft(ctx context.Context, keycloakOrgIDs []string, req model.CreateDraftRequest) (*model.EventModel, error) {
+	meta, err := audit.MetaFromContext(ctx, audit.EventCreated)
+	if err != nil {
+		return nil, err
+	}
 	orgRef := req.OrganizationID
 	if orgRef == "" {
 		switch len(keycloakOrgIDs) {
@@ -80,7 +87,13 @@ func (s *EventService) CreateDraft(keycloakOrgIDs []string, req model.CreateDraf
 		LocationID:  &req.LocationID,
 	}
 
-	if err := s.eventRepo.CreateEvent(event); err != nil {
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		if err := tx.Events.CreateEvent(event); err != nil {
+			return err
+		}
+		return appendEventAudit(tx, meta, org, event.EventID, model.AuditChanges{"event": eventSnapshot(event)})
+	})
+	if err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -110,12 +123,17 @@ func (s *EventService) ListOwnEvents(keycloakOrgIDs []string, status model.Event
 
 // keycloakOrgIDs are the organizations in which the caller may manage events.
 func (s *EventService) UpdateEvent(
+	ctx context.Context,
 	eventID uuid.UUID,
 	keycloakOrgIDs []string,
 	req model.UpdateEventRequest,
 ) (*model.EventModel, error) {
+	meta, err := audit.MetaFromContext(ctx, audit.EventUpdated)
+	if err != nil {
+		return nil, err
+	}
 	var updated *model.EventModel
-	err := s.tx.InTransaction(func(tx repository.Tx) error {
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		event, err := tx.Events.LockEvent(eventID)
 		if err != nil {
 			return err
@@ -141,6 +159,7 @@ func (s *EventService) UpdateEvent(
 			return ErrInvalidStatus
 		}
 
+		before := *event
 		event.Title = req.Title
 		event.Description = req.Description
 		event.StartTime = req.StartTime
@@ -152,6 +171,19 @@ func (s *EventService) UpdateEvent(
 
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
+		}
+		// Compare with the stored row: the database rounds the price to its column precision.
+		persisted, err := tx.Events.GetEventByID(eventID)
+		if err != nil {
+			return err
+		}
+		if persisted == nil {
+			return ErrEventNotFound
+		}
+		if fields := eventFieldChanges(&before, persisted); len(fields) > 0 {
+			if err := appendEventAudit(tx, meta, org, eventID, model.AuditChanges{"fields": fields}); err != nil {
+				return err
+			}
 		}
 		updated = event
 		return nil
@@ -197,8 +229,12 @@ func isEventComplete(event *model.EventModel) bool {
 	return true
 }
 
-func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	return s.tx.InTransaction(func(tx repository.Tx) error {
+func (s *EventService) PublishEvent(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) error {
+	meta, err := audit.MetaFromContext(ctx, audit.EventPublished)
+	if err != nil {
+		return err
+	}
+	return s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		event, err := tx.Events.LockEvent(eventID)
 		if err != nil {
 			return err
@@ -226,12 +262,19 @@ func (s *EventService) PublishEvent(eventID uuid.UUID, keycloakOrgIDs []string) 
 			return ErrIncomplete
 		}
 		event.Status = model.EventStatusPublished
-		return tx.Events.UpdateEvent(event)
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		return appendEventAudit(tx, meta, org, eventID, statusChange(model.EventStatusDraft, model.EventStatusPublished))
 	})
 }
 
-func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string) error {
-	return s.tx.InTransaction(func(tx repository.Tx) error {
+func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) error {
+	meta, err := audit.MetaFromContext(ctx, audit.EventCancelled)
+	if err != nil {
+		return err
+	}
+	return s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		event, err := tx.Events.LockEvent(eventID)
 		if err != nil {
 			return err
@@ -253,7 +296,10 @@ func (s *EventService) WithdrawEvent(eventID uuid.UUID, keycloakOrgIDs []string)
 			return ErrNotPublished
 		}
 		event.Status = model.EventStatusCancelled
-		return tx.Events.UpdateEvent(event)
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		return appendEventAudit(tx, meta, org, eventID, statusChange(model.EventStatusPublished, model.EventStatusCancelled))
 	})
 }
 
@@ -308,4 +354,34 @@ func (s *EventService) ListPublishedEvents(filter model.PublishedEventFilter) ([
 		events = make([]model.PublishedEventResponse, 0)
 	}
 	return events, nil
+}
+
+// GetPublishedEventDetails exposes only published events with current availability.
+func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
+	details, err := s.eventRepo.GetPublishedEventDetails(eventID)
+	if err != nil {
+		return nil, err
+	}
+	if details == nil {
+		return nil, ErrEventNotFound
+	}
+	// EVENTHUB-212: occupancy reflects confirmed sales, while availability also
+	// accounts for live reservations. Reservations alone never mean sold out.
+	details.Bookable = details.Status == model.EventStatusPublished && details.AvailableSeats > 0
+	details.Availability = model.EventAvailabilityTemporarilyUnavailable
+	if details.Capacity > 0 {
+		ratio := math.Min(1, math.Max(0, float64(details.SoldTickets)/float64(details.Capacity)))
+		details.OccupancyPercent = math.Round(ratio*10000) / 100
+		switch {
+		case details.SoldTickets >= int64(details.Capacity):
+			details.Availability = model.EventAvailabilitySoldOut
+		case !details.Bookable:
+			details.Availability = model.EventAvailabilityTemporarilyUnavailable
+		case ratio >= 0.9:
+			details.Availability = model.EventAvailabilityAlmostSoldOut
+		default:
+			details.Availability = model.EventAvailabilityAvailable
+		}
+	}
+	return details, nil
 }

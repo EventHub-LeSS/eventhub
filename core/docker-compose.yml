@@ -83,8 +83,17 @@ services:
         condition: service_started
 
   api-db:
-    image: postgres:17-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.api-db
     restart: unless-stopped
+    # pg_cron runs the audit log retention job (migration 000007) in this database.
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_cron
+      -c cron.use_background_workers=on
+      -c cron.timezone=UTC
+      -c cron.database_name=${API_DB_NAME:-eventhub}
     environment:
       POSTGRES_USER: ${API_DB_USER:-eventhub}
       POSTGRES_PASSWORD: ${API_DB_PASSWORD:-eventhub}

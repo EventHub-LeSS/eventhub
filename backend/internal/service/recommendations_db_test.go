@@ -114,7 +114,7 @@ func TestRecommendationsDBHistoryAndRatings(t *testing.T) {
 	insertRecommendationBooking(t, db, ignoredID, userID, "cancelled", 1, nil)
 	insertRecommendationBooking(t, db, ignoredID, otherUser, "confirmed", 1, nil)
 	for bookingID, score := range map[uuid.UUID]int{first: 1, second: 5, futureBooking: 5} {
-		if err := db.Exec("INSERT INTO ratings (rating_id, booking_id, score, text) VALUES (?, ?, ?, ?)", uuid.New(), bookingID, score, "test").Error; err != nil {
+		if err := db.Exec("INSERT INTO ratings (rating_id, booking_id, score, text, is_visible) VALUES (?, ?, ?, ?, true)", uuid.New(), bookingID, score, "test").Error; err != nil {
 			t.Fatal(err)
 		}
 	}

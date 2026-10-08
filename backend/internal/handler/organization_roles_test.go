@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"backend/internal/audit"
 	"backend/internal/keycloakmock"
 	"backend/internal/middleware"
 	"backend/internal/model"
@@ -34,7 +35,7 @@ func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Hand
 	orgs := r.Group("/api/v1/organizations")
 	{
 		orgs.POST("/", h.CreateOrganization)
-		orgs.PUT("/:organizationID/members/:username/roles", h.ConfigureMemberRoles)
+		orgs.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), h.ConfigureMemberRoles)
 	}
 	return r, fake
 }
