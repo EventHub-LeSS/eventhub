@@ -198,8 +198,35 @@ func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
 	return s.eventRepo.DeleteEvent(eventID)
 }
 
-func (s *EventService) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
+// ListByOrganization returns the events of the organization, in every status. keycloakOrgIDs are
+// the organizations the caller is a member of; any other organization is reported as not found, so
+// that non-members cannot tell existing organizations from unknown ones.
+func (s *EventService) ListByOrganization(organizationID uuid.UUID, keycloakOrgIDs []string) ([]*model.EventModel, error) {
+	org, err := s.orgRepo.GetByID(organizationID)
+	if err != nil {
+		return nil, err
+	}
+	if !managesOrganization(org, keycloakOrgIDs) {
+		return nil, ErrOrganizationNotFound
+	}
 	return s.eventRepo.ListByOrganization(organizationID)
+}
+
+// ListByOrganizationRef is ListByOrganization for an organization addressed by its database UUID or
+// by its alias. Tokens only carry the alias, so that is the reference a frontend can send.
+func (s *EventService) ListByOrganizationRef(ref string, keycloakOrgIDs []string) ([]*model.EventModel, error) {
+	if organizationID, err := uuid.Parse(ref); err == nil {
+		return s.ListByOrganization(organizationID, keycloakOrgIDs)
+	}
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases([]string{ref})
+	if err != nil {
+		return nil, err
+	}
+	// The alias column has no unique constraint, so an ambiguous match is not trusted.
+	if len(orgs) != 1 {
+		return nil, ErrOrganizationNotFound
+	}
+	return s.ListByOrganization(orgs[0].OrganizationID, keycloakOrgIDs)
 }
 
 // managesOrganization reports whether org is one of keycloakOrgIDs, which tokens identify by

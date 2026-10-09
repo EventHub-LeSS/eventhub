@@ -1154,6 +1154,45 @@ paths:
       summary: Save event as draft
       tags:
       - events
+  /events/org/{id}:
+    get:
+      description: Returns all events of the organization, in every status including
+        drafts. The organization is addressed by its database UUID or by its alias,
+        which is what tokens carry. Requires membership in the organization, regardless
+        of role. Organizations the caller is not a member of return 404, like unknown
+        ones.
+      parameters:
+      - description: Organization database UUID or alias
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Events of the organization; an empty array if there are none
+          schema:
+            items:
+              $ref: '#/definitions/model.EventModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List organization events
+      tags:
+      - events
   /events/self:
     get:
       description: Returns the events of all organizations in which the caller holds

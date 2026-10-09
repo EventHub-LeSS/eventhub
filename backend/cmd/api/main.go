@@ -112,6 +112,7 @@ func main() {
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.GET("/self/dashboard", eventHandler.GetSalesDashboardHandler)
+			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)

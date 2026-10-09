@@ -69,6 +69,20 @@ func (p *Principal) HasOrganizationRoleIn(organizationID string, role Organizati
 	return false
 }
 
+// OrganizationIDs returns the IDs of all organizations the principal is a member of, whatever its roles.
+func (p *Principal) OrganizationIDs() []string {
+	if p == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(p.Organizations))
+	for _, org := range p.Organizations {
+		if org != nil {
+			ids = append(ids, org.ID)
+		}
+	}
+	return ids
+}
+
 // OrganizationIDsWithRole returns the IDs of all organizations in which the principal holds the role.
 func (p *Principal) OrganizationIDsWithRole(role OrganizationRole) []string {
 	if p == nil {
