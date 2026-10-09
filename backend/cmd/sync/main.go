@@ -17,7 +17,8 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	// No .env outside local development; real env vars are used there.
+	_ = godotenv.Load()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

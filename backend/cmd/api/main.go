@@ -30,7 +30,8 @@ import (
 // @name Authorization
 // @description Enter "Bearer {token}" where {token} is a Keycloak access token
 func main() {
-	godotenv.Load()
+	// No .env outside local development; real env vars are used there.
+	_ = godotenv.Load()
 
 	// Structured logs for audit events (EVENTHUB-188); plain text like the rest of the app.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))

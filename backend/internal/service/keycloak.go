@@ -576,9 +576,7 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 		}
 	}
 	result = make([]string, 0, len(desired))
-	for _, name := range desired {
-		result = append(result, name)
-	}
+	result = append(result, desired...)
 	slices.Sort(result)
 	return result, nil
 }
@@ -670,7 +668,7 @@ func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken st
 	if err != nil {
 		// Keycloak also rejects a name that another organization already uses.
 		if isKeycloakStatus(err, http.StatusConflict) {
-			return "", "", fmt.Errorf("%w: %v", ErrOrganizationExists, err)
+			return "", "", fmt.Errorf("%w: %w", ErrOrganizationExists, err)
 		}
 		return "", "", fmt.Errorf("failed to create organization: %w", err)
 	}
@@ -883,6 +881,7 @@ var orgMutexes sync.Map // map[string]*sync.Mutex
 
 func lockOrganization(orgID string) func() {
 	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
+	//nolint:errcheck // orgMutexes only ever stores *sync.Mutex.
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock
@@ -1030,7 +1029,7 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		},
 	}
 	if err := trail.record(audit.PhaseStarted, nil); err != nil {
-		return nil, fmt.Errorf("%w: %v", audit.ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", audit.ErrUnavailable, err)
 	}
 
 	// Two separate loops on purpose: all revokes complete before the first

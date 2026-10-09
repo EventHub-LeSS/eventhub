@@ -1,0 +1,66 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  # Report every finding, not just the first few of each kind.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - copyloopvar
+    - misspell
+    - nilerr
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - unconvert
+    - usestdlibvars
+    - whitespace
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    staticcheck:
+      # golangci-lint's defaults, minus the QF* refactoring hints.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1001
+        - -QF1003
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Tests may use assertions and ignore cleanup errors more liberally.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - govet
+      # Generated Swagger docs are not ours to lint.
+      - path: docs/
+        linters:
+          - revive
+          - misspell
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -82,7 +82,7 @@ func lock(t *testing.T, dsn string) {
 	}
 	t.Cleanup(func() {
 		// Closing the session would release the lock as well; unlocking first frees it at once.
-		conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
+		_, _ = conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
 		conn.Close()
 		sqlDB.Close()
 	})
