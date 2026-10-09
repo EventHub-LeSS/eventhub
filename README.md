@@ -219,9 +219,48 @@ von PR #41 manuell mit dem lokalen Stack (`core/docker-compose.yml`) und den Moc
 Seit `{id}` auch einen Alias annimmt, gibt es kein `400` mehr: Eine `{id}`, die weder eine bekannte
 UUID noch ein bekannter Alias ist, ergibt `404`.
 
+### Veranstaltungsentwurf löschen (EVENTHUB-256)
+
+`DELETE /api/v1/events/{id}` löscht einen Entwurf unwiderruflich: Die Zeile in `events` wird
+entfernt, kein Soft-Delete. Kategorie, Ort und Organisation bleiben erhalten. Nur Events im Status
+`draft` können gelöscht werden; veröffentlichte, abgesagte und abgeschlossene Events bleiben, ebenso
+jedes Event mit Buchungen in irgendeinem Status (auch storniert, fehlgeschlagen oder abgelaufen),
+weil Buchungen und Zahlungen zur Buchungshistorie der Besucher gehören. `bookings.event_id` ist
+`ON DELETE SET NULL`; ohne diese Prüfung verlören Buchungen beim Löschen ihr Event.
+
+**Berechtigung:** `event_manager` **oder** `org_admin` der Organisation, der das Event gehört.
+Globale Admins haben keinen Sonderweg. Veröffentlichen, Zurückziehen und Bearbeiten erlauben weiterhin
+nur `event_manager`.
+
+**Antworten:**
+
+| Status | Bedeutung                                                                              |
+| ------ | -------------------------------------------------------------------------------------- |
+| `200`  | `{"message": "event deleted"}`                                                         |
+| `400`  | `{id}` ist keine UUID, oder das Event ist kein Entwurf (`only draft events can be deleted`) |
+| `401`  | nicht angemeldet                                                                       |
+| `403`  | keine Rolle `event_manager`/`org_admin`, oder das Event gehört einer anderen Organisation |
+| `404`  | Event existiert nicht (auch beim zweiten Löschen)                                      |
+| `409`  | Event hat Buchungen (`events with bookings cannot be deleted`)                         |
+| `500`  | Datenbankfehler oder Audit-Eintrag nicht schreibbar; es wird nichts gelöscht           |
+
+Die Reihenfolge der Prüfungen ist wie beim Veröffentlichen: erst Existenz (`404`), dann Organisation
+(`403`), dann Status und Buchungen. Eine fremde Organisation erfährt so den Status nicht.
+
+**Code:** `EventHandler.DeleteEventHandler` → `EventService.DeleteEvent`. Prüfen und Löschen laufen in
+einer Transaktion unter der Zeilensperre des Events (`LockEvent`, `SELECT … FOR UPDATE`), wie beim
+Veröffentlichen und bei der Ticketreservierung; ein paralleles Veröffentlichen oder Buchen kann nicht
+dazwischenkommen. Das Löschen wird als `event.deleted` mit dem letzten Stand des Entwurfs im Audit
+Log protokolliert; die bisherigen Audit-Einträge des Events bleiben bewusst erhalten.
+
+**Getestet:** Automatisch über `TestDeleteEvent_*` in `backend/internal/service` sowie
+`TestDeleteEventHandler_*` und `TestDraftLifecycle_CreateAndDelete_KeepsAuditTrail` in
+`backend/internal/handler` (Rollen, fremde Organisation, alle Status, Buchungen in jedem Status,
+zweites Löschen, Rollback bei Audit-Fehler, Wettlauf mit dem Veröffentlichen in beiden Reihenfolgen).
+
 ### Audit Log der Organisationen
 
-Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
+Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen/löschen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
 
 **Einsicht:** `GET /api/v1/organizations/{organizationID}/audit-logs?limit=50&cursor=…` (neueste zuerst, max. 100 pro Seite, Cursor-Paginierung). Zugriff haben `org_admin` der Organisation und globale Admins. `organizationID` ist die Keycloak-Organisations-ID.
 
