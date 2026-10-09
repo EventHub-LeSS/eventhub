@@ -23,6 +23,9 @@ type EventRepository interface {
 	// ListByOrganizers returns the events of the given organizations; an empty status matches every status.
 	ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
 	GetConfirmedTicketCount(eventID uuid.UUID) (int64, error)
+	// HasBookings reports whether the event has bookings in any status, including cancelled,
+	// failed and expired ones.
+	HasBookings(eventID uuid.UUID) (bool, error)
 }
 
 type eventRepository struct {
@@ -121,6 +124,14 @@ func (r *eventRepository) GetConfirmedTicketCount(eventID uuid.UUID) (int64, err
 	}
 
 	return soldTickets, nil
+}
+
+func (r *eventRepository) HasBookings(eventID uuid.UUID) (bool, error) {
+	var bookings int64
+	if err := r.db.Table("bookings").Where("event_id = ?", eventID).Count(&bookings).Error; err != nil {
+		return false, err
+	}
+	return bookings > 0, nil
 }
 
 // ListPublishedEvents resolves display data in the same query as the status filter.

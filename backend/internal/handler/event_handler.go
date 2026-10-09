@@ -218,7 +218,7 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 
 // EVENTHUB-256: Veranstaltungsentwurf löschen
 // @Summary      Delete draft event
-// @Description  Irrevocably deletes a draft event. Requires the event_manager or org_admin role in the organization that owns the event. Only events in status draft can be deleted; published, cancelled and completed events return 400. The audit log entries of the event are kept.
+// @Description  Irrevocably deletes a draft event. Requires the event_manager or org_admin role in the organization that owns the event. Only events in status draft can be deleted; published, cancelled and completed events return 400. Events with bookings in any status are never deleted and return 409, because the bookings belong to the booking history of the visitors. The audit log entries of the event are kept.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -228,6 +228,7 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 // @Failure      401  {object} model.APIError
 // @Failure      403  {object} model.ErrorResponse
 // @Failure      404  {object} model.ErrorResponse
+// @Failure      409  {object} model.ErrorResponse "Event has bookings"
 // @Failure      500  {object} model.ErrorResponse
 // @Router       /events/{id} [delete]
 func (h *EventHandler) DeleteEventHandler(c *gin.Context) {
@@ -271,6 +272,8 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotDeletable):
 		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrHasBookings):
+		writeProblem(c, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrOrganizationRequired):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrUnknownReference):

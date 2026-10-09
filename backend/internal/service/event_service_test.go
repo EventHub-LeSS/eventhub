@@ -25,6 +25,8 @@ type fakeEventRepo struct {
 	listed     []*model.EventModel
 	listOrgIDs []uuid.UUID
 	listStatus model.EventStatus
+
+	hasBookings bool
 }
 
 func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
@@ -59,6 +61,10 @@ func (f *fakeEventRepo) ListByOrganizers(organizationIDs []uuid.UUID, status mod
 
 func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
 	return 0, nil
+}
+
+func (f *fakeEventRepo) HasBookings(uuid.UUID) (bool, error) {
+	return f.hasBookings, nil
 }
 
 func (f *fakeEventRepo) LockEvent(uuid.UUID) (*model.EventModel, error) {

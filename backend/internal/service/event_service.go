@@ -22,6 +22,9 @@ var (
 	ErrAlreadyPublished = errors.New("this event is already published")
 	// ErrNotDeletable means the event is not a draft. Published, cancelled and completed events stay.
 	ErrNotDeletable = errors.New("only draft events can be deleted")
+	// ErrHasBookings means the event has bookings in some status. They belong to the booking
+	// history of the visitors, so the event is never deleted.
+	ErrHasBookings = errors.New("events with bookings cannot be deleted")
 	// ErrOrganizationRequired means the caller manages events in several organizations and did not
 	// say which one a new event belongs to.
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
@@ -226,6 +229,16 @@ func (s *EventService) DeleteEvent(ctx context.Context, eventID uuid.UUID, keycl
 		}
 		if event.Status != model.EventStatusDraft {
 			return ErrNotDeletable
+		}
+		// bookings.event_id is ON DELETE SET NULL: deleting a booked event would detach the
+		// bookings, payments and ratings of visitors from it. Under the row lock no booking can be
+		// added before the deletion commits.
+		booked, err := tx.Events.HasBookings(eventID)
+		if err != nil {
+			return err
+		}
+		if booked {
+			return ErrHasBookings
 		}
 		deleted, err := tx.Events.DeleteEvent(eventID)
 		if err != nil {
