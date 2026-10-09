@@ -1,0 +1,271 @@
+"use client"
+
+import { useEffect, useState } from "react"
+
+import { ActivityChart } from "@/features/organizations/components/activity-chart"
+import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
+import { EventsTable } from "@/features/organizations/components/events-table"
+import { MembersTable } from "@/features/organizations/components/members-table"
+import { OrganizationHeader } from "@/features/organizations/components/organization-header"
+import { OrganizationStats } from "@/features/organizations/components/organization-stats"
+import { SalesChart } from "@/features/organizations/components/sales-chart"
+import {
+  useOrganization,
+  useOrganizationMembers,
+} from "@/features/organizations/lib/api"
+import {
+  mockActivity,
+  mockAuditLog,
+  mockEvents,
+  mockSales,
+} from "@/features/organizations/lib/mock-data"
+import type {
+  Organization,
+  OrganizationRight,
+} from "@/features/organizations/lib/types"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/features/shared/components/ui/card"
+import { Input } from "@/features/shared/components/ui/input"
+import { Switch } from "@/features/shared/components/ui/switch"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/features/shared/components/ui/tabs"
+
+export function OrganizationOverview({
+  alias,
+  currentUserEmail,
+  isAdmin = false,
+}: {
+  alias: string
+  currentUserEmail: string
+  isAdmin?: boolean
+}) {
+  const organizationQuery = useOrganization(alias)
+  const membersQuery = useOrganizationMembers(alias)
+
+  const [activeTab, setActiveTab] = useState("overview")
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState<Organization | null>(null)
+
+  useEffect(() => {
+    if (organizationQuery.data) {
+      setDraft(organizationQuery.data)
+    }
+  }, [organizationQuery.data])
+
+  function handleTabChange(value: unknown) {
+    setActiveTab(value as string)
+    setIsEditing(false)
+  }
+
+  function handleEditClick() {
+    if (organizationQuery.data) {
+      setDraft(organizationQuery.data)
+    }
+    setActiveTab("settings")
+    setIsEditing(true)
+  }
+
+  function handleSaveClick() {
+    setIsEditing(false)
+  }
+
+  if (organizationQuery.isLoading || membersQuery.isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Loading organization…
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (organizationQuery.isError || !organizationQuery.data) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-destructive">
+          {organizationQuery.error?.message ??
+            "Could not load this organization. You may not have permission to view it."}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const organization = organizationQuery.data
+  const members = membersQuery.data ?? []
+
+  const myRights =
+    members.find((member) => member.email === currentUserEmail)?.rights ?? []
+  const hasRight = (right: OrganizationRight) =>
+    isAdmin || myRights.includes(right)
+  const canViewMembers = hasRight("org_admin")
+  const canViewEvents = hasRight("event_manager")
+  const canViewSales = hasRight("finance_viewer")
+  const canViewAuditLog = hasRight("org_admin")
+
+  if (membersQuery.isError) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-destructive">
+          {membersQuery.error?.message ??
+            "Could not load the member list for this organization."}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
+        <OrganizationHeader
+          organization={organization}
+          isEditing={isEditing}
+          onEditClick={handleEditClick}
+          onSaveClick={handleSaveClick}
+        />
+        <OrganizationStats members={members} events={mockEvents} />
+      </div>
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          {canViewMembers && (
+            <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
+          )}
+          {canViewEvents && (
+            <TabsTrigger value="events">Events ({mockEvents.length})</TabsTrigger>
+          )}
+          {canViewSales && <TabsTrigger value="sales">Sales</TabsTrigger>}
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          {canViewAuditLog && (
+            <TabsTrigger value="audit-log">Audit log</TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value="overview" className="flex flex-col gap-4">
+          <ActivityChart data={mockActivity} />
+        </TabsContent>
+
+        {canViewMembers && (
+          <TabsContent value="members">
+            <Card>
+              <CardHeader>
+                <CardTitle>Members</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MembersTable members={members} alias={alias} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canViewEvents && (
+          <TabsContent value="events">
+            <Card>
+              <CardHeader>
+                <CardTitle>Events</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EventsTable events={mockEvents} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canViewSales && (
+          <TabsContent value="sales" className="flex flex-col gap-4">
+            <SalesChart data={mockSales} />
+          </TabsContent>
+        )}
+
+        {canViewAuditLog && (
+          <TabsContent value="audit-log">
+            <Card>
+              <CardHeader>
+                <CardTitle>Audit log</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AuditLogTable entries={mockAuditLog} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization details</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col divide-y divide-border">
+              <SettingsRow
+                label="Name"
+                value={draft?.name ?? organization.name}
+                isEditing={isEditing}
+                onChange={(value) =>
+                  setDraft((prev) => (prev ? { ...prev, name: value } : prev))
+                }
+              />
+              <SettingsRow
+                label="Alias"
+                value={draft?.alias ?? organization.alias}
+                isEditing={isEditing}
+                onChange={(value) =>
+                  setDraft((prev) => (prev ? { ...prev, alias: value } : prev))
+                }
+              />
+              <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Enabled</p>
+                  <p className="text-sm text-muted-foreground">
+                    Disabled organizations cannot be used to publish events.
+                  </p>
+                </div>
+                <Switch
+                  checked={draft?.enabled ?? organization.enabled}
+                  disabled={!isEditing}
+                  onCheckedChange={(checked) =>
+                    setDraft((prev) => (prev ? { ...prev, enabled: checked } : prev))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+function SettingsRow({
+  label,
+  value,
+  isEditing,
+  onChange,
+}: {
+  label: string
+  value: string
+  isEditing?: boolean
+  onChange?: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      {isEditing && onChange ? (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="max-w-xs"
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">{value}</p>
+      )}
+    </div>
+  )
+}

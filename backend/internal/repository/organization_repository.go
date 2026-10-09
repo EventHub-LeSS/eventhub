@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OrganizationRepository interface {
@@ -65,5 +66,5 @@ func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([
 }
 
 func (r *organizationRepository) AddMembership(membership *model.OrganizationMembershipModel) error {
-	return r.db.Create(membership).Error
+	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(membership).Error
 }
