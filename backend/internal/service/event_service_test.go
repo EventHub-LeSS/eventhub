@@ -26,7 +26,9 @@ type fakeEventRepo struct {
 	listOrgIDs []uuid.UUID
 	listStatus model.EventStatus
 
-	hasBookings bool
+	hasBookings  bool
+	deleted      []uuid.UUID
+	deleteMisses bool
 }
 
 func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
@@ -45,7 +47,11 @@ func (f *fakeEventRepo) GetAllEvents() ([]*model.EventModel, error) {
 	return nil, nil
 }
 
-func (f *fakeEventRepo) DeleteEvent(uuid.UUID) (bool, error) {
+func (f *fakeEventRepo) DeleteEvent(eventID uuid.UUID) (bool, error) {
+	if f.deleteMisses {
+		return false, nil
+	}
+	f.deleted = append(f.deleted, eventID)
 	return true, nil
 }
 
@@ -607,4 +613,111 @@ func TestListOwnEvents_ListsManagedOrganizations(t *testing.T) {
 
 func (f *fakeEventRepo) GetPublishedEventDetails(uuid.UUID) (*model.PublishedEventDetailsResponse, error) {
 	return nil, nil
+}
+
+func eventIDOf(event *model.EventModel) uuid.UUID {
+	if event == nil {
+		return uuid.New()
+	}
+	return event.EventID
+}
+
+// EVENTHUB-256 / AK3, T3: Nur wer in der besitzenden Organisation löschen darf, löscht den Entwurf.
+func TestDeleteEvent_Ownership_OnlyOwningOrganization(t *testing.T) {
+	tests := []struct {
+		name        string
+		event       *model.EventModel
+		managedOrgs []string
+		wantErr     error
+	}{
+		{name: "own organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}},
+		{name: "own organization by alias", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"alias-b"}},
+		{name: "member of several organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a", "kc-org-b"}},
+		{name: "event belongs to another organization", event: eventOwnedBy(orgB, model.EventStatusDraft), managedOrgs: []string{"kc-org-a"}, wantErr: ErrForbidden},
+		{name: "no managed organizations", event: eventOwnedBy(orgB, model.EventStatusDraft), wantErr: ErrForbidden},
+		{name: "event without organizer", event: eventOwnedBy(nil, model.EventStatusDraft), managedOrgs: []string{"kc-org-b"}, wantErr: ErrForbidden},
+		{name: "unknown event", managedOrgs: []string{"kc-org-b"}, wantErr: ErrEventNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(tt.event)
+			eventID := eventIDOf(tt.event)
+
+			err := svc.DeleteEvent(auditCtx(audit.EventDeleted), eventID, tt.managedOrgs)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErr != nil && len(repo.deleted) != 0 {
+				t.Fatal("rejected deletion must not delete")
+			}
+			if tt.wantErr == nil && (len(repo.deleted) != 1 || repo.deleted[0] != eventID) {
+				t.Fatalf("draft %s was not deleted: %v", eventID, repo.deleted)
+			}
+		})
+	}
+}
+
+// EVENTHUB-256: Erst die Berechtigung, dann Status und Buchungen, sonst erfährt eine fremde
+// Organisation den Status eines Events.
+func TestDeleteEvent_ForeignOrganization_ForbiddenBeforeStatusAndBookings(t *testing.T) {
+	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		t.Run(string(status), func(t *testing.T) {
+			event := eventOwnedBy(orgB, status)
+			svc, repo := newTestService(event)
+			repo.hasBookings = true
+
+			if err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-a"}); !errors.Is(err, ErrForbidden) {
+				t.Fatalf("expected ErrForbidden, got %v", err)
+			}
+			if len(repo.deleted) != 0 {
+				t.Fatal("rejected deletion must not delete")
+			}
+		})
+	}
+}
+
+// EVENTHUB-256 / AK2, T2: Veröffentlichte, abgesagte und abgeschlossene Events werden nicht gelöscht.
+func TestDeleteEvent_NotDraft_ReturnsErrNotDeletable(t *testing.T) {
+	for _, status := range []model.EventStatus{model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
+		t.Run(string(status), func(t *testing.T) {
+			event := eventOwnedBy(orgB, status)
+			svc, repo, auditRepo := newTestServiceWithAudit(event)
+
+			if err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotDeletable) {
+				t.Fatalf("expected ErrNotDeletable, got %v", err)
+			}
+			if len(repo.deleted) != 0 || len(auditRepo.entries) != 0 {
+				t.Fatalf("rejected deletion ran: deleted=%v entries=%d", repo.deleted, len(auditRepo.entries))
+			}
+		})
+	}
+}
+
+// EVENTHUB-256 / T2: Gebuchte Events werden nie gelöscht, auch nicht als Entwurf.
+func TestDeleteEvent_DraftWithBookings_ReturnsErrHasBookings(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	svc, repo, auditRepo := newTestServiceWithAudit(event)
+	repo.hasBookings = true
+
+	if err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrHasBookings) {
+		t.Fatalf("expected ErrHasBookings, got %v", err)
+	}
+	if len(repo.deleted) != 0 || len(auditRepo.entries) != 0 {
+		t.Fatalf("rejected deletion ran: deleted=%v entries=%d", repo.deleted, len(auditRepo.entries))
+	}
+}
+
+func TestDeleteEvent_RowAlreadyGone_ReturnsErrEventNotFound(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	svc, repo, auditRepo := newTestServiceWithAudit(event)
+	repo.deleteMisses = true
+
+	if err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrEventNotFound) {
+		t.Fatalf("expected ErrEventNotFound, got %v", err)
+	}
+	if len(auditRepo.entries) != 0 {
+		t.Errorf("deletion without a deleted row recorded %d entries", len(auditRepo.entries))
+	}
 }
