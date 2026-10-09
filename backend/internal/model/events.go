@@ -55,6 +55,18 @@ type UpdateEventRequest struct {
 	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
 }
 
+type CreateEventRequestModel struct {
+	Title       string          `json:"title" binding:"required,min=3,max=200"`
+	Description *string         `json:"description" binding:"omitempty,max=5000"`
+	StartTime   time.Time       `json:"startTime" binding:"required,gt"`
+	EndTime     time.Time       `json:"endTime" binding:"required,gtfield=StartTime"`
+	Capacity    int             `json:"capacity" binding:"required,min=1"`
+	Price       decimal.Decimal `json:"price" binding:"gte=0"`
+	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
+	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+	OrganizerID uuid.UUID       `json:"organizerId" binding:"required"`
+}
+
 // EVENTHUB-76: Veranstaltung veröffentlichen
 type EventActionResponse struct {
 	Message string `json:"message" example:"event published"`

@@ -408,6 +408,79 @@
                         }
                     }
                 }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an event in status draft and returns its UUID as plain text. Requires the event_manager role in the owning organization. organizerId is the organization's database UUID. The start time must be in the future, the end time must be after the start time, capacity must be positive and price must be non-negative. The event can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Create event",
+                "parameters": [
+                    {
+                        "description": "Event data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.CreateEventRequestModel"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created event UUID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid event data",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Missing event_manager role in the owning organization",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Unknown organizerId",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unknown categoryId or locationId",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/events/draft": {
@@ -1683,6 +1756,52 @@
                 "price": {
                     "type": "number",
                     "maximum": 10000,
+                    "minimum": 0
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 3
+                }
+            }
+        },
+        "model.CreateEventRequestModel": {
+            "type": "object",
+            "required": [
+                "capacity",
+                "categoryId",
+                "endTime",
+                "locationId",
+                "organizerId",
+                "startTime",
+                "title"
+            ],
+            "properties": {
+                "capacity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "categoryId": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 5000
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "organizerId": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "number",
                     "minimum": 0
                 },
                 "startTime": {
