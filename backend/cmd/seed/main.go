@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"time"
@@ -15,8 +17,11 @@ import (
 )
 
 func main() {
-	// No .env outside local development; real env vars are used there.
-	_ = godotenv.Load()
+	// A missing .env is normal outside local development, where real env vars
+	// are set. Anything else means the file is there but could not be read.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("ignoring unreadable .env: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
