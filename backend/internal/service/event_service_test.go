@@ -43,8 +43,8 @@ func (f *fakeEventRepo) GetAllEvents() ([]*model.EventModel, error) {
 	return nil, nil
 }
 
-func (f *fakeEventRepo) DeleteEvent(uuid.UUID) error {
-	return nil
+func (f *fakeEventRepo) DeleteEvent(uuid.UUID) (bool, error) {
+	return true, nil
 }
 
 func (f *fakeEventRepo) ListByOrganization(uuid.UUID) ([]*model.EventModel, error) {

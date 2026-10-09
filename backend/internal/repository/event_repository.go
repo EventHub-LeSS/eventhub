@@ -17,7 +17,8 @@ type EventRepository interface {
 	GetAllEvents() ([]*model.EventModel, error)
 	ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error)
 	UpdateEvent(event *model.EventModel) error
-	DeleteEvent(eventID uuid.UUID) error
+	// DeleteEvent removes the event row and reports whether there was one to remove.
+	DeleteEvent(eventID uuid.UUID) (bool, error)
 	ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error)
 	// ListByOrganizers returns the events of the given organizations; an empty status matches every status.
 	ListByOrganizers(organizationIDs []uuid.UUID, status model.EventStatus) ([]*model.EventModel, error)
@@ -73,8 +74,13 @@ func (r *eventRepository) UpdateEvent(event *model.EventModel) error {
 	return translateEventWriteError(r.db.Save(event).Error)
 }
 
-func (r *eventRepository) DeleteEvent(eventID uuid.UUID) error {
-	return r.db.Delete(&model.EventModel{}, "event_id = ?", eventID).Error
+// DeleteEvent is a hard delete: EventModel has no gorm.DeletedAt, so GORM issues a real DELETE.
+func (r *eventRepository) DeleteEvent(eventID uuid.UUID) (bool, error) {
+	result := r.db.Delete(&model.EventModel{}, "event_id = ?", eventID)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }
 
 func (r *eventRepository) ListByOrganization(organizationID uuid.UUID) ([]*model.EventModel, error) {
