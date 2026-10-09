@@ -1,6 +1,7 @@
 package main
 
 import (
+	"backend/internal/audit"
 	"backend/internal/db"
 	"backend/internal/handler"
 	"backend/internal/middleware"
@@ -60,21 +61,27 @@ func main() {
 		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
 		FrontendClientID: firstNonEmpty(os.Getenv("KEYCLOAK_FRONTEND_CLIENT_ID"), "frontend"),
 	}
-	keycloakService := service.NewKeycloakService(keycloakCfg)
+	keycloakService := service.NewKeycloakService(keycloakCfg).WithAuditLog(repository.NewAuditLogRepository(db))
 
 	// Initialize Repositories
 	orgRepo := repository.NewOrganizationRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	tx := repository.NewTransactor(db)
 
 	// Initialize Services
-	eventService := service.NewEventService(eventRepo, orgRepo)
+	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
+	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -83,6 +90,8 @@ func main() {
 	v1 := r.Group("/api/v1")
 	{ // hier routen registrieren
 		v1.GET("/", handler.Healthcheck)
+		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
+		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
 
 		// DEBUG routes — disabled in production
 		if os.Getenv("DEBUG_ENABLED") == "true" {
@@ -95,18 +104,30 @@ func main() {
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
 
+		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
+
 		// events
 		events := protected.Group("/events")
 		{
-			events.PUT("/:id", eventHandler.UpdateEventHandler)
-			events.POST("/:id/publish", eventHandler.PublishEventHandler)
-			events.POST("/:id/withdraw", eventHandler.WithdrawEventHandler)
+			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
+			events.GET("/self", eventHandler.ListOwnEventsHandler)
+			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
+			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
+			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
+			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
+		adminUsers := v1.Group("/admin/users")
+		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+		{
+			adminUsers.GET("", userAdminHandler.ListUsers)
+			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
+			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
+		}
 
 		// bookings
-		protected.POST("/bookings", handler.CreateBookingHandler(bookingService, userRepo))
+		protected.POST("/bookings", bookingHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -120,12 +141,16 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
-		orgRoles.PUT("/:organizationID/members/:username/roles", orgHandler.ConfigureMemberRoles)
+		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
+		// Organization admins read the audit log of their organization; the handler authorizes
+		// against the resolved organization like the role endpoint above.
+		orgRoles.GET("/:organizationID/audit-logs", auditLogHandler.ListAuditLogs)
 	}
 
 	err = r.Run(fmt.Sprintf(":%d", *port))
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 }
 

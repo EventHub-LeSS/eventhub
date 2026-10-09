@@ -3,66 +3,19 @@ package service
 import (
 	"backend/internal/model"
 	"backend/internal/repository"
+	"backend/internal/testdb"
 	"context"
-	"database/sql"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// Runs against a real Postgres because the overbooking guarantee depends on
-// database transactions and locking. Set TEST_DATABASE_DSN to enable, e.g.:
-// postgres://postgres:test@localhost:5599/postgres?sslmode=disable
-func setupTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_DSN")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_DSN not set")
-	}
-
-	sqlDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
-	driver, err := migratePostgres.WithInstance(sqlDB, &migratePostgres.Config{})
-	if err != nil {
-		t.Fatalf("migration driver: %v", err)
-	}
-	m, err := migrate.NewWithDatabaseInstance("file://../../migrations", "postgres", driver)
-	if err != nil {
-		t.Fatalf("migrator: %v", err)
-	}
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		t.Fatalf("migrate up: %v", err)
-	}
-	sqlDB.Close()
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	if err != nil {
-		t.Fatalf("gorm open: %v", err)
-	}
-	t.Cleanup(func() {
-		if gormDB, err := db.DB(); err == nil {
-			gormDB.Close()
-		}
-	})
-	err = db.Exec("TRUNCATE bookings, events, organizations, users, categories, locations CASCADE").Error
-	if err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
-	return db
-}
+// The booking tests run against a real Postgres because the overbooking guarantee depends on
+// database transactions and locking; see testdb.Open for how to enable them.
 
 func seedEvent(t *testing.T, db *gorm.DB, capacity int, status model.EventStatus) (eventID, userID uuid.UUID) {
 	t.Helper()
@@ -100,7 +53,7 @@ func reservedTickets(t *testing.T, db *gorm.DB, eventID uuid.UUID) int64 {
 }
 
 func TestReserveTickets_ParallelRequestsNeverOverbook(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	eventID, userID := seedEvent(t, db, 1, model.EventStatusPublished)
 	svc := NewBookingService(repository.NewBookingRepository(db), 0)
 
@@ -156,7 +109,7 @@ func TestReserveTickets_ParallelRequestsNeverOverbook(t *testing.T) {
 }
 
 func TestReserveTickets_CapacityMath(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	eventID, userID := seedEvent(t, db, 3, model.EventStatusPublished)
 	svc := NewBookingService(repository.NewBookingRepository(db), 0)
 	ctx := context.Background()
@@ -187,7 +140,7 @@ func TestReserveTickets_CapacityMath(t *testing.T) {
 }
 
 func TestReserveTickets_ExpiredReservationFreesCapacity(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	eventID, userID := seedEvent(t, db, 1, model.EventStatusPublished)
 	svc := NewBookingService(repository.NewBookingRepository(db), 0)
 
@@ -207,7 +160,7 @@ func TestReserveTickets_ExpiredReservationFreesCapacity(t *testing.T) {
 }
 
 func TestReserveTickets_RejectsUnpublishedEvent(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	eventID, userID := seedEvent(t, db, 10, model.EventStatusDraft)
 	svc := NewBookingService(repository.NewBookingRepository(db), 0)
 
@@ -221,7 +174,7 @@ func TestReserveTickets_RejectsUnpublishedEvent(t *testing.T) {
 }
 
 func TestReserveTickets_UnknownEvent(t *testing.T) {
-	db := setupTestDB(t)
+	db := testdb.Open(t)
 	svc := NewBookingService(repository.NewBookingRepository(db), 0)
 
 	_, err := svc.ReserveTickets(context.Background(), uuid.New(), uuid.New(), 1)

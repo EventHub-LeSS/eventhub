@@ -1,0 +1,16 @@
+# PostgreSQL with the pg_cron extension, which runs the retention job of the audit log inside the
+# database. Same base image (and thus the same collation) as before, so existing volumes keep working.
+FROM postgres:17-alpine
+
+ARG PG_CRON_VERSION=v1.6.5
+
+RUN apk add --no-cache --virtual .build-deps build-base git \
+    && git clone --depth 1 --branch "${PG_CRON_VERSION}" https://github.com/citusdata/pg_cron.git /tmp/pg_cron \
+    && make -C /tmp/pg_cron with_llvm=no \
+    && make -C /tmp/pg_cron with_llvm=no install \
+    && rm -rf /tmp/pg_cron \
+    && apk del .build-deps
+
+# cron.database_name must be the database of the API (see core/docker-compose.yml): pg_cron can only
+# be installed in one database. Background workers need no extra credentials or pg_hba.conf entries.
+CMD ["postgres", "-c", "shared_preload_libraries=pg_cron", "-c", "cron.use_background_workers=on", "-c", "cron.timezone=UTC"]

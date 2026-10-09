@@ -1,2 +1,5 @@
 .env
 /api
+/api.exe
+cmd/api/api
+cmd/api/api.exe

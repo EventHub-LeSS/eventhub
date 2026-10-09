@@ -1,11 +1,14 @@
 package service
 
 import (
+	"backend/internal/audit"
 	"backend/internal/model"
+	"backend/internal/repository"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -29,18 +32,33 @@ type KeycloakClientConfig struct {
 type KeycloakService struct {
 	cfg    KeycloakClientConfig
 	client *gocloak.GoCloak
+	audit  repository.AuditLogRepository
 
 	// Cached service-account token for admin operations (EVENTHUB-188).
 	adminTokenMu      sync.Mutex
+	adminLoginGate    chan struct{}
 	adminTokenValue   string
 	adminTokenExpires time.Time
 }
 
+var (
+	globalRoleUpdateLocksMu sync.Mutex
+	globalRoleUpdateLocks   = map[string]*sync.Mutex{}
+)
+
 func NewKeycloakService(cfg KeycloakClientConfig) *KeycloakService {
 	return &KeycloakService{
-		cfg:    cfg,
-		client: gocloak.NewClient(cfg.Host),
+		cfg:            cfg,
+		client:         gocloak.NewClient(cfg.Host),
+		adminLoginGate: make(chan struct{}, 1),
 	}
+}
+
+// WithAuditLog sets where audited operations such as role changes are recorded. Without it those
+// operations are refused: there is no silent fallback to unrecorded changes.
+func (k *KeycloakService) WithAuditLog(repo repository.AuditLogRepository) *KeycloakService {
+	k.audit = repo
+	return k
 }
 
 // adminToken returns the service-account token for admin operations, caching it
@@ -232,8 +250,9 @@ func adminResponseError(resp *resty.Response, err error) error {
 
 // ServiceAccountRoles are the realm-management roles the backend service account needs to
 // configure organization member roles (EVENTHUB-188): manage-organizations to change org group
-// memberships, manage-users to look up users and write the memberships. realm-admin is not needed.
-var ServiceAccountRoles = []string{"manage-organizations", "manage-users"}
+// memberships, manage-users to look up users and write the memberships, and view-clients
+// to resolve the backend client and its global roles. realm-admin is not needed.
+var ServiceAccountRoles = []string{"manage-organizations", "manage-users", "view-clients"}
 
 // EnsureServiceAccount enables the service account of the configured backend client and grants it
 // ServiceAccountRoles, both as role mapping and as scope mapping: the client has
@@ -390,6 +409,178 @@ func (k *KeycloakService) EnsureEmailUsernames(ctx context.Context, accessToken,
 		updated++
 	}
 	return updated, nil
+}
+
+func (k *KeycloakService) backendClientID(ctx context.Context, accessToken string) (string, error) {
+	clients, err := k.client.GetClients(ctx, accessToken, k.cfg.UserRealm, gocloak.GetClientsParams{
+		ClientID: &k.cfg.ClientID,
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, client := range clients {
+		if client != nil && client.ClientID != nil && *client.ClientID == k.cfg.ClientID {
+			if client.ID == nil || *client.ID == "" {
+				return "", fmt.Errorf("client %q missing id", k.cfg.ClientID)
+			}
+			return *client.ID, nil
+		}
+	}
+	return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
+}
+
+func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) (result []string, err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	return k.userGlobalRoles(ctx, accessToken, clientID, keycloakUserID)
+}
+
+func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clientID, keycloakUserID string) ([]string, error) {
+	roles, err := k.client.GetCompositeClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch global roles for %s: %w", keycloakUserID, err)
+	}
+	selected := make([]string, 0, len(roles))
+	for _, role := range roles {
+		if role == nil || role.Name == nil || *role.Name == "" {
+			continue
+		}
+		switch *role.Name {
+		case "admin", "moderator", "visitor":
+			selected = append(selected, *role.Name)
+		}
+	}
+	slices.Sort(selected)
+	return selected, nil
+}
+
+func lockGlobalRoleUpdate(realm, clientID string) func() {
+	key := realm + ":" + clientID
+	globalRoleUpdateLocksMu.Lock()
+	mu, ok := globalRoleUpdateLocks[key]
+	if !ok {
+		mu = &sync.Mutex{}
+		globalRoleUpdateLocks[key] = mu
+	}
+	globalRoleUpdateLocksMu.Unlock()
+
+	mu.Lock()
+	return func() {
+		mu.Unlock()
+	}
+}
+
+func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID string, desired []string) (result []string, err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	unlock := lockGlobalRoleUpdate(k.cfg.UserRealm, clientID)
+	defer unlock()
+
+	allowed := map[string]struct{}{"admin": {}, "moderator": {}, "visitor": {}}
+	for _, name := range desired {
+		if _, ok := allowed[name]; !ok {
+			return nil, fmt.Errorf("unsupported role %q", name)
+		}
+	}
+	currentRoles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("read existing roles for %s: %w", keycloakUserID, err)
+	}
+	current := make(map[string]*gocloak.Role, len(currentRoles))
+	for _, role := range currentRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			current[*role.Name] = role
+		}
+	}
+	availableRoles, err := k.client.GetClientRoles(ctx, accessToken, k.cfg.UserRealm, clientID, gocloak.GetRoleParams{})
+	if err != nil {
+		return nil, fmt.Errorf("list available global roles: %w", err)
+	}
+	byName := make(map[string]*gocloak.Role, len(availableRoles))
+	for _, role := range availableRoles {
+		if role == nil || role.Name == nil {
+			continue
+		}
+		if _, ok := allowed[*role.Name]; ok {
+			byName[*role.Name] = role
+		}
+	}
+
+	desiredSet := make(map[string]struct{}, len(desired))
+	for _, name := range desired {
+		desiredSet[name] = struct{}{}
+	}
+	if _, isAdmin := current["admin"]; isAdmin {
+		if _, keepAdmin := desiredSet["admin"]; !keepAdmin {
+			maxAdmins := 2
+			otherAdmins, err := k.client.GetUsersByClientRoleName(ctx, accessToken, k.cfg.UserRealm, clientID, "admin", gocloak.GetUsersByRoleParams{
+				Max: &maxAdmins,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("check remaining global admins: %w", err)
+			}
+			hasOtherAdmin := false
+			for _, admin := range otherAdmins {
+				if admin != nil && admin.ID != nil && *admin.ID != keycloakUserID {
+					hasOtherAdmin = true
+					break
+				}
+			}
+			if !hasOtherAdmin {
+				return nil, ErrLastGlobalAdmin
+			}
+		}
+	}
+	var addRoles []gocloak.Role
+	var removeRoles []gocloak.Role
+	for name := range allowed {
+		if _, ok := desiredSet[name]; ok {
+			if _, exists := current[name]; !exists {
+				role, ok := byName[name]
+				if !ok {
+					return nil, fmt.Errorf("role %q is missing in Keycloak", name)
+				}
+				addRoles = append(addRoles, *role)
+			}
+			continue
+		}
+		if role, exists := current[name]; exists {
+			removeRoles = append(removeRoles, *role)
+		}
+	}
+	if len(removeRoles) > 0 {
+		if err := k.client.DeleteClientRolesFromUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, removeRoles); err != nil {
+			return nil, fmt.Errorf("remove roles from user: %w", err)
+		}
+	}
+	if len(addRoles) > 0 {
+		if err := k.client.AddClientRolesToUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, addRoles); err != nil {
+			return nil, fmt.Errorf("add roles to user: %w", err)
+		}
+	}
+	result = make([]string, 0, len(desired))
+	for _, name := range desired {
+		result = append(result, name)
+	}
+	slices.Sort(result)
+	return result, nil
 }
 
 func (k *KeycloakService) GetAllUsers(ctx context.Context, accessToken string) ([]*gocloak.User, error) {
@@ -677,6 +868,7 @@ var (
 	ErrNotAMember           = errors.New("user is not a member of the organization")
 	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
 	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
+	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
 	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
 )
 
@@ -746,7 +938,18 @@ func (k *KeycloakService) ResolveOrganization(ctx context.Context, organizationI
 // old and new roles; on such a failure the changes already applied are returned together with
 // the error, and the request is idempotent and safe to retry. Keycloak calls run with the backend
 // service account and are bounded by orgRoleChangeTimeout (EVENTHUB-188).
+//
+// Effective changes are written to the audit log (audit.Meta from ctx is required): a "started"
+// entry before the first Keycloak mutation and a result entry afterwards, sharing one operation ID.
 func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, organizationIDOrAlias, username string, requestedRoles []model.OrganizationRole, actor OrgRoleActor) (change *OrgRoleChange, err error) {
+	parentCtx := ctx
+	meta, err := audit.MetaFromContext(ctx, audit.OrganizationMemberRolesChange)
+	if err != nil {
+		return nil, err
+	}
+	if k.audit == nil {
+		return nil, fmt.Errorf("%w: no audit log configured", audit.ErrUnavailable)
+	}
 	ctx, cancel := context.WithTimeout(ctx, orgRoleChangeTimeout)
 	defer cancel()
 	orgAdminRole := string(model.RoleOrganizationAdmin)
@@ -818,34 +1021,150 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 	}
 
 	change = &OrgRoleChange{OrganizationID: keycloakOrgID}
-	// Two separate loops on purpose: all revokes complete before the first
-	// grant, so a failure can never leave the union of old and new roles.
+	var toRevoke, toGrant []string
 	for _, role := range model.OrganizationRoles {
 		name := string(role)
-		if !requested[name] && currentRoles[name] {
-			if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return change, fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
-			}
-			change.Revoked = append(change.Revoked, name)
+		switch {
+		case !requested[name] && currentRoles[name]:
+			toRevoke = append(toRevoke, name)
+		case requested[name] && !currentRoles[name]:
+			toGrant = append(toGrant, name)
 		}
 	}
-	for _, role := range model.OrganizationRoles {
-		name := string(role)
-		if requested[name] && !currentRoles[name] {
-			if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
-				return change, fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
-			}
-			change.Granted = append(change.Granted, name)
-		}
-	}
-
 	change.Applied = make([]string, 0, len(model.OrganizationRoles))
 	for _, role := range model.OrganizationRoles {
 		if requested[string(role)] {
 			change.Applied = append(change.Applied, string(role))
 		}
 	}
-	return change, nil
+	if len(toRevoke) == 0 && len(toGrant) == 0 {
+		return change, nil
+	}
+
+	// Keycloak cannot take part in a database transaction. The operation is therefore recorded
+	// durably before the first change: if that fails, nothing has been changed yet. The result
+	// follows as a second entry; without it the outcome of the operation is unconfirmed.
+	trail := roleChangeAudit{
+		k: k, meta: meta, orgID: keycloakOrgID, targetUserID: userID, targetUsername: username,
+		details: model.AuditChanges{
+			"targetUsername": username,
+			"targetUserId":   userID,
+			"rolesBefore":    rolesOf(currentRoles),
+			"rolesRequested": change.Applied,
+			"toGrant":        nonNilStrings(toGrant),
+			"toRevoke":       nonNilStrings(toRevoke),
+		},
+	}
+	if err := trail.record(audit.PhaseStarted, nil); err != nil {
+		return nil, fmt.Errorf("%w: %v", audit.ErrUnavailable, err)
+	}
+
+	// Two separate loops on purpose: all revokes complete before the first
+	// grant, so a failure can never leave the union of old and new roles.
+	for _, name := range toRevoke {
+		if err := k.client.DeleteUserFromOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+			stepErr := fmt.Errorf("failed to revoke role %q, the request is safe to retry: %w", name, err)
+			return change, trail.conclude(parentCtx, change, "revoke", name, stepErr)
+		}
+		change.Revoked = append(change.Revoked, name)
+	}
+	for _, name := range toGrant {
+		if err := k.client.AddUserToOrganizationGroup(ctx, token, k.cfg.UserRealm, userID, keycloakOrgID, groupIDByName[name]); err != nil {
+			stepErr := fmt.Errorf("failed to grant role %q, the request is safe to retry: %w", name, err)
+			return change, trail.conclude(parentCtx, change, "grant", name, stepErr)
+		}
+		change.Granted = append(change.Granted, name)
+	}
+	return change, trail.conclude(parentCtx, change, "", "", nil)
+}
+
+// roleChangeAudit writes the audit entries of one role change under a common operation ID.
+type roleChangeAudit struct {
+	k              *KeycloakService
+	meta           audit.Meta
+	orgID          string
+	targetUserID   string
+	targetUsername string
+	details        model.AuditChanges
+}
+
+func (a *roleChangeAudit) record(phase string, extra model.AuditChanges) error {
+	changes := make(model.AuditChanges, len(a.details)+len(extra))
+	for key, value := range a.details {
+		changes[key] = value
+	}
+	for key, value := range extra {
+		changes[key] = value
+	}
+	return a.k.audit.Append(&model.AuditLogModel{
+		OperationID:    a.meta.OperationID,
+		ActorSubject:   a.meta.ActorSubject,
+		ActorUsername:  a.meta.ActorUsername,
+		OrganizationID: a.orgID,
+		Action:         string(a.meta.Action),
+		ResourceType:   audit.ResourceOrganizationMember,
+		ResourceID:     a.targetUserID,
+		Phase:          phase,
+		Changes:        changes,
+	})
+}
+
+// conclude records the result and returns opErr, joined with audit.ErrResultNotRecorded if the
+// result could not be persisted. A failed step is recorded as unconfirmed: the request may have
+// reached Keycloak before the error occurred. The result is written even if the caller went away.
+func (a *roleChangeAudit) conclude(parentCtx context.Context, change *OrgRoleChange, failedStep, failedRole string, opErr error) error {
+	phase := audit.PhaseSucceeded
+	extra := model.AuditChanges{
+		"granted": nonNilStrings(change.Granted),
+		"revoked": nonNilStrings(change.Revoked),
+	}
+	if opErr != nil {
+		phase = audit.PhaseIncomplete
+		extra["failedStep"] = failedStep
+		extra["failedRole"] = failedRole
+		extra["failedStepOutcome"] = "unconfirmed"
+	}
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parentCtx), auditResultTimeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- a.record(phase, extra) }()
+	var recordErr error
+	select {
+	case recordErr = <-done:
+	case <-ctx.Done():
+		recordErr = ctx.Err()
+	}
+	if recordErr != nil {
+		slog.Error("audit result of organization role change could not be recorded",
+			"operation_id", a.meta.OperationID,
+			"organization_id", a.orgID,
+			"phase", phase,
+			"error", recordErr.Error(),
+		)
+		return errors.Join(opErr, audit.ErrResultNotRecorded)
+	}
+	return opErr
+}
+
+// auditResultTimeout bounds how long the result of a role change may take to be recorded.
+const auditResultTimeout = 5 * time.Second
+
+func rolesOf(set map[string]bool) []string {
+	roles := make([]string, 0, len(model.OrganizationRoles))
+	for _, role := range model.OrganizationRoles {
+		if set[string(role)] {
+			roles = append(roles, string(role))
+		}
+	}
+	return roles
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // currentUserRoles returns which of the organization's role groups the user belongs to by

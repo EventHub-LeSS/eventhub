@@ -50,6 +50,35 @@ jobs:
             backend:
               - 'backend/**'
 
+      - name: Set up Go
+        if: steps.filter.outputs.backend == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./backend/go.mod
+          cache-dependency-path: ./backend/go.sum
+
+      - name: Start test database (PostgreSQL with pg_cron)
+        if: steps.filter.outputs.backend == 'true'
+        run: |
+          docker build -f core/Dockerfile.api-db -t eventhub-api-db:test core
+          docker run -d --name test-db -p 5432:5432 \
+            -e POSTGRES_USER=eventhub -e POSTGRES_PASSWORD=test -e POSTGRES_DB=eventhub \
+            eventhub-api-db:test postgres -c shared_preload_libraries=pg_cron \
+            -c cron.use_background_workers=on -c cron.timezone=UTC -c cron.database_name=eventhub
+          for i in $(seq 1 30); do
+            docker exec test-db pg_isready -U eventhub -d eventhub && exit 0
+            sleep 2
+          done
+          docker logs test-db
+          exit 1
+
+      - name: Run backend tests
+        if: steps.filter.outputs.backend == 'true'
+        working-directory: ./backend
+        env:
+          TEST_DATABASE_DSN: postgres://eventhub:test@localhost:5432/eventhub?sslmode=disable
+        run: go test -race -p 1 ./...
+
       - name: Set up Docker Buildx
         if: steps.filter.outputs.backend == 'true'
         uses: docker/setup-buildx-action@v3
