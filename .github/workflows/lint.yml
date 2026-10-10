@@ -1,0 +1,72 @@
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  # --- Frontend Lint (oxlint) ---
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for frontend changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/lint.yml'
+
+      - name: Set up Bun
+        if: steps.filter.outputs.frontend == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.filter.outputs.frontend == 'true'
+        working-directory: ./frontend
+        run: bun install --frozen-lockfile
+
+      - name: Run oxlint
+        if: steps.filter.outputs.frontend == 'true'
+        working-directory: ./frontend
+        run: bun run lint --format github
+
+  # --- Backend Lint (golangci-lint) ---
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for backend changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/lint.yml'
+
+      - name: Set up Go
+        if: steps.filter.outputs.backend == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./backend/go.mod
+          cache-dependency-path: ./backend/go.sum
+
+      - name: Run golangci-lint
+        if: steps.filter.outputs.backend == 'true'
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+          working-directory: ./backend
