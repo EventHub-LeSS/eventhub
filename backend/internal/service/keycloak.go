@@ -576,9 +576,7 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 		}
 	}
 	result = make([]string, 0, len(desired))
-	for _, name := range desired {
-		result = append(result, name)
-	}
+	result = append(result, desired...)
 	slices.Sort(result)
 	return result, nil
 }
@@ -670,7 +668,7 @@ func (k *KeycloakService) CreateOrganization(ctx context.Context, accessToken st
 	if err != nil {
 		// Keycloak also rejects a name that another organization already uses.
 		if isKeycloakStatus(err, http.StatusConflict) {
-			return "", "", fmt.Errorf("%w: %v", ErrOrganizationExists, err)
+			return "", "", fmt.Errorf("%w: %w", ErrOrganizationExists, err)
 		}
 		return "", "", fmt.Errorf("failed to create organization: %w", err)
 	}
@@ -762,19 +760,13 @@ func (k *KeycloakService) AddUserToOrganization(orgID, userID string) error {
 	return k.client.AddUserToOrganization(ctx, token, k.cfg.UserRealm, orgID, userID)
 }
 
-func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrEmail string) (string, error) {
-	user, err := k.GetUserByUsername(ctx, accessToken, k.cfg.UserRealm, usernameOrEmail)
+func (k *KeycloakService) resolveUserID(ctx context.Context, accessToken, usernameOrID string) (string, error) {
+	user, err := k.GetUserByUsername(ctx, accessToken, k.cfg.UserRealm, usernameOrID)
 	if err != nil {
 		return "", err
 	}
 	if user == nil || user.ID == nil {
-		user, err = k.GetUserByEmail(ctx, accessToken, k.cfg.UserRealm, usernameOrEmail)
-		if err != nil {
-			return "", err
-		}
-	}
-	if user == nil || user.ID == nil {
-		return "", fmt.Errorf("user %q not found", usernameOrEmail)
+		return "", fmt.Errorf("user %q not found", usernameOrID)
 	}
 	return *user.ID, nil
 }
@@ -797,26 +789,6 @@ func (k *KeycloakService) GetUserByUsername(ctx context.Context, accessToken, re
 		return users[0], nil
 	}
 	return nil, fmt.Errorf("ambiguous user %q: found %d matches", username, len(users))
-}
-
-func (k *KeycloakService) GetUserByEmail(ctx context.Context, accessToken, realm, email string) (*gocloak.User, error) {
-	exact := true
-	maxResults := 2
-	users, err := k.client.GetUsers(ctx, accessToken, realm, gocloak.GetUsersParams{
-		Email: &email,
-		Exact: &exact,
-		Max:   &maxResults,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to look up user by email %q: %w", email, err)
-	}
-	if len(users) == 0 {
-		return nil, nil
-	}
-	if len(users) == 1 {
-		return users[0], nil
-	}
-	return nil, fmt.Errorf("ambiguous user email %q: found %d matches", email, len(users))
 }
 
 func (k *KeycloakService) CreateUserWithToken(ctx context.Context, accessToken, realm string, user gocloak.User) (string, error) {
@@ -909,6 +881,7 @@ var orgMutexes sync.Map // map[string]*sync.Mutex
 
 func lockOrganization(orgID string) func() {
 	value, _ := orgMutexes.LoadOrStore(orgID, &sync.Mutex{})
+	//nolint:errcheck // orgMutexes only ever stores *sync.Mutex.
 	mu := value.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock
@@ -1056,7 +1029,7 @@ func (k *KeycloakService) ConfigureOrganizationMemberRoles(ctx context.Context, 
 		},
 	}
 	if err := trail.record(audit.PhaseStarted, nil); err != nil {
-		return nil, fmt.Errorf("%w: %v", audit.ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", audit.ErrUnavailable, err)
 	}
 
 	// Two separate loops on purpose: all revokes complete before the first

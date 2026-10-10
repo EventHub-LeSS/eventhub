@@ -1,19 +1,11 @@
-"use client";
+"use client"
 
-import {
-  Building2Icon,
-  DoorOpenIcon,
-  LogOutIcon,
-  MonitorIcon,
-  MoonIcon,
-  SunIcon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import Link from "next/link";
+import { LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react"
+import { useTheme } from "next-themes"
 
-import type { SessionUser } from "@/features/auth";
-import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar";
-import { Button } from "@/features/shared/components/ui/button";
+import type { SessionUser } from "@/features/auth"
+import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +16,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/features/shared/components/ui/dropdown-menu";
+} from "@/features/shared/components/ui/dropdown-menu"
 
 function initials(name: string) {
   const letters = name
@@ -32,17 +24,13 @@ function initials(name: string) {
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0])
-    .join("");
+    .join("")
 
-  return letters.toUpperCase() || "?";
-}
-
-function hasOrganizations(user: SessionUser) {
-  return user.organizations.length > 0;
+  return letters.toUpperCase() || "?"
 }
 
 export function UserMenu({ user }: { user: SessionUser }) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme()
 
   return (
     <DropdownMenu>
@@ -71,32 +59,6 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </div>
 
         <DropdownMenuSeparator />
-        {!hasOrganizations(user) && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Organizations</DropdownMenuLabel>
-            <DropdownMenuItem render={<Link href="/organizations/join" />}>
-              <DoorOpenIcon />
-              Join an organization
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
-        {hasOrganizations(user) && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Organization</DropdownMenuLabel>
-            <DropdownMenuItem render={<Link href="/organization" />}>
-              Your Organization
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
-        {user.isAdmin && (
-          <DropdownMenuGroup>
-            <DropdownMenuItem render={<Link href="/organizations/create" />}>
-              <Building2Icon />
-              Create an organization
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Appearance</DropdownMenuLabel>
           <DropdownMenuRadioGroup
@@ -117,6 +79,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+
         <DropdownMenuSeparator />
         <form method="post" action="/api/auth/logout">
           <DropdownMenuItem
@@ -131,5 +94,5 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </form>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }

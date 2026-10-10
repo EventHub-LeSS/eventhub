@@ -25,7 +25,7 @@ func appendEventAudit(tx repository.Tx, meta audit.Meta, org *model.Organization
 		Changes:        changes,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %v", audit.ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", audit.ErrUnavailable, err)
 	}
 	return nil
 }

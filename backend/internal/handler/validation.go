@@ -24,7 +24,9 @@ func init() {
 		}
 		return nil
 	}, decimal.Decimal{})
-	v.RegisterValidation("org_role", func(fl validator.FieldLevel) bool {
+	if err := v.RegisterValidation("org_role", func(fl validator.FieldLevel) bool {
 		return model.IsValidOrganizationRole(fl.Field().String())
-	})
+	}); err != nil {
+		panic("register org_role validation: " + err.Error())
+	}
 }

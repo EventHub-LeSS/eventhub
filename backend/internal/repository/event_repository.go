@@ -2,6 +2,7 @@ package repository
 
 import (
 	"backend/internal/model"
+	"errors"
 	"strings"
 
 	"github.com/google/uuid"
@@ -51,7 +52,7 @@ func (r *eventRepository) getEvent(eventID uuid.UUID, lock bool) (*model.EventMo
 		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
 	err := q.First(event, "event_id = ?", eventID).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {

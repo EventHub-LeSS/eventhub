@@ -147,7 +147,7 @@ services:
     environment:
       - APP_ENV=${APP_ENV:-dev}
     ports:
-      - "${KEYCLOAK_SWAGGER_PORT:-8082}:8080"
+      - "8088:8080"
 
 volumes:
   keycloak_postgres_data:

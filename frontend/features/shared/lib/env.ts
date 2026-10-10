@@ -1,8 +1,11 @@
 import "server-only"
 
+// Defaults mirror .env.example and are only used outside production so local
+// dev/tests work without a .env file. Production always requires real env vars.
 const devDefaults: Record<string, string> = {
-  KEYCLOAK_ISSUER: "http://localhost:8081/realms/eventhub",
-  KEYCLOAK_CLIENT_ID: "frontend",
+  KEYCLOAK_ISSUER: "http://localhost:5433/realms/eventhub",
+  KEYCLOAK_CLIENT_ID: "eventhub-frontend",
+  KEYCLOAK_CLIENT_SECRET: "eventhub-frontend-dev-secret",
   APP_BASE_URL: "http://localhost:3000",
   SESSION_SECRET: "replace-me-with-32-random-bytes-base64",
   API_BASE_URL: "http://localhost:8080/api/v1",
@@ -38,7 +41,7 @@ export const envConfig = {
     return get("KEYCLOAK_CLIENT_ID")
   },
   get keycloakClientSecret() {
-    return process.env.KEYCLOAK_CLIENT_SECRET ?? ""
+    return get("KEYCLOAK_CLIENT_SECRET")
   },
   get appBaseUrl() {
     return get("APP_BASE_URL")

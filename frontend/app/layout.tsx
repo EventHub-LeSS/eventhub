@@ -3,9 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import "@/app/globals.css"
 import { Navbar } from "@/features/app"
 import { getCurrentUser } from "@/features/auth"
-import { QueryProvider } from "@/features/shared/components/query-provider"
 import { ThemeProvider } from "@/features/shared/components/theme-provider"
-import { Toaster } from "@/features/shared/components/ui/toast"
 import { cn } from "@/features/shared/lib/utils"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
@@ -33,15 +31,12 @@ export default async function RootLayout({
       )}
     >
       <body>
-        <QueryProvider>
-          <ThemeProvider>
-            <div className="flex min-h-svh flex-col">
-              <Navbar user={user} />
-              {children}
-            </div>
-            <Toaster />
-          </ThemeProvider>
-        </QueryProvider>
+        <ThemeProvider>
+          <div className="flex min-h-svh flex-col">
+            <Navbar user={user} />
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   )

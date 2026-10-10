@@ -3,6 +3,7 @@ package repository
 import (
 	"backend/internal/model"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -31,7 +32,7 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 func (r *userRepository) GetByID(userID uuid.UUID) (*model.UserModel, error) {
 	user := &model.UserModel{}
 	err := r.db.Where("user_id = ?", userID).First(user).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -43,7 +44,7 @@ func (r *userRepository) GetByID(userID uuid.UUID) (*model.UserModel, error) {
 func (r *userRepository) GetByKeycloakUserID(keycloakUserID string) (*model.UserModel, error) {
 	user := &model.UserModel{}
 	err := r.db.Where("keycloak_user_id = ?", keycloakUserID).First(user).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -58,7 +59,7 @@ func (r *userRepository) GetByEmail(email string) (*model.UserModel, error) {
 	}
 	user := &model.UserModel{}
 	err := r.db.Where("LOWER(email) = LOWER(?)", email).First(user).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
