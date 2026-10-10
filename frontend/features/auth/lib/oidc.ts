@@ -14,12 +14,14 @@ function getOidcConfig() {
         ? { execute: [client.allowInsecureRequests] }
         : undefined
 
+    const clientSecret = authConfig.clientSecret || undefined
+
     discovered = client
       .discovery(
         issuer,
         authConfig.clientId,
-        authConfig.clientSecret,
-        undefined,
+        clientSecret,
+        clientSecret ? undefined : client.None(),
         options
       )
       .catch((error) => {
@@ -89,6 +91,7 @@ export async function refreshAccessToken(refreshToken: string) {
   const tokens = await client.refreshTokenGrant(config, refreshToken)
 
   return {
+    claims: tokens.claims(),
     accessToken: tokens.access_token,
     // Keycloak rotates refresh tokens on use; fall back to the old one if none comes back.
     refreshToken: tokens.refresh_token ?? refreshToken,
