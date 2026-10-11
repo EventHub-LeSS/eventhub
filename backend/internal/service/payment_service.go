@@ -74,7 +74,7 @@ func (s *PaymentService) StartPayment(ctx context.Context, bookingID, userID uui
 		}
 
 		if booking.PaymentID != nil {
-			payment, err := loadPayment(tx.GetPayment, booking)
+			payment, err := loadPayment(tx, booking)
 			if err != nil {
 				return err
 			}
@@ -151,7 +151,7 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 		if booking.PaymentID == nil {
 			return ErrPaymentNotStarted
 		}
-		payment, err := loadPayment(tx.GetPayment, booking)
+		payment, err := loadPayment(tx, booking)
 		if err != nil {
 			return err
 		}
@@ -161,7 +161,8 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 		if booking.Status != model.BookingStatusReserved {
 			return ErrBookingNotPayable
 		}
-		if !confirmedAmount.Equal(payment.Amount) {
+		// An unbounded exponent can never match a stored amount, and comparing it would stall.
+		if !model.IsBoundedDecimal(confirmedAmount) || !confirmedAmount.Equal(payment.Amount) {
 			return ErrPaymentAmountMismatch
 		}
 
@@ -203,7 +204,7 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 
 // GetPayment returns the stored payment process of a booking of the user.
 func (s *PaymentService) GetPayment(ctx context.Context, bookingID, userID uuid.UUID) (*model.PaymentResponse, error) {
-	booking, err := s.paymentRepo.GetBookingByID(ctx, bookingID)
+	booking, payment, err := s.paymentRepo.GetBookingPayment(ctx, bookingID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,18 +214,16 @@ func (s *PaymentService) GetPayment(ctx context.Context, bookingID, userID uuid.
 	if booking.PaymentID == nil {
 		return nil, ErrPaymentNotStarted
 	}
-	payment, err := loadPayment(func(id uuid.UUID) (*model.PaymentModel, error) {
-		return s.paymentRepo.GetPaymentByID(ctx, id)
-	}, booking)
-	if err != nil {
-		return nil, err
+	if payment == nil {
+		return nil, fmt.Errorf("payment %s of booking %s not found", *booking.PaymentID, booking.BookingID)
 	}
-	return paymentResponse(booking, payment), nil
+	// The clock only words the message of a pending payment; the status is the stored one.
+	return paymentResponse(booking, payment, time.Now()), nil
 }
 
 // loadPayment loads the payment a booking references. The foreign key guarantees that it exists.
-func loadPayment(get func(uuid.UUID) (*model.PaymentModel, error), booking *model.BookingModel) (*model.PaymentModel, error) {
-	payment, err := get(*booking.PaymentID)
+func loadPayment(tx repository.PaymentTx, booking *model.BookingModel) (*model.PaymentModel, error) {
+	payment, err := tx.GetPayment(*booking.PaymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +258,8 @@ func reservationExpired(booking *model.BookingModel, now time.Time) bool {
 	return booking.ExpiresAt == nil || !booking.ExpiresAt.After(now)
 }
 
-func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel) *model.PaymentResponse {
+func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel, now time.Time) *model.PaymentResponse {
+	ticketsValid := payment.Status == model.PaymentStatusPaid && booking.Status == model.BookingStatusConfirmed
 	resp := &model.PaymentResponse{
 		PaymentID:       payment.PaymentID,
 		BookingID:       booking.BookingID,
@@ -269,8 +269,8 @@ func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel) *
 		Status:          payment.Status,
 		FailureReason:   payment.FailureReason,
 		BookingStatus:   booking.Status,
-		TicketsValid:    payment.Status == model.PaymentStatusPaid && booking.Status == model.BookingStatusConfirmed,
-		Message:         paymentMessage(payment),
+		TicketsValid:    ticketsValid,
+		Message:         paymentMessage(booking, payment, ticketsValid, now),
 		CreatedAt:       payment.CreatedAt,
 		UpdatedAt:       payment.UpdatedAt,
 	}
@@ -280,11 +280,19 @@ func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel) *
 	return resp
 }
 
-func paymentMessage(payment *model.PaymentModel) string {
+// paymentMessage words the result for the user. It never contradicts ticketsValid: only valid
+// tickets are reported as a confirmed booking.
+func paymentMessage(booking *model.BookingModel, payment *model.PaymentModel, ticketsValid bool, now time.Time) string {
 	switch payment.Status {
 	case model.PaymentStatusPending:
+		if booking.Status != model.BookingStatusReserved || reservationExpired(booking, now) {
+			return "Your reservation is no longer valid, so the payment can no longer be completed. No tickets were booked; please start a new booking."
+		}
 		return "Payment pending. Confirm the amount to complete your booking."
 	case model.PaymentStatusPaid:
+		if !ticketsValid {
+			return "The payment was received, but the booking is no longer active. Your tickets are not valid."
+		}
 		return "Payment successful. Your booking is confirmed."
 	case model.PaymentStatusRefunded:
 		return "The payment was refunded. Your tickets are no longer valid."

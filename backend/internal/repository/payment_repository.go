@@ -3,6 +3,7 @@ package repository
 import (
 	"backend/internal/model"
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +27,10 @@ type PaymentTx interface {
 type PaymentRepository interface {
 	InTransaction(ctx context.Context, fn func(tx PaymentTx) error) error
 	GetBookingByID(ctx context.Context, bookingID uuid.UUID) (*model.BookingModel, error)
-	GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*model.PaymentModel, error)
+	// GetBookingPayment returns a booking and the payment it references from one snapshot, so a
+	// payment completed meanwhile never shows up next to the booking state from before. The
+	// payment is nil when the booking or its payment process does not exist.
+	GetBookingPayment(ctx context.Context, bookingID uuid.UUID) (*model.BookingModel, *model.PaymentModel, error)
 }
 
 type paymentRepository struct {
@@ -47,8 +51,15 @@ func (r *paymentRepository) GetBookingByID(ctx context.Context, bookingID uuid.U
 	return findBooking(r.db.WithContext(ctx), bookingID)
 }
 
-func (r *paymentRepository) GetPaymentByID(ctx context.Context, paymentID uuid.UUID) (*model.PaymentModel, error) {
-	return findPayment(r.db.WithContext(ctx), paymentID)
+func (r *paymentRepository) GetBookingPayment(ctx context.Context, bookingID uuid.UUID) (booking *model.BookingModel, payment *model.PaymentModel, err error) {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if booking, err = findBooking(tx, bookingID); err != nil || booking == nil || booking.PaymentID == nil {
+			return err
+		}
+		payment, err = findPayment(tx, *booking.PaymentID)
+		return err
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	return booking, payment, err
 }
 
 type paymentTx struct {
