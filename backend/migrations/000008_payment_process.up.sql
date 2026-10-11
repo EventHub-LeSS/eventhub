@@ -12,6 +12,6 @@ ALTER TABLE payments
 ALTER TABLE payments
     ADD CONSTRAINT payments_amount_non_negative CHECK (amount >= 0);
 
--- A payment settles exactly one booking.
+-- A payment belongs to at most one booking; bookings.payment_id already allows one payment per booking.
 ALTER TABLE bookings
     ADD CONSTRAINT bookings_payment_id_key UNIQUE (payment_id);

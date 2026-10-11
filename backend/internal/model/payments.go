@@ -24,7 +24,7 @@ const (
 	PaymentFailureDeclined PaymentFailureReason = "declined"
 	// PaymentFailureReservationExpired means the reservation ran out before the payment was completed.
 	PaymentFailureReservationExpired PaymentFailureReason = "reservation_expired"
-	// PaymentFailureEventUnavailable means the event was withdrawn before the payment was completed.
+	// PaymentFailureEventUnavailable means the event was withdrawn or deleted before the payment was completed.
 	PaymentFailureEventUnavailable PaymentFailureReason = "event_unavailable"
 )
 

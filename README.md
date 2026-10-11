@@ -211,9 +211,10 @@ manipulierter Betrag oder Betrag außerhalb von `NUMERIC(12,2)`.
 höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Der Abschluss sperrt wie
 `ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
 eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Migration
-`000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie eine Zahlung je
-Buchung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die Migration bewusst
-scheitern.
+`000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie höchstens eine
+Buchung je Zahlung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die
+Migration bewusst scheitern. Beträge mit extremem Exponenten (z. B. `1e2000000000`) lehnt die
+Validierung mit `400` ab, bevor sie umgerechnet werden; das gilt auch für `price` der Events.
 
 **Getestet:** Automatisch über `TestStartPayment_*`, `TestSimulatePayment_*`, `TestGetPayment_*` und
 `TestPayment_*` in `backend/internal/service` und `backend/internal/handler` (Betragsberechnung,

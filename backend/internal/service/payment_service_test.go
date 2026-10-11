@@ -6,8 +6,10 @@ import (
 	"backend/internal/testdb"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -343,7 +345,8 @@ func TestSimulatePayment_RejectsManipulatedAmount(t *testing.T) {
 	bookingID := f.reserve(t, 3)
 	f.start(t, bookingID)
 
-	for _, amount := range []string{"0", "0.01", "59.96", "59.98", "59.971", "-59.97", "5997", "100000000000"} {
+	// 1e2000000000 also checks that the comparison does not stall on a huge exponent.
+	for _, amount := range []string{"0", "0.01", "59.96", "59.98", "59.971", "-59.97", "5997", "100000000000", "1e2000000000", "5997e-2000000000"} {
 		_, err := f.payments.SimulatePayment(context.Background(), bookingID, f.userID, model.SimulatedPaymentSuccess, decimal.RequireFromString(amount))
 		if !errors.Is(err, ErrPaymentAmountMismatch) {
 			t.Errorf("amount %s: expected ErrPaymentAmountMismatch, got %v", amount, err)
@@ -621,39 +624,103 @@ func TestPaymentResponse_OnlyPaidConfirmedTicketsAreValid(t *testing.T) {
 	declined := model.PaymentFailureDeclined
 	expired := model.PaymentFailureReservationExpired
 	unavailable := model.PaymentFailureEventUnavailable
+	now := time.Now()
+	live, past := now.Add(time.Minute), now.Add(-time.Minute)
 	cases := []struct {
 		payment model.PaymentStatus
 		reason  *model.PaymentFailureReason
 		booking model.BookingStatus
+		expires *time.Time
 		valid   bool
 	}{
-		{model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, true},
-		{model.PaymentStatusPaid, nil, model.BookingStatusCancelled, false},
-		{model.PaymentStatusPending, nil, model.BookingStatusReserved, false},
-		{model.PaymentStatusPending, nil, model.BookingStatusConfirmed, false},
-		{model.PaymentStatusFailed, &declined, model.BookingStatusFailed, false},
-		{model.PaymentStatusFailed, &declined, model.BookingStatusConfirmed, false},
-		{model.PaymentStatusFailed, &expired, model.BookingStatusExpired, false},
-		{model.PaymentStatusFailed, &unavailable, model.BookingStatusFailed, false},
-		{model.PaymentStatusFailed, nil, model.BookingStatusFailed, false},
-		{model.PaymentStatusRefunded, nil, model.BookingStatusConfirmed, false},
+		{model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, true},
+		{model.PaymentStatusPaid, nil, model.BookingStatusCancelled, nil, false},
+		{model.PaymentStatusPending, nil, model.BookingStatusReserved, &live, false},
+		{model.PaymentStatusPending, nil, model.BookingStatusReserved, &past, false},
+		{model.PaymentStatusPending, nil, model.BookingStatusConfirmed, &live, false},
+		{model.PaymentStatusFailed, &declined, model.BookingStatusFailed, nil, false},
+		{model.PaymentStatusFailed, &declined, model.BookingStatusConfirmed, nil, false},
+		{model.PaymentStatusFailed, &expired, model.BookingStatusExpired, nil, false},
+		{model.PaymentStatusFailed, &unavailable, model.BookingStatusFailed, nil, false},
+		{model.PaymentStatusFailed, nil, model.BookingStatusFailed, nil, false},
+		{model.PaymentStatusRefunded, nil, model.BookingStatusConfirmed, nil, false},
 	}
+	success := paymentResponse(
+		&model.BookingModel{Status: model.BookingStatusConfirmed},
+		&model.PaymentModel{Status: model.PaymentStatusPaid}, now,
+	).Message
+	completable := paymentResponse(
+		&model.BookingModel{Status: model.BookingStatusReserved, ExpiresAt: &live},
+		&model.PaymentModel{Status: model.PaymentStatusPending}, now,
+	).Message
+
 	messages := map[string]bool{}
 	for _, tc := range cases {
 		resp := paymentResponse(
-			&model.BookingModel{BookingID: uuid.New(), Status: tc.booking},
+			&model.BookingModel{BookingID: uuid.New(), Status: tc.booking, ExpiresAt: tc.expires},
 			&model.PaymentModel{PaymentID: uuid.New(), Status: tc.payment, FailureReason: tc.reason},
+			now,
 		)
+		name := fmt.Sprintf("%s/%s", tc.payment, tc.booking)
 		if resp.TicketsValid != tc.valid {
-			t.Errorf("%s/%s: expected ticketsValid=%v", tc.payment, tc.booking, tc.valid)
+			t.Errorf("%s: expected ticketsValid=%v", name, tc.valid)
 		}
 		if resp.Message == "" {
-			t.Errorf("%s/%s: expected a message", tc.payment, tc.booking)
+			t.Errorf("%s: expected a message", name)
+		}
+		// The message never contradicts the result.
+		if !tc.valid && resp.Message == success {
+			t.Errorf("%s: invalid tickets must not be reported as a confirmed booking", name)
+		}
+		if resp.Message == completable && (tc.booking != model.BookingStatusReserved || tc.expires != &live) {
+			t.Errorf("%s: only a live reservation may ask to complete the payment", name)
 		}
 		messages[resp.Message] = true
 	}
-	// pending, paid, refunded, generic failure and one message per failure reason
-	if len(messages) != 7 {
-		t.Errorf("expected 7 distinct messages, got %d: %v", len(messages), messages)
+	// pending (live and invalid), paid (valid and invalid), refunded, generic failure and one
+	// message per failure reason
+	if len(messages) != 9 {
+		t.Errorf("expected 9 distinct messages, got %d: %v", len(messages), messages)
 	}
+}
+
+// GET must never combine the booking state from before a completion with the payment after it.
+func TestGetPayment_ConsistentWhileCompleting(t *testing.T) {
+	f := newPaymentFixture(t, 10, "20.00")
+	bookingID := f.reserve(t, 1)
+	f.start(t, bookingID)
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				resp, err := f.payments.GetPayment(context.Background(), bookingID, f.userID)
+				if err != nil {
+					t.Errorf("get payment: %v", err)
+					return
+				}
+				pending := resp.Status == model.PaymentStatusPending && resp.BookingStatus == model.BookingStatusReserved
+				paid := resp.Status == model.PaymentStatusPaid && resp.BookingStatus == model.BookingStatusConfirmed && resp.TicketsValid
+				if !pending && !paid {
+					t.Errorf("inconsistent result: %s/%s ticketsValid=%v", resp.Status, resp.BookingStatus, resp.TicketsValid)
+					return
+				}
+			}
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, err := f.payments.SimulatePayment(context.Background(), bookingID, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(20)); err != nil {
+		t.Errorf("simulate: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(stop)
+	wg.Wait()
 }

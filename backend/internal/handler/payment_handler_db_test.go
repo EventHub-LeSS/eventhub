@@ -234,6 +234,7 @@ func TestPayment_Rejections(t *testing.T) {
 		{"missing amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success"}, http.StatusBadRequest},
 		{"null amount", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":null}`, http.StatusBadRequest},
 		{"negative amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "-20"}, http.StatusBadRequest},
+		{"amount with huge exponent", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":"1e2000000000"}`, http.StatusBadRequest},
 		{"amount not a number", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "twenty"}, http.StatusBadRequest},
 		{"missing outcome", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"amount": "20"}, http.StatusBadRequest},
 		{"unknown outcome", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "paid", "amount": "20"}, http.StatusBadRequest},

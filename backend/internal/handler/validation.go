@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"math"
 	"reflect"
 
 	"backend/internal/model"
@@ -19,6 +20,10 @@ func init() {
 	}
 	v.RegisterCustomTypeFunc(func(field reflect.Value) any {
 		if d, ok := field.Interface().(decimal.Decimal); ok {
+			// Float64 would materialize 10^|exponent|; NaN fails every numeric rule instead.
+			if !model.IsBoundedDecimal(d) {
+				return math.NaN()
+			}
 			f, _ := d.Float64()
 			return f
 		}
