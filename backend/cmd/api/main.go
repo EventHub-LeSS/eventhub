@@ -74,11 +74,13 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
 	tx := repository.NewTransactor(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	paymentService := service.NewPaymentService(paymentRepo)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
@@ -87,6 +89,7 @@ func main() {
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
@@ -135,6 +138,10 @@ func main() {
 
 		// bookings
 		protected.POST("/bookings", bookingHandler)
+		// EVENTHUB-235: simulated payment process of a booking, no real payment provider
+		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
+		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)
+		protected.POST("/bookings/:bookingId/payment/simulate", paymentHandler.SimulatePaymentHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
