@@ -171,6 +171,56 @@ PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
 zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
 Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
 
+### Zahlungsvorgang (EVENTHUB-235)
+
+Eine Reservierung aus `POST /api/v1/bookings` wird über einen simulierten Zahlungsvorgang
+verbindlich. Es ist **kein echter Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt
+der Client.
+
+1. `POST /api/v1/bookings/{bookingId}/payment` legt eine Zahlung mit Status `pending` an. Der Betrag
+   ist Ticketanzahl × Veranstaltungspreis, wird nur serverseitig berechnet und gespeichert; Beträge
+   im Request werden ignoriert. Antwort `201`, ein erneuter Aufruf liefert die offene Zahlung
+   unverändert mit `200` (spätere Preisänderungen ändern einen angezeigten Betrag nicht).
+2. Der Client zeigt `amount` an und schließt mit
+   `POST /api/v1/bookings/{bookingId}/payment/simulate` und `{"outcome": "success" | "failure", "amount": <angezeigter Betrag>}` ab.
+   Weicht `amount` vom gespeicherten Betrag ab, wird nichts geändert (`422`).
+3. `GET /api/v1/bookings/{bookingId}/payment` liefert jederzeit den gespeicherten Stand.
+
+Alle drei Endpunkte antworten mit `PaymentResponse` aus den gespeicherten Daten: `amount`, `status`
+(`pending`/`paid`/`failed`), `failureReason`, `bookingStatus`, `ticketsValid` und eine lesbare
+`message`. `ticketsValid` ist nur bei `paid` **und** `confirmed` `true`.
+
+| Ergebnis | Zahlung | Buchung | `failureReason` |
+| --- | --- | --- | --- |
+| `success` | `paid` | `confirmed` | – |
+| `failure` | `failed` | `failed` | `declined` |
+| Reservierung inzwischen abgelaufen | `failed` | `expired` | `reservation_expired` |
+| Event inzwischen zurückgezogen | `failed` | `failed` | `event_unavailable` |
+
+Fehlgeschlagene Buchungen geben ihre Tickets sofort frei und zählen nicht als verkauft; für einen
+neuen Versuch ist eine neue Buchung nötig. Die Zahlung muss vor `expiresAt` der Reservierung
+abgeschlossen werden.
+
+**Fehler:** `400` ungültige ID oder ungültiger Body (fehlendes/negatives `amount`, unbekanntes
+`outcome`), `401` ohne Token, `403` Nutzer nicht synchronisiert, `404` Buchung unbekannt, gehört
+einem anderen Nutzer oder hat noch keinen Zahlungsvorgang, `409` Buchung nicht reserviert,
+Reservierung abgelaufen, Event nicht mehr veröffentlicht oder Zahlung bereits abgeschlossen, `422`
+manipulierter Betrag oder Betrag außerhalb von `NUMERIC(12,2)`.
+
+**Garantien:** Start und Abschluss laufen in Transaktionen mit Zeilensperren; eine Buchung bekommt
+höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Der Abschluss sperrt wie
+`ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
+eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Migration
+`000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie eine Zahlung je
+Buchung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die Migration bewusst
+scheitern.
+
+**Getestet:** Automatisch über `TestStartPayment_*`, `TestSimulatePayment_*`, `TestGetPayment_*` und
+`TestPayment_*` in `backend/internal/service` und `backend/internal/handler` (Betragsberechnung,
+manipulierte Beträge, Erfolg, Ablehnung, abgelaufene Reservierung, zurückgezogenes Event, fremde
+Buchungen, parallele Starts und Abschlüsse ohne Deadlock oder Überbuchung). Zusätzlich manuell mit
+dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
+
 ### Veranstaltungen einer Organisation (EVENTHUB-79)
 
 `GET /api/v1/events/org/{id}` liefert alle Veranstaltungen einer Organisation in jedem Status,

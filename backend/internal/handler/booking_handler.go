@@ -19,7 +19,7 @@ type CreateBookingRequest struct {
 
 // CreateBookingHandler godoc
 // @Summary      Buchung anlegen
-// @Description  Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
+// @Description  Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde. Bestätigt wird sie über den Zahlungsvorgang (POST /bookings/{bookingId}/payment).
 // @Tags         bookings
 // @Accept       json
 // @Produce      json
