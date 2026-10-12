@@ -99,6 +99,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
+	r.DELETE("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventDeleted), h.DeleteEventHandler)
 	return r
 }
 

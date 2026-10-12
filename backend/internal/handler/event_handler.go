@@ -6,6 +6,7 @@ import (
 	"backend/internal/service"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -38,6 +39,30 @@ func managedOrganizationIDs(c *gin.Context) ([]string, bool) {
 		return nil, false
 	}
 	return managedOrgIDs, true
+}
+
+// organizationIDsWithAnyRole returns the organizations in which the caller holds at least one of
+// the roles. It writes 401 or 403 and returns false if there are none.
+func organizationIDsWithAnyRole(c *gin.Context, roles ...middleware.OrganizationRole) ([]string, bool) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return nil, false
+	}
+
+	var orgIDs []string
+	for _, role := range roles {
+		for _, id := range principal.OrganizationIDsWithRole(role) {
+			if !slices.Contains(orgIDs, id) {
+				orgIDs = append(orgIDs, id)
+			}
+		}
+	}
+	if len(orgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return nil, false
+	}
+	return orgIDs, true
 }
 
 // EVENTHUB-75: Veranstaltung anlegen
@@ -191,6 +216,42 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, model.EventWithdrawnResponse{Message: "event withdrawn"})
 }
 
+// EVENTHUB-256: Veranstaltungsentwurf löschen
+// @Summary      Delete draft event
+// @Description  Irrevocably deletes a draft event. Requires the event_manager or org_admin role in the organization that owns the event. Only events in status draft can be deleted; published, cancelled and completed events return 400. Events with bookings in any status are never deleted and return 409, because the bookings belong to the booking history of the visitors. The audit log entries of the event are kept.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path   string                    true  "Event ID"
+// @Success      200  {object} model.EventDeletedResponse
+// @Failure      400  {object} model.ErrorResponse
+// @Failure      401  {object} model.APIError
+// @Failure      403  {object} model.ErrorResponse
+// @Failure      404  {object} model.ErrorResponse
+// @Failure      409  {object} model.ErrorResponse "Event has bookings"
+// @Failure      500  {object} model.ErrorResponse
+// @Router       /events/{id} [delete]
+func (h *EventHandler) DeleteEventHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
+		return
+	}
+
+	// Besides the event managers, the organization admins may delete the drafts of their organization.
+	orgIDs, ok := organizationIDsWithAnyRole(c, middleware.RoleEventManager, middleware.RoleOrganizationAdmin)
+	if !ok {
+		return
+	}
+
+	if err := h.eventService.DeleteEvent(c.Request.Context(), eventID, orgIDs); err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, model.EventDeletedResponse{Message: "event deleted"})
+}
+
 func writeEventActionError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrEventNotFound):
@@ -209,6 +270,10 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrAlreadyPublished):
 		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrNotDeletable):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrHasBookings):
+		writeProblem(c, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrOrganizationRequired):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrUnknownReference):

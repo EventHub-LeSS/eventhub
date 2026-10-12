@@ -65,6 +65,11 @@ type EventWithdrawnResponse struct {
 	Message string `json:"message" example:"event withdrawn"`
 }
 
+// EVENTHUB-256: Veranstaltungsentwurf löschen
+type EventDeletedResponse struct {
+	Message string `json:"message" example:"event deleted"`
+}
+
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
 type CreateDraftRequest struct {
 	// Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.
