@@ -47,14 +47,8 @@ func CreateBookingHandler(bookingService *service.BookingService, userRepo repos
 			return
 		}
 
-		// The token subject is the Keycloak user id, bookings reference the API user id.
-		user, err := middleware.ResolveUserForPrincipal(userRepo, principal)
-		if err != nil {
-			writeProblem(c, http.StatusInternalServerError, "internal error")
-			return
-		}
-		if user == nil {
-			writeProblem(c, http.StatusForbidden, "user not found in API database, run sync first")
+		user, ok := resolveAPIUser(c, userRepo, principal)
+		if !ok {
 			return
 		}
 

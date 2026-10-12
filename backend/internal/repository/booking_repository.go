@@ -19,6 +19,8 @@ type BookingTx interface {
 type BookingRepository interface {
 	InTransaction(ctx context.Context, fn func(tx BookingTx) error) error
 	GetBookingByID(bookingID uuid.UUID) (*model.BookingModel, error)
+	// LockBooking reads the booking with SELECT ... FOR UPDATE; use it inside a transaction.
+	LockBooking(bookingID uuid.UUID) (*model.BookingModel, error)
 	GetAllBookings() ([]*model.BookingModel, error)
 	UpdateBooking(booking *model.BookingModel) error
 }
@@ -32,9 +34,21 @@ func NewBookingRepository(db *gorm.DB) BookingRepository {
 }
 
 func (r *bookingRepository) GetBookingByID(bookingID uuid.UUID) (*model.BookingModel, error) {
+	return r.getBooking(bookingID, false)
+}
+
+func (r *bookingRepository) LockBooking(bookingID uuid.UUID) (*model.BookingModel, error) {
+	return r.getBooking(bookingID, true)
+}
+
+func (r *bookingRepository) getBooking(bookingID uuid.UUID, lock bool) (*model.BookingModel, error) {
 	booking := &model.BookingModel{}
-	err := r.db.First(booking, "booking_id = ?", bookingID).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	q := r.db
+	if lock {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	err := q.First(booking, "booking_id = ?", bookingID).Error
+	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
 	if err != nil {

@@ -854,7 +854,10 @@ paths:
     get:
       description: 'Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers:
         Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid
-        ist nur bei bezahlter und bestätigter Buchung true.'
+        ist nur bei bezahlter und bestätigter Buchung true, deren Event stattfindet
+        oder stattgefunden hat. Buchung, Zahlung, Event-Status und Datenbankuhr stammen
+        aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein
+        Hintergrundjob jede Minute als fehlgeschlagen ab.'
       parameters:
       - description: Booking ID
         in: path
@@ -898,8 +901,9 @@ paths:
         Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert
         und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter
         Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung
-        muss vor expiresAt abgeschlossen werden. Buchungen anderer Nutzer liefern
-        404.
+        muss vor expiresAt abgeschlossen werden. Ist die Reservierung abgelaufen oder
+        das Event zurückgezogen, wird eine offene Zahlung dabei als fehlgeschlagen
+        gespeichert und 409 geliefert. Buchungen anderer Nutzer liefern 404.
       parameters:
       - description: Booking ID
         in: path
@@ -962,7 +966,8 @@ paths:
         Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt
         die Zahlung fehl (status failed, failureReason, message), die Buchung erhält
         keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird
-        aus dem gespeicherten Zahlungsstatus gelesen.
+        innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der
+        Body darf höchstens 4 KiB groß sein (413).
       parameters:
       - description: Booking ID
         in: path
@@ -1000,6 +1005,10 @@ paths:
             $ref: '#/definitions/model.ErrorResponse'
         "409":
           description: Zahlung bereits abgeschlossen oder Buchung nicht reserviert
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "413":
+          description: Request Body größer als 4 KiB
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "422":

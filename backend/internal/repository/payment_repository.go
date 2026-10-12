@@ -2,35 +2,41 @@ package repository
 
 import (
 	"backend/internal/model"
-	"context"
-	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-type PaymentTx interface {
-	// Now returns the current database time. Reservations expire by the database clock, see
-	// bookingTx.CountOccupiedTickets.
-	Now() (time.Time, error)
-	GetEvent(eventID uuid.UUID) (*model.EventModel, error)
-	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
-	LockBooking(bookingID uuid.UUID) (*model.BookingModel, error)
-	GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error)
-	CreatePayment(payment *model.PaymentModel) error
-	UpdatePayment(payment *model.PaymentModel) error
-	UpdateBooking(booking *model.BookingModel) error
+// BookingPayment is a booking with its payment and the state of its event, read in one statement
+// and thus from one snapshot.
+type BookingPayment struct {
+	Booking *model.BookingModel
+	// Payment is nil while no payment process has been started.
+	Payment *model.PaymentModel
+	// EventStatus is nil when the event of the booking no longer exists.
+	EventStatus *model.EventStatus
+	// Now is the database clock at the time of the read. Reservations expire by the database
+	// clock, see bookingTx.CountOccupiedTickets.
+	Now time.Time
 }
 
 type PaymentRepository interface {
-	InTransaction(ctx context.Context, fn func(tx PaymentTx) error) error
-	GetBookingByID(ctx context.Context, bookingID uuid.UUID) (*model.BookingModel, error)
-	// GetBookingPayment returns a booking and the payment it references from one snapshot, so a
-	// payment completed meanwhile never shows up next to the booking state from before. The
-	// payment is nil when the booking or its payment process does not exist.
-	GetBookingPayment(ctx context.Context, bookingID uuid.UUID) (*model.BookingModel, *model.PaymentModel, error)
+	// DatabaseNow returns the current database time: clock_timestamp, not NOW, which is the start
+	// of the transaction and may lie before a lock wait.
+	DatabaseNow() (time.Time, error)
+	GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error)
+	CreatePayment(payment *model.PaymentModel) error
+	UpdatePayment(payment *model.PaymentModel) error
+	// GetBookingPayment returns nil when the booking does not exist. A single statement sees one
+	// snapshot, so a payment completed meanwhile never shows up next to the booking state from
+	// before; inside a transaction it also sees the transaction's own writes.
+	GetBookingPayment(bookingID uuid.UUID) (*BookingPayment, error)
+	// LockStalePendingBookings locks reserved bookings whose reservation has expired while their
+	// payment is still pending. Bookings locked elsewhere, e.g. by a payment being completed right
+	// now, are skipped.
+	LockStalePendingBookings(limit int) ([]*model.BookingModel, error)
 }
 
 type paymentRepository struct {
@@ -41,81 +47,15 @@ func NewPaymentRepository(db *gorm.DB) PaymentRepository {
 	return &paymentRepository{db: db}
 }
 
-func (r *paymentRepository) InTransaction(ctx context.Context, fn func(tx PaymentTx) error) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return fn(&paymentTx{db: tx})
-	})
-}
-
-func (r *paymentRepository) GetBookingByID(ctx context.Context, bookingID uuid.UUID) (*model.BookingModel, error) {
-	return findBooking(r.db.WithContext(ctx), bookingID)
-}
-
-func (r *paymentRepository) GetBookingPayment(ctx context.Context, bookingID uuid.UUID) (booking *model.BookingModel, payment *model.PaymentModel, err error) {
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if booking, err = findBooking(tx, bookingID); err != nil || booking == nil || booking.PaymentID == nil {
-			return err
-		}
-		payment, err = findPayment(tx, *booking.PaymentID)
-		return err
-	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
-	return booking, payment, err
-}
-
-type paymentTx struct {
-	db *gorm.DB
-}
-
-func (t *paymentTx) Now() (time.Time, error) {
-	// clock_timestamp, not NOW: NOW is the start of the transaction, which may lie before a lock wait.
+func (r *paymentRepository) DatabaseNow() (time.Time, error) {
 	var now time.Time
-	err := t.db.Raw("SELECT clock_timestamp()").Scan(&now).Error
+	err := r.db.Raw("SELECT clock_timestamp()").Scan(&now).Error
 	return now, err
 }
 
-func (t *paymentTx) GetEvent(eventID uuid.UUID) (*model.EventModel, error) {
-	return NewEventRepository(t.db).GetEventByID(eventID)
-}
-
-func (t *paymentTx) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {
-	return NewEventRepository(t.db).LockEvent(eventID)
-}
-
-func (t *paymentTx) LockBooking(bookingID uuid.UUID) (*model.BookingModel, error) {
-	return findBooking(t.db.Clauses(clause.Locking{Strength: "UPDATE"}), bookingID)
-}
-
-func (t *paymentTx) GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error) {
-	return findPayment(t.db, paymentID)
-}
-
-func (t *paymentTx) CreatePayment(payment *model.PaymentModel) error {
-	return t.db.Create(payment).Error
-}
-
-func (t *paymentTx) UpdatePayment(payment *model.PaymentModel) error {
-	return t.db.Save(payment).Error
-}
-
-func (t *paymentTx) UpdateBooking(booking *model.BookingModel) error {
-	return t.db.Save(booking).Error
-}
-
-func findBooking(db *gorm.DB, bookingID uuid.UUID) (*model.BookingModel, error) {
-	booking := &model.BookingModel{}
-	err := db.First(booking, "booking_id = ?", bookingID).Error
-	if err == gorm.ErrRecordNotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return booking, nil
-}
-
-func findPayment(db *gorm.DB, paymentID uuid.UUID) (*model.PaymentModel, error) {
+func (r *paymentRepository) GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error) {
 	payment := &model.PaymentModel{}
-	err := db.First(payment, "payment_id = ?", paymentID).Error
+	err := r.db.First(payment, "payment_id = ?", paymentID).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
@@ -123,4 +63,78 @@ func findPayment(db *gorm.DB, paymentID uuid.UUID) (*model.PaymentModel, error) 
 		return nil, err
 	}
 	return payment, nil
+}
+
+func (r *paymentRepository) CreatePayment(payment *model.PaymentModel) error {
+	return r.db.Create(payment).Error
+}
+
+func (r *paymentRepository) UpdatePayment(payment *model.PaymentModel) error {
+	return r.db.Save(payment).Error
+}
+
+// bookingPaymentRow is one row of GetBookingPayment; the payment columns are NULL while no
+// payment process has been started.
+type bookingPaymentRow struct {
+	model.BookingModel
+	PaymentAmount        decimal.NullDecimal         `gorm:"column:payment_amount"`
+	PaymentStatus        *model.PaymentStatus        `gorm:"column:payment_status"`
+	PaymentFailureReason *model.PaymentFailureReason `gorm:"column:payment_failure_reason"`
+	PaymentRefundAmount  decimal.NullDecimal         `gorm:"column:payment_refund_amount"`
+	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
+	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
+	EventStatus          *model.EventStatus          `gorm:"column:event_status"`
+	DatabaseNow          time.Time                   `gorm:"column:database_now"`
+}
+
+func (r *paymentRepository) GetBookingPayment(bookingID uuid.UUID) (*BookingPayment, error) {
+	var row bookingPaymentRow
+	res := r.db.Raw(`SELECT b.*,
+	        p.amount AS payment_amount, p.status AS payment_status, p.failure_reason AS payment_failure_reason,
+	        p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
+	        e.status AS event_status, clock_timestamp() AS database_now
+	    FROM bookings b
+	    LEFT JOIN payments p ON p.payment_id = b.payment_id
+	    LEFT JOIN events e ON e.event_id = b.event_id
+	    WHERE b.booking_id = ?`, bookingID).Scan(&row)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, nil
+	}
+
+	booking := row.BookingModel
+	view := &BookingPayment{Booking: &booking, EventStatus: row.EventStatus, Now: row.DatabaseNow}
+	if booking.PaymentID != nil && row.PaymentStatus != nil {
+		view.Payment = &model.PaymentModel{
+			PaymentID:     *booking.PaymentID,
+			Amount:        row.PaymentAmount.Decimal,
+			Status:        *row.PaymentStatus,
+			FailureReason: row.PaymentFailureReason,
+			RefundAmount:  row.PaymentRefundAmount.Decimal,
+			CreatedAt:     derefTime(row.PaymentCreatedAt),
+			UpdatedAt:     derefTime(row.PaymentUpdatedAt),
+		}
+	}
+	return view, nil
+}
+
+func (r *paymentRepository) LockStalePendingBookings(limit int) ([]*model.BookingModel, error) {
+	var bookings []*model.BookingModel
+	err := r.db.Raw(`SELECT b.* FROM bookings b
+	    JOIN payments p ON p.payment_id = b.payment_id
+	    WHERE b.status = ? AND p.status = ? AND b.expires_at <= clock_timestamp()
+	    ORDER BY b.expires_at
+	    LIMIT ?
+	    FOR UPDATE OF b SKIP LOCKED`,
+		model.BookingStatusReserved, model.PaymentStatusPending, limit).Scan(&bookings).Error
+	return bookings, err
+}
+
+func derefTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

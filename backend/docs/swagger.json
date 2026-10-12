@@ -316,7 +316,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers: Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid ist nur bei bezahlter und bestätigter Buchung true.",
+                "description": "Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers: Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid ist nur bei bezahlter und bestätigter Buchung true, deren Event stattfindet oder stattgefunden hat. Buchung, Zahlung, Event-Status und Datenbankuhr stammen aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein Hintergrundjob jede Minute als fehlgeschlagen ab.",
                 "produces": [
                     "application/json"
                 ],
@@ -378,7 +378,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang. Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung muss vor expiresAt abgeschlossen werden. Buchungen anderer Nutzer liefern 404.",
+                "description": "Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang. Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung muss vor expiresAt abgeschlossen werden. Ist die Reservierung abgelaufen oder das Event zurückgezogen, wird eine offene Zahlung dabei als fehlgeschlagen gespeichert und 409 geliefert. Buchungen anderer Nutzer liefern 404.",
                 "produces": [
                     "application/json"
                 ],
@@ -460,7 +460,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt die Zahlung fehl (status failed, failureReason, message), die Buchung erhält keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird aus dem gespeicherten Zahlungsstatus gelesen.",
+                "description": "Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt die Zahlung fehl (status failed, failureReason, message), die Buchung erhält keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413).",
                 "consumes": [
                     "application/json"
                 ],
@@ -522,6 +522,12 @@
                     },
                     "409": {
                         "description": "Zahlung bereits abgeschlossen oder Buchung nicht reserviert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Body größer als 4 KiB",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
