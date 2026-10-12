@@ -956,6 +956,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/rating-summary": {
+            "get": {
+                "description": "Public average score and review count. Only visible ratings with scores 1–5 linked to confirmed bookings of this event count; ticket quantities do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0. Published events and ended completed events expose summaries; drafts and cancelled events return 404. Averages are not rounded.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get event rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/sold-tickets": {
             "get": {
                 "security": [
@@ -2222,6 +2269,21 @@ const docTemplate = `{
                 },
                 "updatedAt": {
                     "type": "string"
+                }
+            }
+        },
+        "model.EventRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "ratingCount": {
+                    "type": "integer"
                 }
             }
         },

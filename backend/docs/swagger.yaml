@@ -417,6 +417,16 @@ definitions:
       updatedAt:
         type: string
     type: object
+  model.EventRatingSummary:
+    properties:
+      averageRating:
+        type: number
+        x-nullable: true
+      eventId:
+        type: string
+      ratingCount:
+        type: integer
+    type: object
   model.EventStatus:
     enum:
     - draft
@@ -1181,6 +1191,41 @@ paths:
       security:
       - BearerAuth: []
       summary: Get available seats
+      tags:
+      - events
+  /events/{eventId}/rating-summary:
+    get:
+      description: Public average score and review count. Only visible ratings with
+        scores 1–5 linked to confirmed bookings of this event count; ticket quantities
+        do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0.
+        Published events and ended completed events expose summaries; drafts and cancelled
+        events return 404. Averages are not rounded.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventRatingSummary'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get event rating summary
       tags:
       - events
   /events/{eventId}/sold-tickets:

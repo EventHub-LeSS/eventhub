@@ -17,3 +17,10 @@ type RatingModel struct {
 }
 
 func (RatingModel) TableName() string { return "ratings" }
+
+// EVENTHUB-238: Bewertungsdurchschnitt für Veranstaltungen.
+type EventRatingSummary struct {
+	EventID       uuid.UUID `json:"eventId"`
+	AverageRating *float64  `json:"averageRating" extensions:"x-nullable"`
+	RatingCount   int64     `json:"ratingCount"`
+}
