@@ -1572,6 +1572,53 @@
                 }
             }
         },
+        "/organizations/{organizationID}/rating-summary": {
+            "get": {
+                "description": "Public average of unrounded event averages, with equal weight per rated event. Includes only this organization's published or completed events with endTime \u003c= database time. Uses the same visible, score 1–5, confirmed-booking ratings as event summaries. Unrated events do not contribute. No rated events returns averageRating=null and ratedEventCount=0. Recommendations retain their existing calculation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Get organizer rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization database UUID (not Keycloak ID or alias)",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/recommendations": {
             "get": {
                 "security": [
@@ -2327,6 +2374,21 @@
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.OrganizerRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "ratedEventCount": {
+                    "type": "integer"
+                }
+            }
         },
         "model.PaymentFailureReason": {
             "type": "string",

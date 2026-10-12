@@ -40,3 +40,28 @@ func (h *RatingHandler) GetEventRatingSummaryHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, summary)
 }
+
+// EVENTHUB-239: Bewertungsdurchschnitt für Organisator/Veranstalter.
+// @Summary      Get organizer rating summary
+// @Description  Public average of unrounded event averages, with equal weight per rated event. Includes only this organization's published or completed events with endTime <= database time. Uses the same visible, score 1–5, confirmed-booking ratings as event summaries. Unrated events do not contribute. No rated events returns averageRating=null and ratedEventCount=0. Recommendations retain their existing calculation.
+// @Tags         organizations
+// @Produce      json
+// @Param        organizationID path string true "Organization database UUID (not Keycloak ID or alias)"
+// @Success      200 {object} model.OrganizerRatingSummary
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /organizations/{organizationID}/rating-summary [get]
+func (h *RatingHandler) GetOrganizerRatingSummaryHandler(c *gin.Context) {
+	organizationID, err := uuid.Parse(c.Param("organizationID"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "organizationID must be a valid UUID")
+		return
+	}
+	summary, err := h.ratingService.GetOrganizerRatingSummary(organizationID)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}

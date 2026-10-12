@@ -24,3 +24,10 @@ type EventRatingSummary struct {
 	AverageRating *float64  `json:"averageRating" extensions:"x-nullable"`
 	RatingCount   int64     `json:"ratingCount"`
 }
+
+// EVENTHUB-239: Bewertungsdurchschnitt für Organisator/Veranstalter.
+type OrganizerRatingSummary struct {
+	OrganizationID  uuid.UUID `json:"organizationId"`
+	AverageRating   *float64  `json:"averageRating" extensions:"x-nullable"`
+	RatedEventCount int64     `json:"ratedEventCount"`
+}
