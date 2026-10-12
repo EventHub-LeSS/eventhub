@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,8 @@ func newPaymentRouter(db *gorm.DB, principal *middleware.Principal) http.Handler
 	gin.SetMode(gin.TestMode)
 	userRepo := repository.NewUserRepository(db)
 	bookingService := service.NewBookingService(repository.NewBookingRepository(db), 0)
-	payments := NewPaymentHandler(service.NewPaymentService(repository.NewPaymentRepository(db)), userRepo)
+	paymentService := service.NewPaymentService(repository.NewTransactor(db), repository.NewBookingRepository(db), repository.NewPaymentRepository(db))
+	payments := NewPaymentHandler(paymentService, userRepo)
 
 	setPrincipal := func(c *gin.Context) {
 		if principal != nil {
@@ -234,6 +236,7 @@ func TestPayment_Rejections(t *testing.T) {
 		{"missing amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success"}, http.StatusBadRequest},
 		{"null amount", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":null}`, http.StatusBadRequest},
 		{"negative amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "-20"}, http.StatusBadRequest},
+		{"body larger than 4 KiB", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":"` + strings.Repeat("9", 5000) + `"}`, http.StatusRequestEntityTooLarge},
 		{"amount with huge exponent", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":"1e2000000000"}`, http.StatusBadRequest},
 		{"amount not a number", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "twenty"}, http.StatusBadRequest},
 		{"missing outcome", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"amount": "20"}, http.StatusBadRequest},

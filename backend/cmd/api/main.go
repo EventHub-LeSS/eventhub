@@ -7,6 +7,7 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -80,7 +81,9 @@ func main() {
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
-	paymentService := service.NewPaymentService(paymentRepo)
+	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
+	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
+	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers

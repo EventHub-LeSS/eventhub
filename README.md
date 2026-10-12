@@ -188,7 +188,8 @@ der Client.
 
 Alle drei Endpunkte antworten mit `PaymentResponse` aus den gespeicherten Daten: `amount`, `status`
 (`pending`/`paid`/`failed`), `failureReason`, `bookingStatus`, `ticketsValid` und eine lesbare
-`message`. `ticketsValid` ist nur bei `paid` **und** `confirmed` `true`.
+`message`. `ticketsValid` ist nur bei `paid` **und** `confirmed` `true` und nur, solange das Event
+veröffentlicht oder abgeschlossen ist; Tickets abgesagter oder gelöschter Events sind ungültig.
 
 | Ergebnis | Zahlung | Buchung | `failureReason` |
 | --- | --- | --- | --- |
@@ -201,14 +202,22 @@ Fehlgeschlagene Buchungen geben ihre Tickets sofort frei und zählen nicht als v
 neuen Versuch ist eine neue Buchung nötig. Die Zahlung muss vor `expiresAt` der Reservierung
 abgeschlossen werden.
 
+**Keine dauerhaft offenen Zahlungen:** Stellt ein erneuter Start fest, dass die Reservierung abgelaufen
+oder das Event zurückgezogen ist, speichert er die offene Zahlung in derselben Transaktion als
+fehlgeschlagen und antwortet mit `409`. Zusätzlich schließt die API jede Minute alle offenen Zahlungen
+abgelaufener Reservierungen als fehlgeschlagen ab (`PaymentService.RunPaymentCleanup`). Gerade
+gesperrte Buchungen, etwa ein laufender Abschluss, überspringt der Job (`SKIP LOCKED`).
+
 **Fehler:** `400` ungültige ID oder ungültiger Body (fehlendes/negatives `amount`, unbekanntes
-`outcome`), `401` ohne Token, `403` Nutzer nicht synchronisiert, `404` Buchung unbekannt, gehört
+`outcome`), `401` ohne Token, `413` Body von `simulate` größer als 4 KiB, `403` Nutzer nicht synchronisiert, `404` Buchung unbekannt, gehört
 einem anderen Nutzer oder hat noch keinen Zahlungsvorgang, `409` Buchung nicht reserviert,
 Reservierung abgelaufen, Event nicht mehr veröffentlicht oder Zahlung bereits abgeschlossen, `422`
 manipulierter Betrag oder Betrag außerhalb von `NUMERIC(12,2)`.
 
-**Garantien:** Start und Abschluss laufen in Transaktionen mit Zeilensperren; eine Buchung bekommt
-höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Der Abschluss sperrt wie
+**Garantien:** Start und Abschluss laufen in Transaktionen mit Zeilensperren (`repository.Transactor`);
+eine Buchung bekommt höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Die
+Antwort wird noch in der Transaktion gelesen, ein Fehler nach dem Commit ist damit ausgeschlossen.
+`GET` liest Buchung, Zahlung, Event-Status und Datenbankuhr in einer einzigen Abfrage. Der Abschluss sperrt wie
 `ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
 eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Migration
 `000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie höchstens eine
@@ -217,8 +226,9 @@ Migration bewusst scheitern. Beträge mit extremem Exponenten (z. B. `1e20000000
 Validierung mit `400` ab, bevor sie umgerechnet werden; das gilt auch für `price` der Events.
 
 **Getestet:** Automatisch über `TestStartPayment_*`, `TestSimulatePayment_*`, `TestGetPayment_*` und
-`TestPayment_*` in `backend/internal/service` und `backend/internal/handler` (Betragsberechnung,
-manipulierte Beträge, Erfolg, Ablehnung, abgelaufene Reservierung, zurückgezogenes Event, fremde
+`TestPayment_*` sowie `TestExpireStalePayments_*` in `backend/internal/service` und
+`backend/internal/handler` (Betragsberechnung, manipulierte Beträge, Body-Limit, Erfolg, Ablehnung,
+abgelaufene Reservierung, zurückgezogenes Event, Cleanup offener Zahlungen, fremde
 Buchungen, parallele Starts und Abschlüsse ohne Deadlock oder Überbuchung). Zusätzlich manuell mit
 dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
 

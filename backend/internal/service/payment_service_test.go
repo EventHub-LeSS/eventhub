@@ -6,7 +6,7 @@ import (
 	"backend/internal/testdb"
 	"context"
 	"errors"
-	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +34,7 @@ func newPaymentFixture(t *testing.T, capacity int, price string) paymentFixture 
 	setEventPrice(t, db, eventID, price)
 	return paymentFixture{
 		db:       db,
-		payments: NewPaymentService(repository.NewPaymentRepository(db)),
+		payments: NewPaymentService(repository.NewTransactor(db), repository.NewBookingRepository(db), repository.NewPaymentRepository(db)),
 		bookings: NewBookingService(repository.NewBookingRepository(db), 0),
 		eventID:  eventID,
 		userID:   userID,
@@ -558,7 +558,7 @@ func TestSimulatePayment_Rejections(t *testing.T) {
 		}
 	})
 	t.Run("unknown outcome", func(t *testing.T) {
-		svc := NewPaymentService(nil)
+		svc := NewPaymentService(nil, nil, nil)
 		if _, err := svc.SimulatePayment(ctx, uuid.New(), uuid.New(), "maybe", amount); !errors.Is(err, ErrInvalidPaymentOutcome) {
 			t.Errorf("expected ErrInvalidPaymentOutcome, got %v", err)
 		}
@@ -620,68 +620,321 @@ func TestPaymentAmount(t *testing.T) {
 	}
 }
 
-func TestPaymentResponse_OnlyPaidConfirmedTicketsAreValid(t *testing.T) {
+func TestPaymentResponse_OnlyPaidConfirmedTicketsOfHeldEventsAreValid(t *testing.T) {
 	declined := model.PaymentFailureDeclined
 	expired := model.PaymentFailureReservationExpired
 	unavailable := model.PaymentFailureEventUnavailable
+	published, completed, cancelled := model.EventStatusPublished, model.EventStatusCompleted, model.EventStatusCancelled
 	now := time.Now()
 	live, past := now.Add(time.Minute), now.Add(-time.Minute)
-	cases := []struct {
-		payment model.PaymentStatus
-		reason  *model.PaymentFailureReason
-		booking model.BookingStatus
-		expires *time.Time
-		valid   bool
-	}{
-		{model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, true},
-		{model.PaymentStatusPaid, nil, model.BookingStatusCancelled, nil, false},
-		{model.PaymentStatusPending, nil, model.BookingStatusReserved, &live, false},
-		{model.PaymentStatusPending, nil, model.BookingStatusReserved, &past, false},
-		{model.PaymentStatusPending, nil, model.BookingStatusConfirmed, &live, false},
-		{model.PaymentStatusFailed, &declined, model.BookingStatusFailed, nil, false},
-		{model.PaymentStatusFailed, &declined, model.BookingStatusConfirmed, nil, false},
-		{model.PaymentStatusFailed, &expired, model.BookingStatusExpired, nil, false},
-		{model.PaymentStatusFailed, &unavailable, model.BookingStatusFailed, nil, false},
-		{model.PaymentStatusFailed, nil, model.BookingStatusFailed, nil, false},
-		{model.PaymentStatusRefunded, nil, model.BookingStatusConfirmed, nil, false},
+	view := func(payment model.PaymentStatus, reason *model.PaymentFailureReason, booking model.BookingStatus, expires *time.Time, event *model.EventStatus) *repository.BookingPayment {
+		return &repository.BookingPayment{
+			Booking:     &model.BookingModel{BookingID: uuid.New(), Status: booking, ExpiresAt: expires},
+			Payment:     &model.PaymentModel{PaymentID: uuid.New(), Status: payment, FailureReason: reason},
+			EventStatus: event,
+			Now:         now,
+		}
 	}
-	success := paymentResponse(
-		&model.BookingModel{Status: model.BookingStatusConfirmed},
-		&model.PaymentModel{Status: model.PaymentStatusPaid}, now,
-	).Message
-	completable := paymentResponse(
-		&model.BookingModel{Status: model.BookingStatusReserved, ExpiresAt: &live},
-		&model.PaymentModel{Status: model.PaymentStatusPending}, now,
-	).Message
+	cases := []struct {
+		name        string
+		view        *repository.BookingPayment
+		valid       bool
+		completable bool
+	}{
+		{"paid for published event", view(model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, &published), true, false},
+		{"paid for completed event", view(model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, &completed), true, false},
+		{"paid for cancelled event", view(model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, &cancelled), false, false},
+		{"paid for deleted event", view(model.PaymentStatusPaid, nil, model.BookingStatusConfirmed, nil, nil), false, false},
+		{"paid for cancelled booking", view(model.PaymentStatusPaid, nil, model.BookingStatusCancelled, nil, &published), false, false},
+		{"pending and live", view(model.PaymentStatusPending, nil, model.BookingStatusReserved, &live, &published), false, true},
+		{"pending and expired", view(model.PaymentStatusPending, nil, model.BookingStatusReserved, &past, &published), false, false},
+		{"pending for withdrawn event", view(model.PaymentStatusPending, nil, model.BookingStatusReserved, &live, &cancelled), false, false},
+		{"pending for deleted event", view(model.PaymentStatusPending, nil, model.BookingStatusReserved, &live, nil), false, false},
+		{"pending but booking not reserved", view(model.PaymentStatusPending, nil, model.BookingStatusConfirmed, &live, &published), false, false},
+		{"declined", view(model.PaymentStatusFailed, &declined, model.BookingStatusFailed, nil, &published), false, false},
+		{"declined but confirmed", view(model.PaymentStatusFailed, &declined, model.BookingStatusConfirmed, nil, &published), false, false},
+		{"reservation expired", view(model.PaymentStatusFailed, &expired, model.BookingStatusExpired, nil, &published), false, false},
+		{"event unavailable", view(model.PaymentStatusFailed, &unavailable, model.BookingStatusFailed, nil, &cancelled), false, false},
+		{"failed without reason", view(model.PaymentStatusFailed, nil, model.BookingStatusFailed, nil, &published), false, false},
+		{"refunded", view(model.PaymentStatusRefunded, nil, model.BookingStatusConfirmed, nil, &published), false, false},
+	}
+	success := paymentResponse(cases[0].view).Message
+	completable := paymentResponse(cases[5].view).Message
 
 	messages := map[string]bool{}
 	for _, tc := range cases {
-		resp := paymentResponse(
-			&model.BookingModel{BookingID: uuid.New(), Status: tc.booking, ExpiresAt: tc.expires},
-			&model.PaymentModel{PaymentID: uuid.New(), Status: tc.payment, FailureReason: tc.reason},
-			now,
-		)
-		name := fmt.Sprintf("%s/%s", tc.payment, tc.booking)
+		resp := paymentResponse(tc.view)
 		if resp.TicketsValid != tc.valid {
-			t.Errorf("%s: expected ticketsValid=%v", name, tc.valid)
+			t.Errorf("%s: expected ticketsValid=%v", tc.name, tc.valid)
 		}
 		if resp.Message == "" {
-			t.Errorf("%s: expected a message", name)
+			t.Errorf("%s: expected a message", tc.name)
 		}
 		// The message never contradicts the result.
 		if !tc.valid && resp.Message == success {
-			t.Errorf("%s: invalid tickets must not be reported as a confirmed booking", name)
+			t.Errorf("%s: invalid tickets must not be reported as a confirmed booking", tc.name)
 		}
-		if resp.Message == completable && (tc.booking != model.BookingStatusReserved || tc.expires != &live) {
-			t.Errorf("%s: only a live reservation may ask to complete the payment", name)
+		if (resp.Message == completable) != tc.completable {
+			t.Errorf("%s: only a payable booking may be asked to complete its payment, got %q", tc.name, resp.Message)
 		}
 		messages[resp.Message] = true
 	}
-	// pending (live and invalid), paid (valid and invalid), refunded, generic failure and one
-	// message per failure reason
-	if len(messages) != 9 {
-		t.Errorf("expected 9 distinct messages, got %d: %v", len(messages), messages)
+	// pending (payable, reservation invalid, event gone), paid (valid, event gone, booking
+	// inactive), refunded, generic failure and one message per failure reason
+	if len(messages) != 11 {
+		t.Errorf("expected 11 distinct messages, got %d: %v", len(messages), messages)
 	}
+}
+
+func TestStartPayment_FailsPendingPaymentItCannotComplete(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("expired reservation", func(t *testing.T) {
+		f := newPaymentFixture(t, 10, "20")
+		bookingID := f.reserve(t, 1)
+		f.start(t, bookingID)
+		expireReservation(t, f.db, bookingID)
+
+		if _, _, err := f.payments.StartPayment(ctx, bookingID, f.userID); !errors.Is(err, ErrReservationExpired) {
+			t.Fatalf("expected ErrReservationExpired, got %v", err)
+		}
+		s := stored(t, f.db, bookingID)
+		if *s.PaymentStatus != model.PaymentStatusFailed || s.FailureReason == nil || *s.FailureReason != model.PaymentFailureReservationExpired || s.BookingStatus != model.BookingStatusExpired {
+			t.Errorf("expected failed/reservation_expired/expired to be stored, got %+v", s)
+		}
+		// Asking again still says why.
+		if _, _, err := f.payments.StartPayment(ctx, bookingID, f.userID); !errors.Is(err, ErrReservationExpired) {
+			t.Errorf("start again: expected ErrReservationExpired, got %v", err)
+		}
+	})
+	t.Run("withdrawn event", func(t *testing.T) {
+		f := newPaymentFixture(t, 10, "20")
+		bookingID := f.reserve(t, 1)
+		f.start(t, bookingID)
+		mustExec(t, f.db, "UPDATE events SET status = 'cancelled' WHERE event_id = ?", f.eventID)
+
+		if _, _, err := f.payments.StartPayment(ctx, bookingID, f.userID); !errors.Is(err, ErrEventUnavailable) {
+			t.Fatalf("expected ErrEventUnavailable, got %v", err)
+		}
+		s := stored(t, f.db, bookingID)
+		if *s.PaymentStatus != model.PaymentStatusFailed || s.FailureReason == nil || *s.FailureReason != model.PaymentFailureEventUnavailable || s.BookingStatus != model.BookingStatusFailed {
+			t.Errorf("expected failed/event_unavailable/failed to be stored, got %+v", s)
+		}
+	})
+}
+
+func TestExpireStalePayments(t *testing.T) {
+	f := newPaymentFixture(t, 20, "20")
+	ctx := context.Background()
+
+	stale := f.reserve(t, 1)
+	f.start(t, stale)
+	expireReservation(t, f.db, stale)
+
+	live := f.reserve(t, 1)
+	f.start(t, live)
+
+	withoutPayment := f.reserve(t, 1)
+	expireReservation(t, f.db, withoutPayment)
+
+	paid := f.reserve(t, 1)
+	f.start(t, paid)
+	if _, err := f.payments.SimulatePayment(ctx, paid, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(20)); err != nil {
+		t.Fatalf("simulate: %v", err)
+	}
+
+	// A stale payment of a withdrawn event fails for that reason.
+	otherEvent, otherUser := seedEvent(t, f.db, 5, model.EventStatusPublished)
+	other, err := f.bookings.ReserveTickets(ctx, otherEvent, otherUser, 1)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if _, _, err := f.payments.StartPayment(ctx, other.BookingID, otherUser); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	expireReservation(t, f.db, other.BookingID)
+	mustExec(t, f.db, "UPDATE events SET status = 'cancelled' WHERE event_id = ?", otherEvent)
+
+	n, err := f.payments.ExpireStalePayments(ctx)
+	if err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 failed payments, got %d", n)
+	}
+	for id, want := range map[uuid.UUID]struct {
+		reason  model.PaymentFailureReason
+		booking model.BookingStatus
+	}{
+		stale:           {model.PaymentFailureReservationExpired, model.BookingStatusExpired},
+		other.BookingID: {model.PaymentFailureEventUnavailable, model.BookingStatusFailed},
+	} {
+		s := stored(t, f.db, id)
+		if *s.PaymentStatus != model.PaymentStatusFailed || s.FailureReason == nil || *s.FailureReason != want.reason || s.BookingStatus != want.booking {
+			t.Errorf("booking %s: expected failed/%s/%s, got %+v", id, want.reason, want.booking, s)
+		}
+	}
+	if s := stored(t, f.db, live); *s.PaymentStatus != model.PaymentStatusPending || s.BookingStatus != model.BookingStatusReserved {
+		t.Errorf("a live payment must stay pending, got %+v", s)
+	}
+	if s := stored(t, f.db, withoutPayment); s.PaymentID != nil || s.BookingStatus != model.BookingStatusReserved {
+		t.Errorf("a booking without payment must stay untouched, got %+v", s)
+	}
+	if s := stored(t, f.db, paid); *s.PaymentStatus != model.PaymentStatusPaid || s.BookingStatus != model.BookingStatusConfirmed {
+		t.Errorf("a paid booking must stay confirmed, got %+v", s)
+	}
+
+	if n, err := f.payments.ExpireStalePayments(ctx); err != nil || n != 0 {
+		t.Errorf("a second run must find nothing, got %d %v", n, err)
+	}
+}
+
+func TestExpireStalePayments_WorksThroughSeveralBatches(t *testing.T) {
+	previous := stalePaymentBatch
+	stalePaymentBatch = 2
+	t.Cleanup(func() { stalePaymentBatch = previous })
+
+	f := newPaymentFixture(t, 10, "20")
+	for i := 0; i < 5; i++ {
+		bookingID := f.reserve(t, 1)
+		f.start(t, bookingID)
+		expireReservation(t, f.db, bookingID)
+	}
+	if n, err := f.payments.ExpireStalePayments(context.Background()); err != nil || n != 5 {
+		t.Errorf("expected all 5 stale payments in one call, got %d %v", n, err)
+	}
+}
+
+// The cleanup must neither wait for nor interfere with a booking that is being completed.
+func TestExpireStalePayments_SkipsLockedBookings(t *testing.T) {
+	f := newPaymentFixture(t, 10, "20")
+	ctx := context.Background()
+	bookingID := f.reserve(t, 1)
+	f.start(t, bookingID)
+	expireReservation(t, f.db, bookingID)
+
+	holder := f.db.Begin()
+	if err := holder.Exec("SELECT 1 FROM bookings WHERE booking_id = ? FOR UPDATE", bookingID).Error; err != nil {
+		t.Fatalf("lock booking: %v", err)
+	}
+	done := make(chan int, 1)
+	go func() {
+		n, err := f.payments.ExpireStalePayments(ctx)
+		if err != nil {
+			t.Errorf("expire: %v", err)
+		}
+		done <- n
+	}()
+	select {
+	case n := <-done:
+		if n != 0 {
+			t.Errorf("expected the locked booking to be skipped, got %d", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cleanup waited for a locked booking")
+	}
+	holder.Rollback()
+
+	if n, err := f.payments.ExpireStalePayments(ctx); err != nil || n != 1 {
+		t.Errorf("expected the released booking to be expired, got %d %v", n, err)
+	}
+}
+
+// Cleanup and completion race for the same expired reservations: neither may deadlock, and an
+// expired reservation must never end up paid.
+func TestExpireStalePayments_ConcurrentWithCompletion(t *testing.T) {
+	f := newPaymentFixture(t, 50, "20")
+	ctx := context.Background()
+	const bookings = 10
+	ids := make([]uuid.UUID, bookings)
+	for i := range ids {
+		ids[i] = f.reserve(t, 1)
+		f.start(t, ids[i])
+		expireReservation(t, f.db, ids[i])
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := f.payments.ExpireStalePayments(ctx); err != nil {
+				t.Errorf("expire: %v", err)
+			}
+		}()
+	}
+	for _, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := f.payments.SimulatePayment(ctx, id, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(20))
+			if err != nil && !errors.Is(err, ErrPaymentAlreadyProcessed) {
+				t.Errorf("simulate: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, id := range ids {
+		s := stored(t, f.db, id)
+		if *s.PaymentStatus != model.PaymentStatusFailed || s.BookingStatus != model.BookingStatusExpired {
+			t.Errorf("booking %s: expected failed/expired, got %s/%s", id, *s.PaymentStatus, s.BookingStatus)
+		}
+	}
+}
+
+func TestGetPayment_ReflectsEventState(t *testing.T) {
+	ctx := context.Background()
+	paidBooking := func(t *testing.T, f paymentFixture) uuid.UUID {
+		t.Helper()
+		bookingID := f.reserve(t, 1)
+		f.start(t, bookingID)
+		if _, err := f.payments.SimulatePayment(ctx, bookingID, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(20)); err != nil {
+			t.Fatalf("simulate: %v", err)
+		}
+		return bookingID
+	}
+
+	t.Run("pending payment of a withdrawn event", func(t *testing.T) {
+		f := newPaymentFixture(t, 10, "20")
+		bookingID := f.reserve(t, 1)
+		f.start(t, bookingID)
+		mustExec(t, f.db, "UPDATE events SET status = 'cancelled' WHERE event_id = ?", f.eventID)
+
+		resp, err := f.payments.GetPayment(ctx, bookingID, f.userID)
+		if err != nil {
+			t.Fatalf("get payment: %v", err)
+		}
+		if resp.Status != model.PaymentStatusPending || !strings.Contains(resp.Message, "event is no longer available") {
+			t.Errorf("expected the stored pending status with a message about the event, got %+v", resp)
+		}
+	})
+	t.Run("paid tickets of a cancelled event", func(t *testing.T) {
+		f := newPaymentFixture(t, 10, "20")
+		bookingID := paidBooking(t, f)
+		mustExec(t, f.db, "UPDATE events SET status = 'cancelled' WHERE event_id = ?", f.eventID)
+
+		resp, err := f.payments.GetPayment(ctx, bookingID, f.userID)
+		if err != nil {
+			t.Fatalf("get payment: %v", err)
+		}
+		if resp.Status != model.PaymentStatusPaid || resp.BookingStatus != model.BookingStatusConfirmed || resp.TicketsValid {
+			t.Errorf("tickets of a cancelled event must not be valid, got %+v", resp)
+		}
+	})
+	t.Run("paid tickets of a deleted event", func(t *testing.T) {
+		f := newPaymentFixture(t, 10, "20")
+		bookingID := paidBooking(t, f)
+		mustExec(t, f.db, "DELETE FROM events WHERE event_id = ?", f.eventID)
+
+		resp, err := f.payments.GetPayment(ctx, bookingID, f.userID)
+		if err != nil {
+			t.Fatalf("get payment: %v", err)
+		}
+		if resp.EventID != nil || resp.TicketsValid {
+			t.Errorf("tickets of a deleted event must not be valid, got %+v", resp)
+		}
+	})
 }
 
 // GET must never combine the booking state from before a completion with the payment after it.

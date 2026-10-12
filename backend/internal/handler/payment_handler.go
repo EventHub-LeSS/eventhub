@@ -14,6 +14,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// maxSimulatePaymentBody bounds the simulate request body, which is a few dozen bytes. Decoding
+// a decimal grows superlinearly with its digits, so the limit also bounds the cost of amount.
+const maxSimulatePaymentBody = 4 << 10
+
 // EVENTHUB-235: Zahlungsvorgang
 type SimulatePaymentRequest struct {
 	// Outcome the simulated payment provider reports; no real payment provider is connected.
@@ -34,7 +38,7 @@ func NewPaymentHandler(paymentService *service.PaymentService, userRepo reposito
 
 // StartPaymentHandler godoc
 // @Summary      Zahlungsvorgang starten
-// @Description  Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang. Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung muss vor expiresAt abgeschlossen werden. Buchungen anderer Nutzer liefern 404.
+// @Description  Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang. Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung muss vor expiresAt abgeschlossen werden. Ist die Reservierung abgelaufen oder das Event zurückgezogen, wird eine offene Zahlung dabei als fehlgeschlagen gespeichert und 409 geliefert. Buchungen anderer Nutzer liefern 404.
 // @Tags         payments
 // @Produce      json
 // @Param        bookingId path string true "Booking ID"
@@ -70,7 +74,7 @@ func (h *PaymentHandler) StartPaymentHandler(c *gin.Context) {
 
 // SimulatePaymentHandler godoc
 // @Summary      Zahlung simulieren
-// @Description  Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt die Zahlung fehl (status failed, failureReason, message), die Buchung erhält keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird aus dem gespeicherten Zahlungsstatus gelesen.
+// @Description  Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt die Zahlung fehl (status failed, failureReason, message), die Buchung erhält keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413).
 // @Tags         payments
 // @Accept       json
 // @Produce      json
@@ -82,6 +86,7 @@ func (h *PaymentHandler) StartPaymentHandler(c *gin.Context) {
 // @Failure      403 {object} model.ErrorResponse
 // @Failure      404 {object} model.ErrorResponse "Buchung nicht gefunden oder kein Zahlungsvorgang gestartet"
 // @Failure      409 {object} model.ErrorResponse "Zahlung bereits abgeschlossen oder Buchung nicht reserviert"
+// @Failure      413 {object} model.ErrorResponse "Request Body größer als 4 KiB"
 // @Failure      422 {object} model.ErrorResponse "Betrag weicht vom gespeicherten Betrag ab"
 // @Failure      500 {object} model.ErrorResponse
 // @Security     BearerAuth
@@ -92,8 +97,14 @@ func (h *PaymentHandler) SimulatePaymentHandler(c *gin.Context) {
 		return
 	}
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxSimulatePaymentBody)
 	var req SimulatePaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeProblem(c, http.StatusRequestEntityTooLarge, "request body must not exceed 4 KiB")
+			return
+		}
 		writeProblem(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -108,7 +119,7 @@ func (h *PaymentHandler) SimulatePaymentHandler(c *gin.Context) {
 
 // GetPaymentHandler godoc
 // @Summary      Zahlungsvorgang abrufen
-// @Description  Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers: Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid ist nur bei bezahlter und bestätigter Buchung true.
+// @Description  Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers: Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid ist nur bei bezahlter und bestätigter Buchung true, deren Event stattfindet oder stattgefunden hat. Buchung, Zahlung, Event-Status und Datenbankuhr stammen aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein Hintergrundjob jede Minute als fehlgeschlagen ab.
 // @Tags         payments
 // @Produce      json
 // @Param        bookingId path string true "Booking ID"
@@ -149,18 +160,8 @@ func (h *PaymentHandler) resolveRequest(c *gin.Context) (uuid.UUID, *model.UserM
 		return uuid.Nil, nil, false
 	}
 
-	// The token subject is the Keycloak user id, bookings reference the API user id.
-	user, err := middleware.ResolveUserForPrincipal(h.userRepo, principal)
-	if err != nil {
-		slog.Error("payment user lookup failed", "error", err)
-		writeProblem(c, http.StatusInternalServerError, "internal error")
-		return uuid.Nil, nil, false
-	}
-	if user == nil {
-		writeProblem(c, http.StatusForbidden, "user not found in API database, run sync first")
-		return uuid.Nil, nil, false
-	}
-	return bookingID, user, true
+	user, ok := resolveAPIUser(c, h.userRepo, principal)
+	return bookingID, user, ok
 }
 
 func writePaymentError(c *gin.Context, err error) {

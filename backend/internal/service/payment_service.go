@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,91 +25,116 @@ var (
 	ErrInvalidPaymentOutcome   = errors.New("outcome must be success or failure")
 )
 
+// PaymentCleanupInterval is how often RunPaymentCleanup fails pending payments of expired
+// reservations.
+const PaymentCleanupInterval = time.Minute
+
+// stalePaymentBatch bounds the bookings one cleanup transaction locks; a variable for tests.
+var stalePaymentBatch = 500
+
 // maxPaymentAmount is the largest value of the payments.amount column, NUMERIC(12,2).
 var maxPaymentAmount = decimal.RequireFromString("9999999999.99")
 
 // PaymentService runs the payment process of a booking. No real payment provider is connected:
 // the caller chooses the outcome of the simulated payment (EVENTHUB-235).
 type PaymentService struct {
-	paymentRepo repository.PaymentRepository
+	tx       repository.Transactor
+	bookings repository.BookingRepository
+	payments repository.PaymentRepository
 }
 
-func NewPaymentService(paymentRepo repository.PaymentRepository) *PaymentService {
-	return &PaymentService{paymentRepo: paymentRepo}
+func NewPaymentService(tx repository.Transactor, bookings repository.BookingRepository, payments repository.PaymentRepository) *PaymentService {
+	return &PaymentService{tx: tx, bookings: bookings, payments: payments}
 }
 
 // StartPayment turns a live reservation of the user into a pending payment. The amount is the
 // number of tickets times the event price and is computed here only, never taken from the client.
 // Starting again returns the pending payment unchanged, so the amount shown to the user is the
 // amount that is charged. created reports whether a new payment was created.
+//
+// A pending payment whose reservation expired or whose event was withdrawn is failed right away,
+// in the same transaction that detects it, and the error says why.
 func (s *PaymentService) StartPayment(ctx context.Context, bookingID, userID uuid.UUID) (resp *model.PaymentResponse, created bool, err error) {
-	err = s.paymentRepo.InTransaction(ctx, func(tx repository.PaymentTx) error {
+	var outcome error
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		// The booking lock serializes concurrent starts, so a booking never gets two payments.
 		// The event is only read: SimulatePayment locks the event before the booking.
-		booking, err := tx.LockBooking(bookingID)
+		booking, err := tx.Bookings.LockBooking(bookingID)
 		if err != nil {
 			return err
 		}
 		if !ownsBooking(booking, userID) {
 			return ErrBookingNotFound
 		}
-		if booking.Status != model.BookingStatusReserved {
+		switch booking.Status {
+		case model.BookingStatusReserved:
+		case model.BookingStatusExpired:
+			return ErrReservationExpired
+		default:
 			return ErrBookingNotPayable
 		}
-		now, err := tx.Now()
-		if err != nil {
-			return err
-		}
-		if reservationExpired(booking, now) {
-			return ErrReservationExpired
-		}
-
-		var event *model.EventModel
-		if booking.EventID != nil {
-			if event, err = tx.GetEvent(*booking.EventID); err != nil {
-				return err
-			}
-		}
-		if event == nil || event.Status != model.EventStatusPublished {
-			return ErrEventUnavailable
-		}
-
+		var payment *model.PaymentModel
 		if booking.PaymentID != nil {
-			payment, err := loadPayment(tx, booking)
-			if err != nil {
+			if payment, err = loadPayment(tx.Payments, booking); err != nil {
 				return err
 			}
 			if payment.Status != model.PaymentStatusPending {
 				return ErrPaymentAlreadyProcessed
 			}
-			return nil
 		}
 
-		amount, err := paymentAmount(event.Price, booking.NumberOfTickets)
+		var event *model.EventModel
+		if booking.EventID != nil {
+			if event, err = tx.Events.GetEventByID(*booking.EventID); err != nil {
+				return err
+			}
+		}
+		now, err := tx.Payments.DatabaseNow()
 		if err != nil {
 			return err
 		}
-		payment := &model.PaymentModel{
-			PaymentID: uuid.New(),
-			Amount:    amount,
-			Status:    model.PaymentStatusPending,
+		if reason := unpayableReason(event, booking, now); reason != "" {
+			outcome = ErrReservationExpired
+			if reason == model.PaymentFailureEventUnavailable {
+				outcome = ErrEventUnavailable
+			}
+			if payment == nil {
+				return outcome
+			}
+			// Commit the failed payment and report the outcome afterwards.
+			return failPayment(tx, booking, payment, reason)
 		}
-		if err := tx.CreatePayment(payment); err != nil {
-			return err
+
+		if payment == nil {
+			amount, err := paymentAmount(event.Price, booking.NumberOfTickets)
+			if err != nil {
+				return err
+			}
+			payment = &model.PaymentModel{
+				PaymentID: uuid.New(),
+				Amount:    amount,
+				Status:    model.PaymentStatusPending,
+			}
+			if err := tx.Payments.CreatePayment(payment); err != nil {
+				return err
+			}
+			booking.PaymentID = &payment.PaymentID
+			if err := tx.Bookings.UpdateBooking(booking); err != nil {
+				return err
+			}
+			created = true
 		}
-		booking.PaymentID = &payment.PaymentID
-		if err := tx.UpdateBooking(booking); err != nil {
-			return err
-		}
-		created = true
-		return nil
+		// Read the stored result inside the transaction: once it commits, the response is ready.
+		resp, err = readPayment(tx.Payments, bookingID)
+		return err
 	})
 	if err != nil {
 		return nil, false, err
 	}
-	// Like every payment result, the response is read back from the database.
-	resp, err = s.GetPayment(ctx, bookingID, userID)
-	return resp, created, err
+	if outcome != nil {
+		return nil, false, outcome
+	}
+	return resp, created, nil
 }
 
 // SimulatePayment completes the pending payment of a booking with the outcome of the simulated
@@ -123,7 +149,7 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 
 	// Locks are taken in the order of ReserveTickets, event before booking, which rules out
 	// deadlocks. The booking is read first to learn its event, which never changes.
-	unlocked, err := s.paymentRepo.GetBookingByID(ctx, bookingID)
+	unlocked, err := s.bookings.GetBookingByID(bookingID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,17 +157,18 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 		return nil, ErrBookingNotFound
 	}
 
-	err = s.paymentRepo.InTransaction(ctx, func(tx repository.PaymentTx) error {
+	var resp *model.PaymentResponse
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		// The event lock serializes the confirmation with new reservations: once a reservation has
 		// expired, ReserveTickets may hand its tickets to others, so it must not be confirmed.
 		var event *model.EventModel
 		if unlocked.EventID != nil {
 			var err error
-			if event, err = tx.LockEvent(*unlocked.EventID); err != nil {
+			if event, err = tx.Events.LockEvent(*unlocked.EventID); err != nil {
 				return err
 			}
 		}
-		booking, err := tx.LockBooking(bookingID)
+		booking, err := tx.Bookings.LockBooking(bookingID)
 		if err != nil {
 			return err
 		}
@@ -151,7 +178,7 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 		if booking.PaymentID == nil {
 			return ErrPaymentNotStarted
 		}
-		payment, err := loadPayment(tx, booking)
+		payment, err := loadPayment(tx.Payments, booking)
 		if err != nil {
 			return err
 		}
@@ -166,64 +193,153 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, bookingID, userID 
 			return ErrPaymentAmountMismatch
 		}
 
-		now, err := tx.Now()
+		now, err := tx.Payments.DatabaseNow()
 		if err != nil {
 			return err
 		}
-		var reason model.PaymentFailureReason
-		switch {
-		case event == nil || event.Status != model.EventStatusPublished:
-			reason = model.PaymentFailureEventUnavailable
-		case reservationExpired(booking, now):
-			reason = model.PaymentFailureReservationExpired
-		case outcome == model.SimulatedPaymentFailure:
+		reason := unpayableReason(event, booking, now)
+		if reason == "" && outcome == model.SimulatedPaymentFailure {
 			reason = model.PaymentFailureDeclined
 		}
-
-		switch reason {
-		case "":
-			payment.Status = model.PaymentStatusPaid
-			booking.Status = model.BookingStatusConfirmed
-		case model.PaymentFailureReservationExpired:
-			payment.Status, payment.FailureReason = model.PaymentStatusFailed, &reason
-			booking.Status = model.BookingStatusExpired
-		default:
-			payment.Status, payment.FailureReason = model.PaymentStatusFailed, &reason
-			booking.Status = model.BookingStatusFailed
+		if reason != "" {
+			err = failPayment(tx, booking, payment, reason)
+		} else {
+			err = confirmPayment(tx, booking, payment)
 		}
-		if err := tx.UpdatePayment(payment); err != nil {
+		if err != nil {
 			return err
 		}
-		return tx.UpdateBooking(booking)
+		// Read the stored result inside the transaction: once it commits, the response is ready.
+		resp, err = readPayment(tx.Payments, bookingID)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.GetPayment(ctx, bookingID, userID)
+	return resp, nil
 }
 
 // GetPayment returns the stored payment process of a booking of the user.
 func (s *PaymentService) GetPayment(ctx context.Context, bookingID, userID uuid.UUID) (*model.PaymentResponse, error) {
-	booking, payment, err := s.paymentRepo.GetBookingPayment(ctx, bookingID)
+	view, err := s.payments.GetBookingPayment(bookingID)
 	if err != nil {
 		return nil, err
 	}
-	if !ownsBooking(booking, userID) {
+	if view == nil || !ownsBooking(view.Booking, userID) {
 		return nil, ErrBookingNotFound
 	}
-	if booking.PaymentID == nil {
+	if view.Payment == nil {
 		return nil, ErrPaymentNotStarted
 	}
-	if payment == nil {
-		return nil, fmt.Errorf("payment %s of booking %s not found", *booking.PaymentID, booking.BookingID)
+	return paymentResponse(view), nil
+}
+
+// ExpireStalePayments fails pending payments whose reservation has expired, so no payment process
+// stays open after its tickets were released. It returns the number of failed payments.
+func (s *PaymentService) ExpireStalePayments(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		n := 0
+		err := s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+			bookings, err := tx.Payments.LockStalePendingBookings(stalePaymentBatch)
+			if err != nil {
+				return err
+			}
+			for _, booking := range bookings {
+				payment, err := loadPayment(tx.Payments, booking)
+				if err != nil {
+					return err
+				}
+				var event *model.EventModel
+				if booking.EventID != nil {
+					if event, err = tx.Events.GetEventByID(*booking.EventID); err != nil {
+						return err
+					}
+				}
+				// The reservation has expired, unless the event is gone, which takes precedence
+				// like in SimulatePayment.
+				reason := model.PaymentFailureReservationExpired
+				if !eventOpenForBooking(event) {
+					reason = model.PaymentFailureEventUnavailable
+				}
+				if err := failPayment(tx, booking, payment, reason); err != nil {
+					return err
+				}
+			}
+			n = len(bookings)
+			return nil
+		})
+		if err != nil {
+			return total, err
+		}
+		total += n
+		if n < stalePaymentBatch {
+			return total, nil
+		}
 	}
-	// The clock only words the message of a pending payment; the status is the stored one.
-	return paymentResponse(booking, payment, time.Now()), nil
+}
+
+// RunPaymentCleanup calls ExpireStalePayments every interval until ctx is done.
+func (s *PaymentService) RunPaymentCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := s.ExpireStalePayments(ctx)
+			if err != nil {
+				slog.Error("payment cleanup failed", "error", err)
+			} else if n > 0 {
+				slog.Info("payment cleanup closed stale payments of expired reservations", "count", n)
+			}
+		}
+	}
+}
+
+// unpayableReason reports why a reserved booking can no longer be paid, or "" if it can. An
+// unavailable event takes precedence over an expired reservation.
+func unpayableReason(event *model.EventModel, booking *model.BookingModel, now time.Time) model.PaymentFailureReason {
+	switch {
+	case !eventOpenForBooking(event):
+		return model.PaymentFailureEventUnavailable
+	case reservationExpired(booking, now):
+		return model.PaymentFailureReservationExpired
+	}
+	return ""
+}
+
+func eventOpenForBooking(event *model.EventModel) bool {
+	return event != nil && event.Status == model.EventStatusPublished
+}
+
+func confirmPayment(tx repository.Tx, booking *model.BookingModel, payment *model.PaymentModel) error {
+	payment.Status = model.PaymentStatusPaid
+	booking.Status = model.BookingStatusConfirmed
+	if err := tx.Payments.UpdatePayment(payment); err != nil {
+		return err
+	}
+	return tx.Bookings.UpdateBooking(booking)
+}
+
+// failPayment fails the payment and leaves the booking without a ticket claim: expired for an
+// expired reservation, failed otherwise. Either way its tickets are released.
+func failPayment(tx repository.Tx, booking *model.BookingModel, payment *model.PaymentModel, reason model.PaymentFailureReason) error {
+	payment.Status, payment.FailureReason = model.PaymentStatusFailed, &reason
+	booking.Status = model.BookingStatusFailed
+	if reason == model.PaymentFailureReservationExpired {
+		booking.Status = model.BookingStatusExpired
+	}
+	if err := tx.Payments.UpdatePayment(payment); err != nil {
+		return err
+	}
+	return tx.Bookings.UpdateBooking(booking)
 }
 
 // loadPayment loads the payment a booking references. The foreign key guarantees that it exists.
-func loadPayment(tx repository.PaymentTx, booking *model.BookingModel) (*model.PaymentModel, error) {
-	payment, err := tx.GetPayment(*booking.PaymentID)
+func loadPayment(payments repository.PaymentRepository, booking *model.BookingModel) (*model.PaymentModel, error) {
+	payment, err := payments.GetPayment(*booking.PaymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -231,6 +347,18 @@ func loadPayment(tx repository.PaymentTx, booking *model.BookingModel) (*model.P
 		return nil, fmt.Errorf("payment %s of booking %s not found", *booking.PaymentID, booking.BookingID)
 	}
 	return payment, nil
+}
+
+// readPayment reads the stored payment process of a booking that has one.
+func readPayment(payments repository.PaymentRepository, bookingID uuid.UUID) (*model.PaymentResponse, error) {
+	view, err := payments.GetBookingPayment(bookingID)
+	if err != nil {
+		return nil, err
+	}
+	if view == nil || view.Payment == nil {
+		return nil, fmt.Errorf("payment of booking %s not found after writing it", bookingID)
+	}
+	return paymentResponse(view), nil
 }
 
 // paymentAmount is the number of tickets times the price of one ticket. Amounts that do not fit
@@ -258,8 +386,17 @@ func reservationExpired(booking *model.BookingModel, now time.Time) bool {
 	return booking.ExpiresAt == nil || !booking.ExpiresAt.After(now)
 }
 
-func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel, now time.Time) *model.PaymentResponse {
-	ticketsValid := payment.Status == model.PaymentStatusPaid && booking.Status == model.BookingStatusConfirmed
+// eventHonorsTickets reports whether the event still takes place, or took place, so that its
+// tickets are valid.
+func eventHonorsTickets(eventStatus *model.EventStatus) bool {
+	return eventStatus != nil && (*eventStatus == model.EventStatusPublished || *eventStatus == model.EventStatusCompleted)
+}
+
+func paymentResponse(view *repository.BookingPayment) *model.PaymentResponse {
+	booking, payment := view.Booking, view.Payment
+	ticketsValid := payment.Status == model.PaymentStatusPaid &&
+		booking.Status == model.BookingStatusConfirmed &&
+		eventHonorsTickets(view.EventStatus)
 	resp := &model.PaymentResponse{
 		PaymentID:       payment.PaymentID,
 		BookingID:       booking.BookingID,
@@ -270,7 +407,7 @@ func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel, n
 		FailureReason:   payment.FailureReason,
 		BookingStatus:   booking.Status,
 		TicketsValid:    ticketsValid,
-		Message:         paymentMessage(booking, payment, ticketsValid, now),
+		Message:         paymentMessage(view, ticketsValid),
 		CreatedAt:       payment.CreatedAt,
 		UpdatedAt:       payment.UpdatedAt,
 	}
@@ -280,20 +417,28 @@ func paymentResponse(booking *model.BookingModel, payment *model.PaymentModel, n
 	return resp
 }
 
-// paymentMessage words the result for the user. It never contradicts ticketsValid: only valid
-// tickets are reported as a confirmed booking.
-func paymentMessage(booking *model.BookingModel, payment *model.PaymentModel, ticketsValid bool, now time.Time) string {
+// paymentMessage words the result for the user. It never contradicts the result: only valid
+// tickets are reported as a confirmed booking, and only a payable booking is asked to complete
+// its payment. Expiry is judged by the database clock like everywhere else.
+func paymentMessage(view *repository.BookingPayment, ticketsValid bool) string {
+	booking, payment := view.Booking, view.Payment
 	switch payment.Status {
 	case model.PaymentStatusPending:
-		if booking.Status != model.BookingStatusReserved || reservationExpired(booking, now) {
+		switch {
+		case view.EventStatus == nil || *view.EventStatus != model.EventStatusPublished:
+			return "The event is no longer available, so the payment can no longer be completed. No tickets were booked and nothing was charged."
+		case booking.Status != model.BookingStatusReserved || reservationExpired(booking, view.Now):
 			return "Your reservation is no longer valid, so the payment can no longer be completed. No tickets were booked; please start a new booking."
 		}
 		return "Payment pending. Confirm the amount to complete your booking."
 	case model.PaymentStatusPaid:
-		if !ticketsValid {
-			return "The payment was received, but the booking is no longer active. Your tickets are not valid."
+		switch {
+		case ticketsValid:
+			return "Payment successful. Your booking is confirmed."
+		case booking.Status == model.BookingStatusConfirmed:
+			return "The payment was received, but the event is no longer taking place. Your tickets are not valid."
 		}
-		return "Payment successful. Your booking is confirmed."
+		return "The payment was received, but the booking is no longer active. Your tickets are not valid."
 	case model.PaymentStatusRefunded:
 		return "The payment was refunded. Your tickets are no longer valid."
 	}
