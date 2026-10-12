@@ -1,15 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import {
+  joinSessionCookie,
   organizationsFromClaims,
   refreshAccessToken,
   sealSession,
   sessionCookieOptions,
+  splitSessionCookie,
+  staleSessionCookieNames,
   unsealSession,
   type Session,
 } from "@/features/auth"
-
-const SESSION_COOKIE = "eh_session"
 
 const REFRESH_BUFFER_MS = 30_000
 
@@ -65,18 +66,35 @@ async function withRefreshedSession(
       refreshToken: refreshed.refreshToken,
       accessTokenExpiresAt: Date.now() + (refreshed.expiresIn ?? 0) * 1000,
     }
-    const value = await sealSession(updated)
+    const chunks = splitSessionCookie(await sealSession(updated))
+    const stale = staleSessionCookieNames(
+      request.cookies.getAll(),
+      chunks.length
+    )
 
-    request.cookies.set(SESSION_COOKIE, value)
+    // Update the request too, so server components in this render see the new tokens.
+    for (const name of stale) {
+      request.cookies.delete(name)
+    }
+    for (const chunk of chunks) {
+      request.cookies.set(chunk.name, chunk.value)
+    }
 
     const response = NextResponse.next({ request })
-    response.cookies.set(SESSION_COOKIE, value, sessionCookieOptions())
+    for (const name of stale) {
+      response.cookies.delete(name)
+    }
+    for (const chunk of chunks) {
+      response.cookies.set(chunk.name, chunk.value, sessionCookieOptions())
+    }
 
     return response
   } catch {
     // The refresh token itself expired (idle/SSO session timeout) or was revoked.
     const response = loginRedirect(request)
-    response.cookies.delete(SESSION_COOKIE)
+    for (const name of staleSessionCookieNames(request.cookies.getAll())) {
+      response.cookies.delete(name)
+    }
 
     return response
   }
@@ -87,7 +105,7 @@ async function withRefreshedSession(
  * clearly is not logged in; the real check happens in the Data Access Layer.
  */
 export async function proxy(request: NextRequest) {
-  const cookie = request.cookies.get(SESSION_COOKIE)?.value
+  const cookie = joinSessionCookie(request.cookies.getAll())
 
   if (!cookie) {
     return loginRedirect(request)
