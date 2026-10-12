@@ -85,6 +85,7 @@ func main() {
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
+	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -94,6 +95,7 @@ func main() {
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
+	ratingHandler := handler.NewRatingHandler(ratingService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -104,6 +106,7 @@ func main() {
 		v1.GET("/", handler.Healthcheck)
 		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
 		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
+		v1.GET("/events/:eventId/rating-summary", ratingHandler.GetEventRatingSummaryHandler)
 
 		// DEBUG routes — disabled in production
 		if os.Getenv("DEBUG_ENABLED") == "true" {
