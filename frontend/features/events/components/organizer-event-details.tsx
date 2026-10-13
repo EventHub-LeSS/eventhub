@@ -4,11 +4,12 @@ import { EventActions } from "@/features/events/components/event-actions"
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
 import {
   EMPTY_VALUE,
+  formatAvailableSeats,
   formatEventCapacity,
   formatEventDateTime,
   formatEventPrice,
-  formatSoldTickets,
   formatEventTimeRange,
+  formatSoldTickets,
 } from "@/features/events/lib/format"
 import { getOrganizerEvent } from "@/features/events/lib/get-organizer-events"
 
@@ -98,6 +99,9 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
               : EMPTY_VALUE}
           </Detail>
         )}
+        <Detail label="Available seats">
+          {formatAvailableSeats(event.availableSeats, event.capacity)}
+        </Detail>
         <Detail label="Price">{formatEventPrice(event.price)}</Detail>
         <Detail label="Created">{formatEventDateTime(event.createdAt)}</Detail>
         <Detail label="Last updated">

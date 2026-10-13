@@ -84,3 +84,17 @@ export function formatSoldTickets(soldTickets: number, capacity: number): string
 
   return `${eventCountFormat.format(soldTickets)} / ${eventCountFormat.format(capacity)} ${unit}`
 }
+
+/** EVENTHUB-81. `null` means the count couldn't be loaded. */
+export function formatAvailableSeats(
+  availableSeats: number | null,
+  capacity: number
+): string {
+  if (availableSeats === null) {
+    return EMPTY_VALUE
+  }
+
+  const unit = availableSeats === 1 ? "seat" : "seats"
+
+  return `${eventCountFormat.format(availableSeats)} of ${eventCountFormat.format(capacity)} ${unit} available`
+}
