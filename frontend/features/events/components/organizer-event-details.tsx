@@ -73,13 +73,6 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
         />
       </div>
 
-      <div className="flex w-fit flex-col items-center gap-1 self-start rounded-xl border border-border px-6 py-3">
-        <OccupancyGauge percent={occupancyPercent} />
-        <p className="text-sm text-muted-foreground">
-          {formatAvailableSeats(event.availableSeats, event.capacity)}
-        </p>
-      </div>
-
       <dl className="grid gap-4 sm:grid-cols-2">
         <Detail label="Date & time">
           {formatEventTimeRange(event.startTime, event.endTime)}
@@ -118,6 +111,13 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
           {formatEventDateTime(event.updatedAt)}
         </Detail>
       </dl>
+
+      <div className="flex w-fit flex-col items-center gap-1 self-start rounded-xl border border-border px-6 py-3">
+        <OccupancyGauge percent={occupancyPercent} />
+        <p className="text-sm text-muted-foreground">
+          {formatAvailableSeats(event.availableSeats, event.capacity)}
+        </p>
+      </div>
     </>
   )
 }
