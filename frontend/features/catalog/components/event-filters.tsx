@@ -2,7 +2,7 @@
 
 import { XIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { EventCategory } from "@/features/catalog/lib/get-published-events"
 import { Button } from "@/features/shared/components/ui/button"
@@ -46,41 +46,61 @@ export function EventFilters({ categories }: EventFiltersProps) {
     categoryItems[category.categoryId] = category.category
   }
 
-  function applyFilters(next: {
-    title: string
-    location: string
-    date: string
-    categoryId: string
-  }) {
-    const params = new URLSearchParams(searchParams)
+  const applyFilters = useCallback(
+    (next: {
+      title: string
+      location: string
+      date: string
+      categoryId: string
+    }) => {
+      const params = new URLSearchParams(searchParams)
 
-    if (next.title) {
-      params.set("title", next.title)
-    } else {
-      params.delete("title")
+      if (next.title) {
+        params.set("title", next.title)
+      } else {
+        params.delete("title")
+      }
+
+      if (next.location) {
+        params.set("location", next.location)
+      } else {
+        params.delete("location")
+      }
+
+      if (next.date) {
+        params.set("date", next.date)
+      } else {
+        params.delete("date")
+      }
+
+      if (next.categoryId && next.categoryId !== ALL_CATEGORIES) {
+        params.set("categoryId", next.categoryId)
+      } else {
+        params.delete("categoryId")
+      }
+
+      const query = params.toString()
+      router.replace(query ? `${pathname}?${query}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
+
+  // Skips the debounced effect's first run, which would otherwise re-apply
+  // the filters the URL already has as soon as the component mounts.
+  const isFirstRender = useRef(true)
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
     }
 
-    if (next.location) {
-      params.set("location", next.location)
-    } else {
-      params.delete("location")
-    }
+    const timeout = setTimeout(() => {
+      applyFilters({ title, location, date, categoryId })
+    }, 300)
 
-    if (next.date) {
-      params.set("date", next.date)
-    } else {
-      params.delete("date")
-    }
-
-    if (next.categoryId && next.categoryId !== ALL_CATEGORIES) {
-      params.set("categoryId", next.categoryId)
-    } else {
-      params.delete("categoryId")
-    }
-
-    const query = params.toString()
-    router.push(query ? `${pathname}?${query}` : pathname)
-  }
+    return () => clearTimeout(timeout)
+  }, [title, location, date, categoryId, applyFilters])
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
