@@ -79,43 +79,10 @@ export function formatEventCapacity(capacity: number): string {
   return `${eventCountFormat.format(capacity)} ${unit}`
 }
 
-export function formatSoldTickets(
-  soldTickets: number,
-  capacity: number
-): string {
-  const unit = capacity === 1 ? "Platz" : "Plätze"
-
-  return `${eventCountFormat.format(soldTickets)} / ${eventCountFormat.format(capacity)} ${unit}`
-}
-
-/** EVENTHUB-81. `null` means the count couldn't be loaded. */
-export function formatAvailableSeats(
-  availableSeats: number | null,
-  capacity: number
-): string {
-  if (availableSeats === null) {
-    return EMPTY_VALUE
-  }
-
-  const unit = capacity === 1 ? "Platz" : "Plätzen"
-
-  return `${eventCountFormat.format(availableSeats)} von ${eventCountFormat.format(capacity)} ${unit} frei`
-}
-
 /**
- * EVENTHUB-81. Share of capacity that's booked, rounded to a whole percent and
- * capped at 100 (a drafted capacity cut below sold tickets must not read over
- * full). `null` when the seat count couldn't be loaded, or capacity is 0.
+ * Money earned on an event, in EUR. The API exposes no revenue field, so the
+ * caller passes price × confirmed tickets; Intl rounds it to cents.
  */
-export function computeOccupancyPercent(
-  availableSeats: number | null,
-  capacity: number
-): number | null {
-  if (availableSeats === null || capacity <= 0) {
-    return null
-  }
-
-  const booked = capacity - availableSeats
-
-  return Math.min(100, Math.max(0, Math.round((booked / capacity) * 100)))
+export function formatEventRevenue(amount: number): string {
+  return Number.isFinite(amount) ? eventPriceFormat.format(amount) : EMPTY_VALUE
 }
