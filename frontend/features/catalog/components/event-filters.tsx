@@ -2,7 +2,7 @@
 
 import { XIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 
 import type { EventCategory } from "@/features/catalog/lib/get-published-events"
 import { Button } from "@/features/shared/components/ui/button"
@@ -46,68 +46,63 @@ export function EventFilters({ categories }: EventFiltersProps) {
     categoryItems[category.categoryId] = category.category
   }
 
-  const applyFilters = useCallback(
-    (next: {
-      title: string
-      location: string
-      date: string
-      categoryId: string
-    }) => {
-      const params = new URLSearchParams(searchParams)
+  function applyFilters(next: {
+    title: string
+    location: string
+    date: string
+    categoryId: string
+  }) {
+    const params = new URLSearchParams(searchParams)
 
-      if (next.title) {
-        params.set("title", next.title)
-      } else {
-        params.delete("title")
-      }
-
-      if (next.location) {
-        params.set("location", next.location)
-      } else {
-        params.delete("location")
-      }
-
-      if (next.date) {
-        params.set("date", next.date)
-      } else {
-        params.delete("date")
-      }
-
-      if (next.categoryId && next.categoryId !== ALL_CATEGORIES) {
-        params.set("categoryId", next.categoryId)
-      } else {
-        params.delete("categoryId")
-      }
-
-      const query = params.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname)
-    },
-    [pathname, router, searchParams]
-  )
-
-  // Skips the debounced effect's first run, which would otherwise re-apply
-  // the filters the URL already has as soon as the component mounts.
-  const isFirstRender = useRef(true)
-
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
+    if (next.title) {
+      params.set("title", next.title)
+    } else {
+      params.delete("title")
     }
 
-    const timeout = setTimeout(() => {
-      applyFilters({ title, location, date, categoryId })
-    }, 300)
+    if (next.location) {
+      params.set("location", next.location)
+    } else {
+      params.delete("location")
+    }
 
-    return () => clearTimeout(timeout)
-  }, [title, location, date, categoryId, applyFilters])
+    if (next.date) {
+      params.set("date", next.date)
+    } else {
+      params.delete("date")
+    }
+
+    if (next.categoryId && next.categoryId !== ALL_CATEGORIES) {
+      params.set("categoryId", next.categoryId)
+    } else {
+      params.delete("categoryId")
+    }
+
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname)
+  }
+
+  // Shared across fields, so typing in one resets the pending apply from another.
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  function scheduleFilters(next: {
+    title: string
+    location: string
+    date: string
+    categoryId: string
+  }) {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => applyFilters(next), 300)
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    clearTimeout(debounceRef.current)
     applyFilters({ title, location, date, categoryId })
   }
 
   function handleReset() {
+    clearTimeout(debounceRef.current)
     setTitle("")
     setLocation("")
     setDate("")
@@ -131,7 +126,11 @@ export function EventFilters({ categories }: EventFiltersProps) {
           id="event-filter-title"
           placeholder="Nach Titel suchen…"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value
+            setTitle(value)
+            scheduleFilters({ title: value, location, date, categoryId })
+          }}
         />
       </div>
       <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
@@ -145,7 +144,11 @@ export function EventFilters({ categories }: EventFiltersProps) {
           id="event-filter-location"
           placeholder="Stadt oder Veranstaltungsort"
           value={location}
-          onChange={(event) => setLocation(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value
+            setLocation(value)
+            scheduleFilters({ title, location: value, date, categoryId })
+          }}
         />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -159,7 +162,11 @@ export function EventFilters({ categories }: EventFiltersProps) {
           id="event-filter-date"
           type="date"
           value={date}
-          onChange={(event) => setDate(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value
+            setDate(value)
+            scheduleFilters({ title, location, date: value, categoryId })
+          }}
         />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -172,7 +179,14 @@ export function EventFilters({ categories }: EventFiltersProps) {
         <Select
           items={categoryItems}
           value={categoryId}
-          onValueChange={(value) => setCategoryId(value ?? ALL_CATEGORIES)}
+          onValueChange={(value) => {
+            const next = value ?? ALL_CATEGORIES
+            setCategoryId(next)
+            // A picked option is a discrete action, not continuous typing, so
+            // it applies right away instead of waiting for the debounce.
+            clearTimeout(debounceRef.current)
+            applyFilters({ title, location, date, categoryId: next })
+          }}
         >
           <SelectTrigger id="event-filter-category" className="w-full">
             <SelectValue placeholder="Alle Kategorien" />
