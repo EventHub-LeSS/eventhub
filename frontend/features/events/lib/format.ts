@@ -98,3 +98,21 @@ export function formatAvailableSeats(
 
   return `${eventCountFormat.format(availableSeats)} of ${eventCountFormat.format(capacity)} ${unit} available`
 }
+
+/**
+ * EVENTHUB-81. Share of capacity that's booked, rounded to a whole percent and
+ * capped at 100 (a drafted capacity cut below sold tickets must not read over
+ * full). `null` when the seat count couldn't be loaded, or capacity is 0.
+ */
+export function computeOccupancyPercent(
+  availableSeats: number | null,
+  capacity: number
+): number | null {
+  if (availableSeats === null || capacity <= 0) {
+    return null
+  }
+
+  const booked = capacity - availableSeats
+
+  return Math.min(100, Math.max(0, Math.round((booked / capacity) * 100)))
+}
