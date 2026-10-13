@@ -60,6 +60,7 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
         <EventActions
           eventId={event.eventId}
           eventTitle={event.title}
+          status={event.status}
           showViewDetails={false}
         />
       </div>
