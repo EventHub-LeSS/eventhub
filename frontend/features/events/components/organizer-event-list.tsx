@@ -59,7 +59,11 @@ export async function OrganizerEventList() {
                   {formatEventPrice(event.price)}
                 </p>
               </div>
-              <EventActions eventId={event.eventId} eventTitle={event.title} />
+              <EventActions
+                eventId={event.eventId}
+                eventTitle={event.title}
+                status={event.status}
+              />
             </li>
           ))}
         </ul>
