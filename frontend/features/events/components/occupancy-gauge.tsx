@@ -4,8 +4,8 @@ import { PolarAngleAxis, RadialBar, RadialBarChart } from "recharts"
 
 import { EMPTY_VALUE } from "@/features/events/lib/format"
 
-const WIDTH = 160
-const HEIGHT = 84
+const WIDTH = 280
+const HEIGHT = 146
 
 /**
  * EVENTHUB-81. A half-donut gauge of how much of an event's capacity is
@@ -40,7 +40,7 @@ export function OccupancyGauge({ percent }: { percent: number | null }) {
         outerRadius={WIDTH * 0.5}
         cx={WIDTH / 2}
         cy={HEIGHT}
-        barSize={14}
+        barSize={24}
       >
         {/* Pins the bar's scale to 0–100; without it a single radial bar
             scales its domain to its own value and always renders full. */}
@@ -48,11 +48,11 @@ export function OccupancyGauge({ percent }: { percent: number | null }) {
         <RadialBar
           dataKey="value"
           background={{ fill: "var(--color-muted)" }}
-          cornerRadius={7}
+          cornerRadius={12}
           isAnimationActive={false}
         />
       </RadialBarChart>
-      <div className="absolute inset-x-0 bottom-0 text-center text-lg font-semibold tabular-nums">
+      <div className="absolute inset-x-0 bottom-0 text-center text-3xl font-semibold tabular-nums">
         {percent}%
       </div>
     </div>
