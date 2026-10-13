@@ -1,7 +1,6 @@
 import Link from "next/link"
 
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
-import { OccupancyBar } from "@/features/events/components/occupancy-bar"
 import type { OrganizerDashboardEvent } from "@/features/events/lib/dashboard"
 import { formatEventRevenue } from "@/features/events/lib/format"
 import {
@@ -58,7 +57,6 @@ export function SalesDashboard({
               <TableHead className="text-right">Sold</TableHead>
               <TableHead className="text-right">Free</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
-              <TableHead className="text-right">Occupancy</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -77,7 +75,7 @@ export function SalesDashboard({
                 </TableCell>
                 {event.statsUnavailable ? (
                   <TableCell
-                    colSpan={4}
+                    colSpan={3}
                     className="text-center text-xs text-muted-foreground"
                   >
                     Ticket figures unavailable
@@ -92,14 +90,6 @@ export function SalesDashboard({
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {formatEventRevenue(event.revenue)}
-                    </TableCell>
-                    <TableCell className="flex items-center justify-end">
-                      <OccupancyBar
-                        sold={event.soldTickets}
-                        capacity={event.capacity}
-                        percent={event.occupancyPercent}
-                        compact
-                      />
                     </TableCell>
                   </>
                 )}
