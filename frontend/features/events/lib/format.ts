@@ -78,3 +78,11 @@ export function formatEventCapacity(capacity: number): string {
 
   return `${eventCountFormat.format(capacity)} ${unit}`
 }
+
+/**
+ * Money earned on an event, in EUR. The API exposes no revenue field, so the
+ * caller passes price × confirmed tickets; Intl rounds it to cents.
+ */
+export function formatEventRevenue(amount: number): string {
+  return Number.isFinite(amount) ? eventPriceFormat.format(amount) : EMPTY_VALUE
+}
