@@ -340,3 +340,21 @@ Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen K
 **Aufbewahrung:** Einträge werden nach 10 Jahren täglich um 03:00 UTC per `pg_cron` (Migration `000007`) gelöscht. Die API-Datenbank braucht daher das Image aus `core/Dockerfile.api-db` und die Einstellungen `shared_preload_libraries=pg_cron`, `cron.database_name=<DB-Name>` (siehe `core/docker-compose.yml`). Ohne pg_cron bricht die Migration mit einer klaren Fehlermeldung ab. Bestehende Volumes bleiben erhalten; den `api-db`-Container mit `docker compose up -d --build api-db` neu erzeugen. Für externe Deployments (z. B. Dockhand) das Image `ghcr.io/<owner>/api-db` mit denselben Parametern verwenden.
 
 **Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.
+
+### Benachrichtigungen (EVENTHUB-240)
+
+Nach Migration 000009 liefert GET /api/v1/notifications die eigenen
+Benachrichtigungen, neueste zuerst ([] bei leerer Liste). Beide Endpunkte
+benötigen ein Bearer-Token und einen synchronisierten API-Nutzer.
+
+POST /api/v1/bookings/{bookingId}/reminder simuliert eine Erinnerung für eine
+eigene bestätigte Buchung einer bevorstehenden veröffentlichten Veranstaltung.
+Sie enthält Anlass, Inhalt, Empfänger, Buchungs-ID und Zeitstempel. Der geplante
+Zeitpunkt scheduledAt liegt 24 Stunden vor Beginn, bei kurzfristigen Buchungen
+bei der Erzeugung. Die Simulation macht sie sofort in der Liste sichtbar
+(simulated: true); es gibt keinen automatischen Versandjob oder E-Mail-Versand.
+
+Die erste Erzeugung liefert 201, wiederholte oder parallele Aufrufe dieselbe
+Erinnerung mit 200. Fremde oder unbekannte Buchungen liefern 404; nicht
+bestätigte Buchungen und nicht mehr verfügbare Veranstaltungen 409.
+Das Frontend kann die Daten als Banner oder Benachrichtigungsliste darstellen.

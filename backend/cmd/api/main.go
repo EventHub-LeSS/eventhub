@@ -75,6 +75,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	tx := repository.NewTransactor(db)
 
@@ -86,11 +87,14 @@ func main() {
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
+	notificationService := service.NewNotificationService(notificationRepo, tx)
+
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
@@ -115,6 +119,8 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
+		protected.POST("/bookings/:bookingId/reminder", notificationHandler.SimulateReminderHandler)
 
 		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
 

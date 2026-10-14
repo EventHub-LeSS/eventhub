@@ -442,6 +442,29 @@ definitions:
       time:
         type: string
     type: object
+  model.NotificationData:
+    properties:
+      bookingId:
+        type: string
+      content:
+        type: string
+      createdAt:
+        type: string
+      notificationId:
+        type: string
+      occasion:
+        type: string
+      scheduledAt:
+        type: string
+      simulated:
+        type: boolean
+      subject:
+        type: string
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
   model.OrganizationRole:
     enum:
     - org_admin
@@ -1024,6 +1047,59 @@ paths:
       summary: Zahlung simulieren
       tags:
       - payments
+  /bookings/{bookingId}/reminder:
+    post:
+      description: Creates an in-app reminder for an own confirmed booking of an upcoming
+        published event. scheduledAt is 24 hours before the event or now for short-notice
+        bookings. Simulation displays it immediately. Repeated calls return the existing
+        reminder. No email or external delivery service is used. Foreign bookings
+        return 404.
+      parameters:
+      - description: Booking UUID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Existing reminder
+          schema:
+            $ref: '#/definitions/model.NotificationData'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.NotificationData'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Simulate own booking reminder
+      tags:
+      - notifications
   /debug/token:
     post:
       consumes:
@@ -1551,6 +1627,37 @@ paths:
       summary: List own events
       tags:
       - events
+  /notifications:
+    get:
+      description: Returns only the authenticated user's notifications, newest first.
+        No notifications returns []. Simulated reminders are immediately visible,
+        even before scheduledAt; no email is sent.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.NotificationData'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List own notifications
+      tags:
+      - notifications
   /organizations/:
     post:
       consumes:
