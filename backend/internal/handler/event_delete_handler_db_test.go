@@ -414,7 +414,7 @@ func waitUntilClosed(t *testing.T, ch <-chan struct{}, what string) {
 	}
 }
 
-// EVENTHUB-256: Hält das Löschen die Zeilensperre, wartet ein paralleles Veröffentlichen und findet
+// EVENTHUB-256: Hält das Löschen die Zeilensperre, wartet ein gleichzeitiges Veröffentlichen und findet
 // danach kein Event mehr; ein gelöschter Entwurf kann nicht mehr veröffentlicht werden.
 func TestDeleteEventHandler_DeleteHoldsRowLock_PublishNotFound(t *testing.T) {
 	db := testdb.Open(t)
