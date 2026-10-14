@@ -107,7 +107,7 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 
 // EVENTHUB-78: Veranstaltung bearbeiten
 // @Summary      Update event
-// @Description  Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited.
+// @Description  Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409).
 // @Tags         events
 // @Security     BearerAuth
 // @Accept       json
@@ -119,6 +119,7 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 // @Failure      401 {object} model.APIError
 // @Failure      403 {object} model.ErrorResponse
 // @Failure      404 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse "Capacity below the tickets already sold or reserved"
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /events/{id} [put]
 func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
@@ -278,6 +279,8 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrUnknownReference):
 		writeProblem(c, http.StatusUnprocessableEntity, err.Error())
+	case errors.As(err, new(*service.CapacityBelowOccupiedError)):
+		writeProblem(c, http.StatusConflict, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}

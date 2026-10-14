@@ -1027,7 +1027,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited.",
+                "description": "Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1083,6 +1083,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Capacity below the tickets already sold or reserved",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }

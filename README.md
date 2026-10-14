@@ -219,7 +219,10 @@ eine Buchung bekommt höchstens eine Zahlung und eine Zahlung wird genau einmal 
 Antwort wird noch in der Transaktion gelesen, ein Fehler nach dem Commit ist damit ausgeschlossen.
 `GET` liest Buchung, Zahlung, Event-Status und Datenbankuhr in einer einzigen Abfrage. Der Abschluss sperrt wie
 `ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
-eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Migration
+eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Die Kapazität
+eines Events lässt sich nicht unter die verkauften und aktiv reservierten Tickets senken
+(`PUT /api/v1/events/{id}` antwortet dann mit `409`); so kann ein Abschluss nie mehr Tickets
+bestätigen, als das Event hat. Migration
 `000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie höchstens eine
 Buchung je Zahlung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die
 Migration bewusst scheitern. Beträge mit extremem Exponenten (z. B. `1e2000000000`) lehnt die

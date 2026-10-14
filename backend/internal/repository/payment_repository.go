@@ -2,6 +2,7 @@ package repository
 
 import (
 	"backend/internal/model"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func (r *paymentRepository) DatabaseNow() (time.Time, error) {
 func (r *paymentRepository) GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error) {
 	payment := &model.PaymentModel{}
 	err := r.db.First(payment, "payment_id = ?", paymentID).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
