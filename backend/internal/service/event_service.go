@@ -6,6 +6,7 @@ import (
 	"backend/internal/repository"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 
@@ -31,6 +32,17 @@ var (
 	// ErrUnknownReference means the event references a category or location that does not exist.
 	ErrUnknownReference = repository.ErrUnknownReference
 )
+
+// CapacityBelowOccupiedError means an update would lower the capacity of an event below the tickets
+// that are sold or reserved for it.
+type CapacityBelowOccupiedError struct {
+	Requested int
+	Occupied  int64
+}
+
+func (e *CapacityBelowOccupiedError) Error() string {
+	return fmt.Sprintf("capacity must not be lower than the %d tickets already sold or reserved, requested %d", e.Occupied, e.Requested)
+}
 
 type EventService struct {
 	eventRepo repository.EventRepository
@@ -162,6 +174,18 @@ func (s *EventService) UpdateEvent(
 		case model.EventStatusDraft, model.EventStatusPublished:
 		default:
 			return ErrInvalidStatus
+		}
+		// A lower capacity must leave room for every sold and reserved ticket, otherwise completing
+		// a payment confirms more tickets than the event has. The event lock serializes this check
+		// with ReserveTickets and SimulatePayment. Updates that keep or raise the capacity pass.
+		if req.Capacity < event.Capacity {
+			occupied, err := tx.Bookings.CountOccupiedTickets(eventID)
+			if err != nil {
+				return err
+			}
+			if int64(req.Capacity) < occupied {
+				return &CapacityBelowOccupiedError{Requested: req.Capacity, Occupied: occupied}
+			}
 		}
 
 		before := *event

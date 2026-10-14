@@ -270,3 +270,38 @@ func TestPayment_Rejections(t *testing.T) {
 	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started)+"/simulate", valid), http.StatusConflict)
 	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started), nil), http.StatusConflict)
 }
+
+// The organizer cannot lower the capacity below the tickets of a running checkout (review of PR #63).
+func TestPayment_CapacityChangeDuringCheckout(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	seedBookingUser(t, db, bookingKeycloakUserID)
+	visitor := newPaymentRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+	organizer := newEventRouter(db, principalManaging("org-a"))
+
+	bookingID := reserveViaAPI(t, visitor, event.eventID, 2)
+	if rec := doPaymentRequest(t, visitor, http.MethodPost, paymentPath(bookingID), nil); rec.Code != http.StatusCreated {
+		t.Fatalf("start payment: %d %s", rec.Code, rec.Body.String())
+	}
+
+	wantPaymentProblem(t, putEvent(t, organizer, event.eventID.String(), with(validBody(event), "capacity", 1)), http.StatusConflict)
+	if rec := putEvent(t, organizer, event.eventID.String(), with(validBody(event), "capacity", 2)); rec.Code != http.StatusOK {
+		t.Fatalf("lowering to the reserved tickets: expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec := doPaymentRequest(t, visitor, http.MethodPost, paymentPath(bookingID)+"/simulate", map[string]any{"outcome": "success", "amount": "40"})
+	if got := decodePayment(t, rec); rec.Code != http.StatusOK || got.Status != model.PaymentStatusPaid || !got.TicketsValid {
+		t.Fatalf("simulate: %d %s", rec.Code, rec.Body.String())
+	}
+	sold, err := repository.NewEventRepository(db).GetConfirmedTicketCount(event.eventID)
+	if err != nil {
+		t.Fatalf("sold tickets: %v", err)
+	}
+	var capacity int
+	if err := db.Raw("SELECT capacity FROM events WHERE event_id = ?", event.eventID).Scan(&capacity).Error; err != nil {
+		t.Fatalf("capacity: %v", err)
+	}
+	if sold != 2 || capacity != 2 {
+		t.Errorf("expected 2 sold tickets for capacity 2, got %d for %d", sold, capacity)
+	}
+}
