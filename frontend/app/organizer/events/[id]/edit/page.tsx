@@ -17,8 +17,8 @@ export default async function EditEventDraftPage({
 
   const event = await getOwnEvent(session?.accessToken ?? "", id)
 
-  // Only drafts are editable here; a published event is a different story.
-  if (!event || event.status !== "draft") {
+  // All events can be edited independent of their status (draft, published, completed).
+  if (!event) {
     notFound()
   }
 
