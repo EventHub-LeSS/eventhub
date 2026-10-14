@@ -10,6 +10,7 @@ import {
   EventApiError,
   publishEvent,
   updateEvent,
+  withdrawEvent,
 } from "@/features/events/lib/api"
 import {
   type DraftErrors,
@@ -106,6 +107,23 @@ export async function publishDraftAction(
 
   try {
     await publishEvent(accessToken, eventId)
+  } catch (error) {
+    return failed(error)
+  }
+
+  revalidatePath(DRAFTS_PATH)
+
+  return {}
+}
+
+/** EVENTHUB-82: withdraw a published event so it can no longer be booked. */
+export async function withdrawEventAction(
+  eventId: string
+): Promise<DraftActionResult> {
+  const { accessToken } = await authorize()
+
+  try {
+    await withdrawEvent(accessToken, eventId)
   } catch (error) {
     return failed(error)
   }

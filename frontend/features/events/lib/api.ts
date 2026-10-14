@@ -123,6 +123,20 @@ export async function publishEvent(
 }
 
 /**
+ * EVENTHUB-82: takes a published event off sale. The API moves it to
+ * "cancelled" and leaves its bookings untouched.
+ */
+export async function withdrawEvent(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}/withdraw`, {
+    accessToken,
+    method: "POST",
+  })
+}
+
+/**
  * Categories and locations are master data, but the API exposes no endpoint for
  * them yet. The public listing embeds both on every published event, so the
  * selectable values are derived from there until dedicated endpoints exist.
