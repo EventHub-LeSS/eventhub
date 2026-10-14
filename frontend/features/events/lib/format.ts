@@ -79,7 +79,10 @@ export function formatEventCapacity(capacity: number): string {
   return `${eventCountFormat.format(capacity)} ${unit}`
 }
 
-export function formatSoldTickets(soldTickets: number, capacity: number): string {
+export function formatSoldTickets(
+  soldTickets: number,
+  capacity: number
+): string {
   const unit = capacity === 1 ? "seat" : "seats"
 
   return `${eventCountFormat.format(soldTickets)} / ${eventCountFormat.format(capacity)} ${unit}`
