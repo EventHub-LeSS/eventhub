@@ -9,7 +9,8 @@ const statusPresentation: Record<
 > = {
   draft: { label: "Draft", variant: "secondary" },
   published: { label: "Published", variant: "default" },
-  cancelled: { label: "Cancelled", variant: "destructive" },
+  // Organizers withdraw events; the backend stores that as "cancelled".
+  cancelled: { label: "Withdrawn", variant: "destructive" },
   completed: { label: "Completed", variant: "outline" },
 }
 
