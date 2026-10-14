@@ -26,7 +26,9 @@ export function TemplateTopBar() {
                     className="flex shrink-0 items-center gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                     <TicketsIcon className="size-5" />
-                    <span className="text-sm font-semibold">EventHub</span>
+                    <span className="text-sm font-semibold">
+                        {kcContext.properties.SHADCN_THEME_APP_NAME}
+                    </span>
                 </a>
 
                 <div className="ml-auto flex items-center gap-2">
