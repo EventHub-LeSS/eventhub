@@ -13,13 +13,26 @@ export interface OrganizerEvent extends Event {
   category: EventCategory | null
 }
 
+/**
+ * Only organization members with the event_manager role may read sales. Other
+ * members still see the event, just without the figure.
+ */
+export type SoldTicketsResult =
+  | { status: "ok"; count: number }
+  | { status: "forbidden" }
+  | { status: "unavailable" }
+
+export interface OrganizerEventWithSales extends OrganizerEvent {
+  soldTickets: SoldTicketsResult
+}
+
 /** Failures are returned, not thrown, so the page can say what happened. */
 export type OrganizerEventsResult =
   | { status: "ok"; events: OrganizerEvent[] }
   | { status: "unavailable" }
 
 export type OrganizerEventResult =
-  | { status: "ok"; event: OrganizerEvent }
+  | { status: "ok"; event: OrganizerEventWithSales }
   | { status: "not-found" }
   | { status: "unavailable" }
 
@@ -82,8 +95,16 @@ export async function getOrganizerEvent(
   }
 
   const event = result.events.find((candidate) => candidate.eventId === eventId)
+  if (!event) {
+    return { status: "not-found" }
+  }
 
-  return event ? { status: "ok", event } : { status: "not-found" }
+  const session = await getSession()
+  const soldTickets: SoldTicketsResult = session
+    ? await fetchSoldTickets(eventId, session.accessToken)
+    : { status: "unavailable" }
+
+  return { status: "ok", event: { ...event, soldTickets } }
 }
 
 async function fetchOrganizationEvents(
@@ -108,5 +129,48 @@ async function fetchOrganizationEvents(
     return Array.isArray(payload) ? (payload as Event[]) : null
   } catch {
     return null
+  }
+}
+
+interface SoldTicketsResponse {
+  soldTickets: number
+}
+
+async function fetchSoldTickets(
+  eventId: string,
+  accessToken: string
+): Promise<SoldTicketsResult> {
+  try {
+    const response = await fetch(
+      `${envConfig.apiBaseUrl}/events/${encodeURIComponent(eventId)}/sold-tickets`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      }
+    )
+
+    if (response.status === 401 || response.status === 403) {
+      return { status: "forbidden" }
+    }
+
+    if (!response.ok) {
+      return { status: "unavailable" }
+    }
+
+    const payload: unknown = await response.json()
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      typeof (payload as SoldTicketsResponse).soldTickets !== "number"
+    ) {
+      return { status: "unavailable" }
+    }
+
+    return {
+      status: "ok",
+      count: (payload as SoldTicketsResponse).soldTickets,
+    }
+  } catch {
+    return { status: "unavailable" }
   }
 }

@@ -7,6 +7,7 @@ import {
   formatEventCapacity,
   formatEventDateTime,
   formatEventPrice,
+  formatSoldTickets,
   formatEventTimeRange,
 } from "@/features/events/lib/format"
 import { getOrganizerEvent } from "@/features/events/lib/get-organizer-events"
@@ -90,6 +91,13 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
           {event.category?.category ?? EMPTY_VALUE}
         </Detail>
         <Detail label="Capacity">{formatEventCapacity(event.capacity)}</Detail>
+        {event.soldTickets.status !== "forbidden" && (
+          <Detail label="Sold tickets">
+            {event.soldTickets.status === "ok"
+              ? formatSoldTickets(event.soldTickets.count, event.capacity)
+              : EMPTY_VALUE}
+          </Detail>
+        )}
         <Detail label="Price">{formatEventPrice(event.price)}</Detail>
         <Detail label="Created">{formatEventDateTime(event.createdAt)}</Detail>
         <Detail label="Last updated">
