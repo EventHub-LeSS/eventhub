@@ -4,7 +4,7 @@ import { EventActions } from "@/features/events/components/event-actions"
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
 import {
   EMPTY_VALUE,
-  formatEventCapacity,
+  formatAvailableSeats,
   formatEventPrice,
   formatEventTimeRange,
 } from "@/features/events/lib/format"
@@ -55,11 +55,15 @@ export async function OrganizerEventList() {
                 <p className="text-xs text-muted-foreground">
                   {formatEventTimeRange(event.startTime, event.endTime)} ·{" "}
                   {event.location?.name ?? EMPTY_VALUE} ·{" "}
-                  {formatEventCapacity(event.capacity)} ·{" "}
+                  {formatAvailableSeats(event.availableSeats, event.capacity)} ·{" "}
                   {formatEventPrice(event.price)}
                 </p>
               </div>
-              <EventActions eventId={event.eventId} eventTitle={event.title} />
+              <EventActions
+                eventId={event.eventId}
+                eventTitle={event.title}
+                status={event.status}
+              />
             </li>
           ))}
         </ul>

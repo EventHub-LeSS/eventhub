@@ -11,6 +11,8 @@ type Tx struct {
 	Organizations OrganizationRepository
 	Users         UserRepository
 	Audit         AuditLogRepository
+	Bookings      BookingRepository
+	Payments      PaymentRepository
 }
 
 type Transactor interface {
@@ -32,6 +34,8 @@ func (t *transactor) InTransaction(ctx context.Context, fn func(tx Tx) error) er
 			Organizations: NewOrganizationRepository(gdb),
 			Users:         NewUserRepository(gdb),
 			Audit:         NewAuditLogRepository(gdb),
+			Bookings:      NewBookingRepository(gdb),
+			Payments:      NewPaymentRepository(gdb),
 		})
 	})
 }

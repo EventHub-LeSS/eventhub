@@ -55,7 +55,7 @@ func Open(t *testing.T) *gorm.DB {
 			gormDB.Close()
 		}
 	})
-	if err := db.Exec("TRUNCATE bookings, events, organizations, users, categories, locations, audit_logs CASCADE").Error; err != nil {
+	if err := db.Exec("TRUNCATE bookings, payments, events, organizations, users, categories, locations, audit_logs CASCADE").Error; err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return db
@@ -82,7 +82,7 @@ func lock(t *testing.T, dsn string) {
 	}
 	t.Cleanup(func() {
 		// Closing the session would release the lock as well; unlocking first frees it at once.
-		conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
+		_, _ = conn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
 		conn.Close()
 		sqlDB.Close()
 	})

@@ -2,12 +2,16 @@ import { notFound } from "next/navigation"
 
 import { EventActions } from "@/features/events/components/event-actions"
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
+import { OccupancyGauge } from "@/features/events/components/occupancy-gauge"
 import {
+  computeOccupancyPercent,
   EMPTY_VALUE,
+  formatAvailableSeats,
   formatEventCapacity,
   formatEventDateTime,
   formatEventPrice,
   formatEventTimeRange,
+  formatSoldTickets,
 } from "@/features/events/lib/format"
 import { getOrganizerEvent } from "@/features/events/lib/get-organizer-events"
 
@@ -44,6 +48,10 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
 
   const { event } = result
   const { location } = event
+  const occupancyPercent = computeOccupancyPercent(
+    event.availableSeats,
+    event.capacity
+  )
 
   return (
     <>
@@ -60,8 +68,16 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
         <EventActions
           eventId={event.eventId}
           eventTitle={event.title}
+          status={event.status}
           showViewDetails={false}
         />
+      </div>
+
+      <div className="flex w-full flex-col items-center gap-1 rounded-xl border border-border px-6 py-4">
+        <OccupancyGauge percent={occupancyPercent} />
+        <p className="text-sm text-muted-foreground">
+          {formatAvailableSeats(event.availableSeats, event.capacity)}
+        </p>
       </div>
 
       <dl className="grid gap-4 sm:grid-cols-2">
@@ -89,6 +105,13 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
           {event.category?.category ?? EMPTY_VALUE}
         </Detail>
         <Detail label="Capacity">{formatEventCapacity(event.capacity)}</Detail>
+        {event.soldTickets.status !== "forbidden" && (
+          <Detail label="Sold tickets">
+            {event.soldTickets.status === "ok"
+              ? formatSoldTickets(event.soldTickets.count, event.capacity)
+              : EMPTY_VALUE}
+          </Detail>
+        )}
         <Detail label="Price">{formatEventPrice(event.price)}</Detail>
         <Detail label="Created">{formatEventDateTime(event.createdAt)}</Detail>
         <Detail label="Last updated">

@@ -122,6 +122,33 @@ export async function publishEvent(
   })
 }
 
+/** EVENTHUB-81: the organizer's own event's remaining capacity. */
+export async function getAvailableSeats(
+  accessToken: string,
+  eventId: string
+): Promise<number> {
+  const response = await apiFetch<{ availableSeats: number }>(
+    `/events/${eventId}/available-seats`,
+    { accessToken }
+  )
+
+  return response.availableSeats
+}
+
+/**
+ * EVENTHUB-82: takes a published event off sale. The API moves it to
+ * "cancelled" and leaves its bookings untouched.
+ */
+export async function withdrawEvent(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}/withdraw`, {
+    accessToken,
+    method: "POST",
+  })
+}
+
 /**
  * Categories and locations are master data, but the API exposes no endpoint for
  * them yet. The public listing embeds both on every published event, so the

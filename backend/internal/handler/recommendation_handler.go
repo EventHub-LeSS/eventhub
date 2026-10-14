@@ -48,15 +48,8 @@ func (h *RecommendationsHandler) GetEventRecommendations(c *gin.Context) {
 		}
 	}
 
-	user, err := middleware.ResolveUserForPrincipal(h.userRepo, principal)
-	if err != nil {
-		slog.Error("recommendation user lookup failed", "error", err)
-		writeProblem(c, http.StatusInternalServerError, "could not resolve recommendation user")
-		return
-	}
-
-	if user == nil {
-		writeProblem(c, http.StatusForbidden, "user not found in API database, run sync first")
+	user, ok := resolveAPIUser(c, h.userRepo, principal)
+	if !ok {
 		return
 	}
 

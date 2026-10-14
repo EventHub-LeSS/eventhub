@@ -6,6 +6,7 @@ import (
 	"backend/internal/repository"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"slices"
 
@@ -20,12 +21,28 @@ var (
 	ErrNotDraft         = errors.New("only draft events can be published")
 	ErrNotPublished     = errors.New("only published events can be withdrawn")
 	ErrAlreadyPublished = errors.New("this event is already published")
+	// ErrNotDeletable means the event is not a draft. Published, cancelled and completed events stay.
+	ErrNotDeletable = errors.New("only draft events can be deleted")
+	// ErrHasBookings means the event has bookings in some status. They belong to the booking
+	// history of the visitors, so the event is never deleted.
+	ErrHasBookings = errors.New("events with bookings cannot be deleted")
 	// ErrOrganizationRequired means the caller manages events in several organizations and did not
 	// say which one a new event belongs to.
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
 	// ErrUnknownReference means the event references a category or location that does not exist.
 	ErrUnknownReference = repository.ErrUnknownReference
 )
+
+// CapacityBelowOccupiedError means an update would lower the capacity of an event below the tickets
+// that are sold or reserved for it.
+type CapacityBelowOccupiedError struct {
+	Requested int
+	Occupied  int64
+}
+
+func (e *CapacityBelowOccupiedError) Error() string {
+	return fmt.Sprintf("capacity must not be lower than the %d tickets already sold or reserved, requested %d", e.Occupied, e.Requested)
+}
 
 type EventService struct {
 	eventRepo repository.EventRepository
@@ -158,6 +175,18 @@ func (s *EventService) UpdateEvent(
 		default:
 			return ErrInvalidStatus
 		}
+		// A lower capacity must leave room for every sold and reserved ticket, otherwise completing
+		// a payment confirms more tickets than the event has. The event lock serializes this check
+		// with ReserveTickets and SimulatePayment. Updates that keep or raise the capacity pass.
+		if req.Capacity < event.Capacity {
+			occupied, err := tx.Bookings.CountOccupiedTickets(eventID)
+			if err != nil {
+				return err
+			}
+			if int64(req.Capacity) < occupied {
+				return &CapacityBelowOccupiedError{Requested: req.Capacity, Occupied: occupied}
+			}
+		}
 
 		before := *event
 		event.Title = req.Title
@@ -194,8 +223,56 @@ func (s *EventService) UpdateEvent(
 	return updated, nil
 }
 
-func (s *EventService) DeleteEvent(eventID uuid.UUID) error {
-	return s.eventRepo.DeleteEvent(eventID)
+// EVENTHUB-256: Veranstaltungsentwurf löschen
+// DeleteEvent irrevocably removes a draft. keycloakOrgIDs are the organizations in which the caller
+// may delete events. The audit entries of the event are kept, and the deletion is recorded with the
+// last state of the draft.
+func (s *EventService) DeleteEvent(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) error {
+	meta, err := audit.MetaFromContext(ctx, audit.EventDeleted)
+	if err != nil {
+		return err
+	}
+	return s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		// The row lock serializes the deletion with publishing, editing and booking the event.
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+		if event.Status != model.EventStatusDraft {
+			return ErrNotDeletable
+		}
+		// bookings.event_id is ON DELETE SET NULL: deleting a booked event would detach the
+		// bookings, payments and ratings of visitors from it. Under the row lock no booking can be
+		// added before the deletion commits.
+		booked, err := tx.Events.HasBookings(eventID)
+		if err != nil {
+			return err
+		}
+		if booked {
+			return ErrHasBookings
+		}
+		deleted, err := tx.Events.DeleteEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return ErrEventNotFound
+		}
+		return appendEventAudit(tx, meta, org, eventID, model.AuditChanges{"event": eventSnapshot(event)})
+	})
 }
 
 // ListByOrganization returns the events of the organization, in every status. keycloakOrgIDs are

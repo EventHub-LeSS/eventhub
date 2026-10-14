@@ -2,6 +2,7 @@ package seed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -132,7 +133,7 @@ func (s *DBSeeder) seedCategories(_ context.Context) error {
 	}
 	for _, c := range cats {
 		var existing model.CategoryModel
-		if err := s.db.Where("category = ?", c.Category).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("category = ?", c.Category).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := s.db.Create(&c).Error; err != nil {
 				return fmt.Errorf("create category %q: %w", c.Category, err)
 			}
@@ -152,7 +153,7 @@ func (s *DBSeeder) seedLocations(_ context.Context) error {
 	}
 	for _, l := range locs {
 		var existing model.LocationModel
-		if err := s.db.Where("name = ?", l.Name).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("name = ?", l.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := s.db.Create(&l).Error; err != nil {
 				return fmt.Errorf("create location %q: %w", l.Name, err)
 			}
@@ -224,7 +225,7 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 	for _, e := range events {
 		id := seedUUID(e.tag)
 		var existing model.EventModel
-		if err := s.db.Where("event_id = ?", id).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("event_id = ?", id).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			catID := seedUUID("cat-" + e.category)
 			orgID, ok := s.orgByKey[e.orgName]
 			if !ok {
@@ -325,7 +326,7 @@ func (s *DBSeeder) seedPayments(_ context.Context) error {
 	for _, p := range payments {
 		id := seedUUID(p.tag)
 		var existing model.PaymentModel
-		if err := s.db.Where("payment_id = ?", id).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("payment_id = ?", id).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			amt, _ := decimal.NewFromString(p.amount)
 			refund, _ := decimal.NewFromString(p.refundAmt)
 			pm := model.PaymentModel{
@@ -421,7 +422,7 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 	for _, b := range bookings {
 		id := seedUUID(b.tag)
 		var existing model.BookingModel
-		if err := s.db.Where("booking_id = ?", id).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("booking_id = ?", id).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			userID, ok := s.userByKey[b.userEmail]
 			if !ok {
 				return fmt.Errorf("user %q not found for booking %q", b.userEmail, b.tag)
@@ -493,7 +494,7 @@ func (s *DBSeeder) seedRatings(_ context.Context) error {
 	for _, r := range ratings {
 		id := seedUUID(r.tag)
 		var existing model.RatingModel
-		if err := s.db.Where("rating_id = ?", id).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("rating_id = ?", id).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			bkID := seedUUID(r.bookingTag)
 			rt := model.RatingModel{
 				RatingID:  id,
@@ -534,7 +535,7 @@ func (s *DBSeeder) seedNotifications(_ context.Context) error {
 	for _, n := range notifs {
 		id := seedUUID(n.tag)
 		var existing model.NotificationData
-		if err := s.db.Where("notification_id = ?", id).First(&existing).Error; err == gorm.ErrRecordNotFound {
+		if err := s.db.Where("notification_id = ?", id).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			userID, ok := s.userByKey[n.userEmail]
 			if !ok {
 				return fmt.Errorf("user %q not found for notification %q", n.userEmail, n.tag)

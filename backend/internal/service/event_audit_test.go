@@ -140,6 +140,9 @@ func TestAuditedEventActions_RequireAuditContext(t *testing.T) {
 		"withdraw": func(s *EventService, ctx context.Context) error {
 			return s.WithdrawEvent(ctx, uuid.New(), []string{"kc-org-b"})
 		},
+		"delete": func(s *EventService, ctx context.Context) error {
+			return s.DeleteEvent(ctx, uuid.New(), []string{"kc-org-b"})
+		},
 	}
 	for name, call := range calls {
 		for ctxName, ctx := range map[string]context.Context{"missing": context.Background(), "wrong action": wrongAction} {
@@ -151,7 +154,7 @@ func TestAuditedEventActions_RequireAuditContext(t *testing.T) {
 				if err := call(svc, ctx); !errors.Is(err, audit.ErrMissingContext) {
 					t.Fatalf("expected ErrMissingContext, got %v", err)
 				}
-				if repo.saved != nil || repo.created != nil || len(auditRepo.entries) != 0 {
+				if repo.saved != nil || repo.created != nil || len(repo.deleted) != 0 || len(auditRepo.entries) != 0 {
 					t.Error("operation ran without audit context")
 				}
 			})
@@ -179,5 +182,35 @@ func TestRejectedEventActions_WriteNoEntry(t *testing.T) {
 	}
 	if len(auditRepo.entries) != 0 {
 		t.Errorf("rejected action recorded %d entries", len(auditRepo.entries))
+	}
+}
+
+// EVENTHUB-256: Das Löschen wird wie das Anlegen mit dem Stand des Entwurfs protokolliert.
+func TestDeleteEvent_Draft_RecordsSnapshot(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	svc, _, auditRepo := newTestServiceWithAudit(event)
+
+	if err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-b"}); err != nil {
+		t.Fatal(err)
+	}
+	entry := singleEntry(t, auditRepo)
+	wantPersonalAttribution(t, entry, audit.EventDeleted)
+	if entry.ResourceID != event.EventID.String() {
+		t.Errorf("resource = %q, want %q", entry.ResourceID, event.EventID)
+	}
+	snapshot := entry.Changes["event"].(map[string]any)
+	if snapshot["title"] != "Altes Konzert" || snapshot["price"] != "20" || snapshot["status"] != "draft" {
+		t.Errorf("snapshot = %v", snapshot)
+	}
+}
+
+func TestDeleteEvent_AuditUnavailable_ReturnsErrUnavailable(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	svc, _, auditRepo := newTestServiceWithAudit(event)
+	auditRepo.err = errors.New("disk full")
+
+	err := svc.DeleteEvent(auditCtx(audit.EventDeleted), event.EventID, []string{"kc-org-b"})
+	if !errors.Is(err, audit.ErrUnavailable) {
+		t.Fatalf("expected ErrUnavailable so the transaction is rolled back, got %v", err)
 	}
 }

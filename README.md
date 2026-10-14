@@ -171,6 +171,70 @@ PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
 zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
 Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
 
+### Zahlungsvorgang (EVENTHUB-235)
+
+Eine Reservierung aus `POST /api/v1/bookings` wird über einen simulierten Zahlungsvorgang
+verbindlich. Es ist **kein echter Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt
+der Client.
+
+1. `POST /api/v1/bookings/{bookingId}/payment` legt eine Zahlung mit Status `pending` an. Der Betrag
+   ist Ticketanzahl × Veranstaltungspreis, wird nur serverseitig berechnet und gespeichert; Beträge
+   im Request werden ignoriert. Antwort `201`, ein erneuter Aufruf liefert die offene Zahlung
+   unverändert mit `200` (spätere Preisänderungen ändern einen angezeigten Betrag nicht).
+2. Der Client zeigt `amount` an und schließt mit
+   `POST /api/v1/bookings/{bookingId}/payment/simulate` und `{"outcome": "success" | "failure", "amount": <angezeigter Betrag>}` ab.
+   Weicht `amount` vom gespeicherten Betrag ab, wird nichts geändert (`422`).
+3. `GET /api/v1/bookings/{bookingId}/payment` liefert jederzeit den gespeicherten Stand.
+
+Alle drei Endpunkte antworten mit `PaymentResponse` aus den gespeicherten Daten: `amount`, `status`
+(`pending`/`paid`/`failed`), `failureReason`, `bookingStatus`, `ticketsValid` und eine lesbare
+`message`. `ticketsValid` ist nur bei `paid` **und** `confirmed` `true` und nur, solange das Event
+veröffentlicht oder abgeschlossen ist; Tickets abgesagter oder gelöschter Events sind ungültig.
+
+| Ergebnis | Zahlung | Buchung | `failureReason` |
+| --- | --- | --- | --- |
+| `success` | `paid` | `confirmed` | – |
+| `failure` | `failed` | `failed` | `declined` |
+| Reservierung inzwischen abgelaufen | `failed` | `expired` | `reservation_expired` |
+| Event inzwischen zurückgezogen | `failed` | `failed` | `event_unavailable` |
+
+Fehlgeschlagene Buchungen geben ihre Tickets sofort frei und zählen nicht als verkauft; für einen
+neuen Versuch ist eine neue Buchung nötig. Die Zahlung muss vor `expiresAt` der Reservierung
+abgeschlossen werden.
+
+**Keine dauerhaft offenen Zahlungen:** Stellt ein erneuter Start fest, dass die Reservierung abgelaufen
+oder das Event zurückgezogen ist, speichert er die offene Zahlung in derselben Transaktion als
+fehlgeschlagen und antwortet mit `409`. Zusätzlich schließt die API jede Minute alle offenen Zahlungen
+abgelaufener Reservierungen als fehlgeschlagen ab (`PaymentService.RunPaymentCleanup`). Gerade
+gesperrte Buchungen, etwa ein laufender Abschluss, überspringt der Job (`SKIP LOCKED`).
+
+**Fehler:** `400` ungültige ID oder ungültiger Body (fehlendes/negatives `amount`, unbekanntes
+`outcome`), `401` ohne Token, `413` Body von `simulate` größer als 4 KiB, `403` Nutzer nicht synchronisiert, `404` Buchung unbekannt, gehört
+einem anderen Nutzer oder hat noch keinen Zahlungsvorgang, `409` Buchung nicht reserviert,
+Reservierung abgelaufen, Event nicht mehr veröffentlicht oder Zahlung bereits abgeschlossen, `422`
+manipulierter Betrag oder Betrag außerhalb von `NUMERIC(12,2)`.
+
+**Garantien:** Start und Abschluss laufen in Transaktionen mit Zeilensperren (`repository.Transactor`);
+eine Buchung bekommt höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Die
+Antwort wird noch in der Transaktion gelesen, ein Fehler nach dem Commit ist damit ausgeschlossen.
+`GET` liest Buchung, Zahlung, Event-Status und Datenbankuhr in einer einzigen Abfrage. Der Abschluss sperrt wie
+`ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
+eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Die Kapazität
+eines Events lässt sich nicht unter die verkauften und aktiv reservierten Tickets senken
+(`PUT /api/v1/events/{id}` antwortet dann mit `409`); so kann ein Abschluss nie mehr Tickets
+bestätigen, als das Event hat. Migration
+`000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie höchstens eine
+Buchung je Zahlung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die
+Migration bewusst scheitern. Beträge mit extremem Exponenten (z. B. `1e2000000000`) lehnt die
+Validierung mit `400` ab, bevor sie umgerechnet werden; das gilt auch für `price` der Events.
+
+**Getestet:** Automatisch über `TestStartPayment_*`, `TestSimulatePayment_*`, `TestGetPayment_*` und
+`TestPayment_*` sowie `TestExpireStalePayments_*` in `backend/internal/service` und
+`backend/internal/handler` (Betragsberechnung, manipulierte Beträge, Body-Limit, Erfolg, Ablehnung,
+abgelaufene Reservierung, zurückgezogenes Event, Cleanup offener Zahlungen, fremde
+Buchungen, parallele Starts und Abschlüsse ohne Deadlock oder Überbuchung). Zusätzlich manuell mit
+dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
+
 ### Veranstaltungen einer Organisation (EVENTHUB-79)
 
 `GET /api/v1/events/org/{id}` liefert alle Veranstaltungen einer Organisation in jedem Status,
@@ -219,9 +283,48 @@ von PR #41 manuell mit dem lokalen Stack (`core/docker-compose.yml`) und den Moc
 Seit `{id}` auch einen Alias annimmt, gibt es kein `400` mehr: Eine `{id}`, die weder eine bekannte
 UUID noch ein bekannter Alias ist, ergibt `404`.
 
+### Veranstaltungsentwurf löschen (EVENTHUB-256)
+
+`DELETE /api/v1/events/{id}` löscht einen Entwurf unwiderruflich: Die Zeile in `events` wird
+entfernt, kein Soft-Delete. Kategorie, Ort und Organisation bleiben erhalten. Nur Events im Status
+`draft` können gelöscht werden; veröffentlichte, abgesagte und abgeschlossene Events bleiben, ebenso
+jedes Event mit Buchungen in irgendeinem Status (auch storniert, fehlgeschlagen oder abgelaufen),
+weil Buchungen und Zahlungen zur Buchungshistorie der Besucher gehören. `bookings.event_id` ist
+`ON DELETE SET NULL`; ohne diese Prüfung verlören Buchungen beim Löschen ihr Event.
+
+**Berechtigung:** `event_manager` **oder** `org_admin` der Organisation, der das Event gehört.
+Globale Admins haben keinen Sonderweg. Veröffentlichen, Zurückziehen und Bearbeiten erlauben weiterhin
+nur `event_manager`.
+
+**Antworten:**
+
+| Status | Bedeutung                                                                              |
+| ------ | -------------------------------------------------------------------------------------- |
+| `200`  | `{"message": "event deleted"}`                                                         |
+| `400`  | `{id}` ist keine UUID, oder das Event ist kein Entwurf (`only draft events can be deleted`) |
+| `401`  | nicht angemeldet                                                                       |
+| `403`  | keine Rolle `event_manager`/`org_admin`, oder das Event gehört einer anderen Organisation |
+| `404`  | Event existiert nicht (auch beim zweiten Löschen)                                      |
+| `409`  | Event hat Buchungen (`events with bookings cannot be deleted`)                         |
+| `500`  | Datenbankfehler oder Audit-Eintrag nicht schreibbar; es wird nichts gelöscht           |
+
+Die Reihenfolge der Prüfungen ist wie beim Veröffentlichen: erst Existenz (`404`), dann Organisation
+(`403`), dann Status und Buchungen. Eine fremde Organisation erfährt so den Status nicht.
+
+**Code:** `EventHandler.DeleteEventHandler` → `EventService.DeleteEvent`. Prüfen und Löschen laufen in
+einer Transaktion unter der Zeilensperre des Events (`LockEvent`, `SELECT … FOR UPDATE`), wie beim
+Veröffentlichen und bei der Ticketreservierung; ein paralleles Veröffentlichen oder Buchen kann nicht
+dazwischenkommen. Das Löschen wird als `event.deleted` mit dem letzten Stand des Entwurfs im Audit
+Log protokolliert; die bisherigen Audit-Einträge des Events bleiben bewusst erhalten.
+
+**Getestet:** Automatisch über `TestDeleteEvent_*` in `backend/internal/service` sowie
+`TestDeleteEventHandler_*` und `TestDraftLifecycle_CreateAndDelete_KeepsAuditTrail` in
+`backend/internal/handler` (Rollen, fremde Organisation, alle Status, Buchungen in jedem Status,
+zweites Löschen, Rollback bei Audit-Fehler, Wettlauf mit dem Veröffentlichen in beiden Reihenfolgen).
+
 ### Audit Log der Organisationen
 
-Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
+Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen/löschen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
 
 **Einsicht:** `GET /api/v1/organizations/{organizationID}/audit-logs?limit=50&cursor=…` (neueste zuerst, max. 100 pro Seite, Cursor-Paginierung). Zugriff haben `org_admin` der Organisation und globale Admins. `organizationID` ist die Keycloak-Organisations-ID.
 
