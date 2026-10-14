@@ -7,8 +7,10 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -30,7 +32,11 @@ import (
 // @name Authorization
 // @description Enter "Bearer {token}" where {token} is a Keycloak access token
 func main() {
-	godotenv.Load()
+	// A missing .env is normal outside local development, where real env vars
+	// are set. Anything else means the file is there but could not be read.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("ignoring unreadable .env: %v", err)
+	}
 
 	// Structured logs for audit events (EVENTHUB-188); plain text like the rest of the app.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))

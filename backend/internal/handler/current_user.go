@@ -10,10 +10,10 @@ import (
 )
 
 type CurrentUserResponse struct {
-	Subject       string                       `json:"subject"`
-	Username      string                       `json:"username"`
-	GlobalRoles   []middleware.GlobalRole      `json:"globalRoles"`
-	Organization  *CurrentOrganizationResponse `json:"organization,omitempty"`
+	Subject       string                        `json:"subject"`
+	Username      string                        `json:"username"`
+	GlobalRoles   []middleware.GlobalRole       `json:"globalRoles"`
+	Organization  *CurrentOrganizationResponse  `json:"organization,omitempty"`
 	Organizations []CurrentOrganizationResponse `json:"organizations"`
 }
 

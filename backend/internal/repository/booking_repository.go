@@ -3,6 +3,7 @@ package repository
 import (
 	"backend/internal/model"
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -33,7 +34,7 @@ func NewBookingRepository(db *gorm.DB) BookingRepository {
 func (r *bookingRepository) GetBookingByID(bookingID uuid.UUID) (*model.BookingModel, error) {
 	booking := &model.BookingModel{}
 	err := r.db.First(booking, "booking_id = ?", bookingID).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -68,7 +69,7 @@ type bookingTx struct {
 func (t *bookingTx) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {
 	event := &model.EventModel{}
 	err := t.db.Clauses(clause.Locking{Strength: "UPDATE"}).First(event, "event_id = ?", eventID).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
