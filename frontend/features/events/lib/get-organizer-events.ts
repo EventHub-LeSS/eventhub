@@ -1,6 +1,7 @@
 import "server-only"
 import { getCurrentUser, getSession } from "@/features/auth"
 import { getPublishedEvents, type PublishedEvent } from "@/features/catalog"
+import { getAvailableSeats } from "@/features/events/lib/api"
 import type { Event } from "@/features/events/lib/types"
 import { envConfig } from "@/features/shared/lib/env"
 
@@ -11,6 +12,8 @@ type EventCategory = PublishedEvent["category"]
 export interface OrganizerEvent extends Event {
   location: EventLocation | null
   category: EventCategory | null
+  /** EVENTHUB-81. Null when the count couldn't be loaded. */
+  availableSeats: number | null
 }
 
 /**
@@ -65,10 +68,16 @@ export async function getOrganizerEvents(): Promise<OrganizerEventsResult> {
     catalog.events.map((event) => [event.category.categoryId, event.category])
   )
 
+  const availableSeats = await Promise.all(
+    events.map((event) =>
+      getAvailableSeats(session.accessToken, event.eventId).catch(() => null)
+    )
+  )
+
   return {
     status: "ok",
     events: events
-      .map((event) => ({
+      .map((event, index) => ({
         ...event,
         location: event.locationId
           ? (locations.get(event.locationId) ?? null)
@@ -76,6 +85,7 @@ export async function getOrganizerEvents(): Promise<OrganizerEventsResult> {
         category: event.categoryId
           ? (categories.get(event.categoryId) ?? null)
           : null,
+        availableSeats: availableSeats[index],
       }))
       .toSorted((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime)),
   }
