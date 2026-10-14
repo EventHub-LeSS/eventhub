@@ -1,5 +1,4 @@
 import "server-only"
-
 import { envConfig } from "@/features/shared/lib/env"
 
 export const authConfig = {
@@ -28,4 +27,4 @@ export function getCallbackUrl(): string {
  * "organization:*" returns every organization the user belongs to. The plain
  * "organization" scope would make Keycloak show an org picker for multi-org users.
  */
-export const authScope = "openid profile email organization:*"
+export const authScope = "openid profile organization:*"

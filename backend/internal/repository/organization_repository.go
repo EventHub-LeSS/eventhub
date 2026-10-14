@@ -2,9 +2,11 @@ package repository
 
 import (
 	"backend/internal/model"
+	"errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OrganizationRepository interface {
@@ -32,7 +34,7 @@ func (r *organizationRepository) CreateOrganization(org *model.OrganizationModel
 func (r *organizationRepository) GetByID(organizationID uuid.UUID) (*model.OrganizationModel, error) {
 	org := &model.OrganizationModel{}
 	err := r.db.First(org, "organization_id = ?", organizationID).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -44,7 +46,7 @@ func (r *organizationRepository) GetByID(organizationID uuid.UUID) (*model.Organ
 func (r *organizationRepository) GetByKeycloakOrgID(keycloakOrgID string) (*model.OrganizationModel, error) {
 	org := &model.OrganizationModel{}
 	err := r.db.Where("keycloak_org_id = ?", keycloakOrgID).First(org).Error
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -65,5 +67,5 @@ func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([
 }
 
 func (r *organizationRepository) AddMembership(membership *model.OrganizationMembershipModel) error {
-	return r.db.Create(membership).Error
+	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(membership).Error
 }

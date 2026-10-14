@@ -80,6 +80,30 @@
       }
     },
     {
+      "files": ["features/organizations/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/organizations/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["features/app/**"],
       "rules": {
         "no-restricted-imports": [

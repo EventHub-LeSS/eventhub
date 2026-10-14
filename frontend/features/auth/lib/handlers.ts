@@ -75,7 +75,14 @@ export async function handleCallback(request: NextRequest) {
     return failed("no_id_token")
   }
 
-  const email = typeof claims.email === "string" ? claims.email : ""
+  // Realm has registrationEmailAsUsername: true, so preferred_username (from
+  // the "profile" scope) is always the email address. Read it from there
+  // instead of requesting a separate "email" scope, which this realm's
+  // imported client-scope list doesn't define.
+  const email =
+    typeof claims.preferred_username === "string"
+      ? claims.preferred_username
+      : ""
 
   await createSessionCookie({
     sub: claims.sub,

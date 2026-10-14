@@ -41,6 +41,28 @@ definitions:
       username:
         type: string
     type: object
+  handler.SimulatePaymentRequest:
+    properties:
+      amount:
+        description: |-
+          Amount shown to the user before completing the payment, as JSON number or string; it must
+          equal the stored amount.
+        example: 40
+        minimum: 0
+        type: number
+      outcome:
+        allOf:
+        - $ref: '#/definitions/model.SimulatedPaymentOutcome'
+        description: Outcome the simulated payment provider reports; no real payment
+          provider is connected.
+        enum:
+        - success
+        - failure
+        example: success
+    required:
+    - amount
+    - outcome
+    type: object
   handler.UserAdminListItem:
     properties:
       email:
@@ -360,6 +382,12 @@ definitions:
     - EventAvailabilityAlmostSoldOut
     - EventAvailabilitySoldOut
     - EventAvailabilityTemporarilyUnavailable
+  model.EventDeletedResponse:
+    properties:
+      message:
+        example: event deleted
+        type: string
+    type: object
   model.EventModel:
     properties:
       capacity:
@@ -424,6 +452,66 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.PaymentFailureReason:
+    enum:
+    - declined
+    - reservation_expired
+    - event_unavailable
+    type: string
+    x-enum-varnames:
+    - PaymentFailureDeclined
+    - PaymentFailureReservationExpired
+    - PaymentFailureEventUnavailable
+  model.PaymentResponse:
+    properties:
+      amount:
+        description: Number of tickets times the event price when the payment process
+          was started.
+        example: "40"
+        type: string
+      bookingId:
+        type: string
+      bookingStatus:
+        $ref: '#/definitions/model.BookingStatus'
+      createdAt:
+        type: string
+      eventId:
+        type: string
+      expiresAt:
+        description: Deadline for completing a pending payment; omitted once the payment
+          is completed.
+        type: string
+      failureReason:
+        $ref: '#/definitions/model.PaymentFailureReason'
+      message:
+        description: Human readable result of the payment process.
+        example: Payment successful. Your booking is confirmed.
+        type: string
+      numberOfTickets:
+        example: 2
+        type: integer
+      paymentId:
+        type: string
+      status:
+        $ref: '#/definitions/model.PaymentStatus'
+      ticketsValid:
+        description: True only when the payment is paid and the booking is confirmed.
+        type: boolean
+      updatedAt:
+        type: string
+    type: object
+  model.PaymentStatus:
+    enum:
+    - pending
+    - paid
+    - failed
+    - refunded
+    type: string
+    x-enum-varnames:
+    - PaymentStatusPending
+    - PaymentStatusPaid
+    - PaymentStatusFailed
+    - PaymentStatusRefunded
   model.PublishedEventCategory:
     properties:
       category:
@@ -506,6 +594,14 @@ definitions:
       title:
         type: string
     type: object
+  model.SimulatedPaymentOutcome:
+    enum:
+    - success
+    - failure
+    type: string
+    x-enum-varnames:
+    - SimulatedPaymentSuccess
+    - SimulatedPaymentFailure
   model.SoldTicketsResponse:
     properties:
       eventId:
@@ -709,7 +805,8 @@ paths:
       consumes:
       - application/json
       description: Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung
-        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde.
+        verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde. Bestätigt
+        wird sie über den Zahlungsvorgang (POST /bookings/{bookingId}/payment).
       parameters:
       - description: Buchungsdaten
         in: body
@@ -753,6 +850,180 @@ paths:
       summary: Buchung anlegen
       tags:
       - bookings
+  /bookings/{bookingId}/payment:
+    get:
+      description: 'Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers:
+        Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid
+        ist nur bei bezahlter und bestätigter Buchung true, deren Event stattfindet
+        oder stattgefunden hat. Buchung, Zahlung, Event-Status und Datenbankuhr stammen
+        aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein
+        Hintergrundjob jede Minute als fehlgeschlagen ab.'
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.PaymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Buchung nicht gefunden oder kein Zahlungsvorgang gestartet
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Zahlungsvorgang abrufen
+      tags:
+      - payments
+    post:
+      description: Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang.
+        Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert
+        und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter
+        Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung
+        muss vor expiresAt abgeschlossen werden. Ist die Reservierung abgelaufen oder
+        das Event zurückgezogen, wird eine offene Zahlung dabei als fehlgeschlagen
+        gespeichert und 409 geliefert. Buchungen anderer Nutzer liefern 404.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Offener Zahlungsvorgang existierte bereits
+          schema:
+            $ref: '#/definitions/model.PaymentResponse'
+        "201":
+          description: Zahlungsvorgang angelegt
+          schema:
+            $ref: '#/definitions/model.PaymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Buchung nicht reserviert, Reservierung abgelaufen, Event nicht
+            mehr verfügbar oder Zahlung bereits abgeschlossen
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "422":
+          description: Betrag außerhalb des zulässigen Bereichs
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Zahlungsvorgang starten
+      tags:
+      - payments
+  /bookings/{bookingId}/payment/simulate:
+    post:
+      consumes:
+      - application/json
+      description: Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis
+        ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten
+        Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die
+        Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true).
+        Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt
+        die Zahlung fehl (status failed, failureReason, message), die Buchung erhält
+        keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird
+        innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der
+        Body darf höchstens 4 KiB groß sein (413).
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      - description: Simuliertes Ergebnis und angezeigter Betrag
+        in: body
+        name: payment
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SimulatePaymentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Ergebnis des Zahlungsvorgangs, erfolgreich oder fehlgeschlagen
+          schema:
+            $ref: '#/definitions/model.PaymentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Buchung nicht gefunden oder kein Zahlungsvorgang gestartet
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Zahlung bereits abgeschlossen oder Buchung nicht reserviert
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "413":
+          description: Request Body größer als 4 KiB
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "422":
+          description: Betrag weicht vom gespeicherten Betrag ab
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Zahlung simulieren
+      tags:
+      - payments
   /debug/token:
     post:
       consumes:
@@ -955,12 +1226,63 @@ paths:
       tags:
       - events
   /events/{id}:
+    delete:
+      description: Irrevocably deletes a draft event. Requires the event_manager or
+        org_admin role in the organization that owns the event. Only events in status
+        draft can be deleted; published, cancelled and completed events return 400.
+        Events with bookings in any status are never deleted and return 409, because
+        the bookings belong to the booking history of the visitors. The audit log
+        entries of the event are kept.
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventDeletedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Event has bookings
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete draft event
+      tags:
+      - events
     put:
       consumes:
       - application/json
       description: Updates title, description, time span, location, category, price
         and capacity of an event. Requires the event_manager role in the organization
         that owns the event. Only events in status draft or published can be edited.
+        The capacity cannot be lowered below the tickets already sold or reserved
+        (409).
       parameters:
       - description: Event ID
         in: path
@@ -994,6 +1316,10 @@ paths:
             $ref: '#/definitions/model.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Capacity below the tickets already sold or reserved
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "500":
@@ -1144,10 +1470,12 @@ paths:
   /events/org/{id}:
     get:
       description: Returns all events of the organization, in every status including
-        drafts. Requires membership in the organization, regardless of role. Organizations
-        the caller is not a member of return 404, like unknown ones.
+        drafts. The organization is addressed by its database UUID or by its alias,
+        which is what tokens carry. Requires membership in the organization, regardless
+        of role. Organizations the caller is not a member of return 404, like unknown
+        ones.
       parameters:
-      - description: Organization ID (database UUID)
+      - description: Organization database UUID or alias
         in: path
         name: id
         required: true
@@ -1161,10 +1489,6 @@ paths:
             items:
               $ref: '#/definitions/model.EventModel'
             type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
         "401":
           description: Unauthorized
           schema:

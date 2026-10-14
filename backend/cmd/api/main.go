@@ -7,8 +7,11 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -30,7 +33,11 @@ import (
 // @name Authorization
 // @description Enter "Bearer {token}" where {token} is a Keycloak access token
 func main() {
-	godotenv.Load()
+	// A missing .env is normal outside local development, where real env vars
+	// are set. Anything else means the file is there but could not be read.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("ignoring unreadable .env: %v", err)
+	}
 
 	// Structured logs for audit events (EVENTHUB-188); plain text like the rest of the app.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
@@ -68,11 +75,15 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
 	tx := repository.NewTransactor(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
+	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
+	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 
 	// Initialize Handlers
@@ -81,6 +92,7 @@ func main() {
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
+	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 
 	r := gin.Default()
@@ -115,6 +127,7 @@ func main() {
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
 			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)
+			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 		}
@@ -128,6 +141,10 @@ func main() {
 
 		// bookings
 		protected.POST("/bookings", bookingHandler)
+		// EVENTHUB-235: simulated payment process of a booking, no real payment provider
+		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
+		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)
+		protected.POST("/bookings/:bookingId/payment/simulate", paymentHandler.SimulatePaymentHandler)
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))

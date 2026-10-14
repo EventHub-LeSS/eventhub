@@ -99,6 +99,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
+	r.DELETE("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventDeleted), h.DeleteEventHandler)
 	return r
 }
 
@@ -189,6 +190,33 @@ func TestListOrganizationEventsHandler_OnlyRequestedOrganization(t *testing.T) {
 		}
 		delete(want, event.EventID)
 	}
+}
+
+func TestListOrganizationEventsHandler_ByAlias(t *testing.T) {
+	db := testdb.Open(t)
+	draft := seedEventForOrg(t, db, "kc-org-a", model.EventStatusDraft)
+	seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+	if err := db.Exec("UPDATE organizations SET alias = ? WHERE keycloak_org_id = ?", "alias-a", "kc-org-a").Error; err != nil {
+		t.Fatalf("set alias: %v", err)
+	}
+	// Tokens without organization IDs identify the organization by alias only.
+	member := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{{ID: "alias-a", Alias: "alias-a"}}}
+
+	rec := getOrganizationEvents(newEventRouter(db, member), "alias-a")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var events []model.EventModel
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
+	if len(events) != 1 || events[0].EventID != draft.eventID {
+		t.Fatalf("expected only the draft of alias-a, got %s", rec.Body.String())
+	}
+
+	stranger := &middleware.Principal{Subject: "user", Organizations: []*middleware.OrganizationAccess{{ID: "kc-org-b", Alias: "alias-b"}}}
+	assertOrganizationEventsProblem(t, getOrganizationEvents(newEventRouter(db, stranger), "alias-a"), http.StatusNotFound)
+	assertOrganizationEventsProblem(t, getOrganizationEvents(newEventRouter(db, member), "unknown-alias"), http.StatusNotFound)
 }
 
 func TestListOrganizationEventsHandler_EmptyArray(t *testing.T) {
