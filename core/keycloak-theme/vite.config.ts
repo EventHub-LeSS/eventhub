@@ -24,7 +24,7 @@ export default defineConfig({
           default: "%BASE_URL%/eventhub-logo-dark.svg",
         },
         { name: "SHADCN_THEME_APP_NAME", default: "EventHub" },
-        { name: "SHADCN_THEME_LAYOUT", default: "two-column" },
+        { name: "SHADCN_THEME_LAYOUT", default: "centered-card" },
         { name: "SHADCN_THEME_SIDE_IMAGE_URL", default: "" },
         { name: "SHADCN_THEME_PRESET", default: "neutral" },
         { name: "SHADCN_THEME_BASE", default: "neutral" },

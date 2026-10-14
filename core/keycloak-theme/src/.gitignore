@@ -2,6 +2,14 @@
 
 # === Owned files start ===
 # login/i18n.ts
+# components/ui/alert.tsx
+# components/ui/button.tsx
+# components/ui/input-group.tsx
+# components/ui/input.tsx
+# login/components/Template/Template.tsx
+# login/components/Template/TemplateTopBar.tsx
+# login/pages/login-username/Page.tsx
+# login/components/Template/layouts/CenteredCardLayout.tsx
 # === Owned files end =====
 
 # === @oussemasahbeni/keycloakify-login-shadcn v250004.0.24 ===
@@ -11,15 +19,11 @@
 /login/KcPage.tsx
 /login/styleLevelCustomization.tsx
 /components/lib/utils.ts
-/components/ui/alert.tsx
-/components/ui/button.tsx
 /components/ui/card.tsx
 /components/ui/checkbox.tsx
 /components/ui/dropdown-menu.tsx
 /components/ui/field.tsx
-/components/ui/input-group.tsx
 /components/ui/input-otp.tsx
-/components/ui/input.tsx
 /components/ui/label.tsx
 /components/ui/radio-group.tsx
 /components/ui/select.tsx
@@ -39,9 +43,7 @@
 /login/assets/img/shape.svg
 /login/components/Template/Defaults.ts
 /login/components/Template/index.ts
-/login/components/Template/Template.tsx
 /login/components/Template/TemplateContent.tsx
-/login/components/Template/TemplateTopBar.tsx
 /login/components/Template/useAuthChecker.ts
 /login/components/Template/useInitializeTemplate.ts
 /login/components/ui/Langauges.tsx
@@ -145,7 +147,6 @@
 /login/pages/login-update-profile/Page.tsx
 /login/pages/login-username/index.ts
 /login/pages/login-username/Page.stories.tsx
-/login/pages/login-username/Page.tsx
 /login/pages/login-verify-email/index.ts
 /login/pages/login-verify-email/Page.stories.tsx
 /login/pages/login-verify-email/Page.tsx
@@ -185,7 +186,6 @@
 /login/pages/webauthn-register/Page.stories.tsx
 /login/pages/webauthn-register/Page.tsx
 /login/pages/webauthn-register/useLogic.ts
-/login/components/Template/layouts/CenteredCardLayout.tsx
 /login/components/Template/layouts/ImageAsideLayout.tsx
 /login/components/Template/layouts/TwoColumnLayout.tsx
 /login/components/Template/theme/Themes.ts

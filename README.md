@@ -55,6 +55,29 @@ bun install && bun run storybook
 Aussehen (Farbe, Font, Layout, App-Name) wird über die `environmentVariables` in
 `core/keycloak-theme/vite.config.ts` gesteuert.
 
+Damit Login, Registrierung und Passwort-zurücksetzen wie das Frontend aussehen, sind einige
+Dateien des shadcn-Themes mit `npx keycloakify own --path <datei>` übernommen und angepasst
+(alle übrigen bleiben in `src/.gitignore` und kommen per `bun install` aus dem Paket):
+
+- `login/components/Template/TemplateTopBar.tsx`: Header wie die Navbar des Frontends
+- `login/components/Template/layouts/CenteredCardLayout.tsx` und `Template.tsx`: Karte unter dem Header
+- `components/ui/button.tsx`, `input.tsx`, `input-group.tsx`: Größen und Fehlerzustand wie im Frontend
+- `components/ui/alert.tsx`: Fehlermeldungen in der Destructive-Farbe des Frontends
+- `login/pages/login-username/Page.tsx`: vertauschte Beschriftung E-Mail/Benutzername korrigiert
+
+Der Realm ist auf Deutsch (`defaultLocale: "de"`) gestellt, wie das Frontend. Passwort-zurücksetzen
+ist aktiviert; ohne konfigurierten SMTP-Server schlägt das Versenden der E-Mail aber fehl.
+Bestehende Keycloak-Volumes übernehmen Änderungen an der Realm-Datei nicht (siehe oben). Ohne das
+Volume zu löschen, lassen sich die Einstellungen so nachziehen:
+
+```bash
+TOKEN=$(curl -s -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin \
+  http://localhost:5433/realms/master/protocol/openid-connect/token | jq -r .access_token)
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  http://localhost:5433/admin/realms/eventhub \
+  -d '{"resetPasswordAllowed":true,"internationalizationEnabled":true,"supportedLocales":["de"],"defaultLocale":"de"}'
+```
+
 Testbenutzer:
 
 | Benutzer                     | Passwort    | Organisationen                 |
