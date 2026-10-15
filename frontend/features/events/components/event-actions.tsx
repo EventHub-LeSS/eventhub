@@ -136,7 +136,7 @@ export function EventActions({
               Withdraw
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem>
+          <DropdownMenuItem render={<Link href={`/organizer/events/${eventId}/edit`} />}>
             <PencilIcon />
             Edit
           </DropdownMenuItem>

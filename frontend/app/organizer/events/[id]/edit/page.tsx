@@ -17,8 +17,8 @@ export default async function EditEventDraftPage({
 
   const event = await getOwnEvent(session?.accessToken ?? "", id)
 
-  // Only drafts are editable here; a published event is a different story.
-  if (!event || event.status !== "draft") {
+  // All events can be edited independent of their status (draft, published, completed).
+  if (!event) {
     notFound()
   }
 
@@ -35,13 +35,13 @@ export default async function EditEventDraftPage({
             size="sm"
           >
             <ArrowLeftIcon />
-            Drafts
+            Back to event list
           </Button>
         </div>
         <div>
-          <h1 className="text-lg font-medium">Edit Draft</h1>
+          <h1 className="text-lg font-medium">Edit event</h1>
           <p className="text-sm text-muted-foreground">
-            Still a draft and not visible to visitors.
+            You can edit the event by making changes to the form and pressing the 'Save changes' button.
           </p>
         </div>
         <DraftForm catalog={catalog} event={event} />
