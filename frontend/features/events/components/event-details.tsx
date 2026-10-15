@@ -1,3 +1,12 @@
+/**
+ * Gemeinsamer Darstellungsbaustein für die Besucher- und Organizer-Detailseite.
+ * Zeigt die übergebenen Event-Daten wie Titel, Beschreibung, Auslastung,
+ * Datum, Ort, Kategorie und Preis im gleichen Aufbau an.
+ * Lädt selbst keine Daten. Die jeweilige Detailseite liefert die Angaben
+ * und kann zusätzliche Bedienelemente ergänzen: Organizer-Aktionen oder
+ * den vorbereiteten „Buy ticket“-Bereich auf der Besucher-Detailseite.
+ * So müssen Änderungen an der gemeinsamen Darstellung nur hier erfolgen.
+ */
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
 import { OccupancyGauge } from "@/features/events/components/occupancy-gauge"
 import {

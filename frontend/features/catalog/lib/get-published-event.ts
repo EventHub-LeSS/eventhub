@@ -1,3 +1,12 @@
+/**
+ * Lädt die öffentlichen Angaben zu einem einzelnen veröffentlichten Event
+ * vom Backend, also dem Server, der die Event-Daten bereitstellt.
+ * Die Besucher-Detailseite verwendet diese Funktion, um beispielsweise
+ * Beschreibung, Veranstaltungsort, Preis und verfügbare Plätze abzurufen.
+ * Beschreibt außerdem die erwarteten Daten und unterscheidet zwischen einem
+ * gefundenen Event, einem nicht vorhandenen Event und einem Ladefehler.
+ * Läuft ausschließlich auf dem Server und enthält keine Seitendarstellung.
+ */
 import "server-only"
 import type { PublishedEvent } from "@/features/catalog/lib/types"
 import { envConfig } from "@/features/shared/lib/env"

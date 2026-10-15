@@ -18,6 +18,8 @@ interface EventCardProps {
   event: PublishedEvent
 }
 
+// Der Link umschließt die gesamte Kachel und öffnet die Besucher-Detailseite
+// des jeweiligen Events. Dadurch lässt sich die Kachel auch per Tastatur öffnen.
 export function EventCard({ event }: EventCardProps) {
   return (
     <Link

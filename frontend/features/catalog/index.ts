@@ -11,4 +11,6 @@ export type {
   PublishedEventsResult,
 } from "@/features/catalog/lib/get-published-events"
 export type { PublishedEvent } from "@/features/catalog/lib/types"
+// Stellt die Ladefunktion für ein einzelnes öffentliches Event zentral bereit.
+// Die Besucher-Detailseite kann sie dadurch über @/features/catalog einbinden.
 export { getPublishedEvent } from "@/features/catalog/lib/get-published-event"

@@ -19,6 +19,9 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
     )
   }
 
+  // Die Organizer-Daten werden weiterhin hier geladen. EventDetails übernimmt
+  // die gemeinsame Darstellung, die auch die Besucher-Detailseite verwendet.
+  // Über actions werden nur hier die Organizer-Bedienelemente ergänzt.
   const { event } = result
   return (
     <EventDetails

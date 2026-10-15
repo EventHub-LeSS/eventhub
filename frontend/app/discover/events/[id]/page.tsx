@@ -1,3 +1,11 @@
+/**
+ * Besucher-Detailseite unter /discover/events/[id]. [id] steht für die Kennung
+ * des Events, dessen Kachel auf der Startseite angeklickt wurde.
+ * Lädt die öffentlichen Event-Daten mit getPublishedEvent und übergibt sie
+ * zur Anzeige an den gemeinsamen Darstellungsbaustein EventDetails.
+ * Ergänzt den Zurück-Link und den vorbereiteten „Buy ticket“-Knopf mit
+ * Verfügbarkeitshinweisen. Der Ticketkauf ist hier noch nicht freigeschaltet.
+ */
 import { ArrowLeftIcon, TicketIcon } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
