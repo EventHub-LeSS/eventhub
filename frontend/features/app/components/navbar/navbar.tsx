@@ -63,7 +63,9 @@ function activeHref(pathname: string, links: NavLink[]) {
 
   for (const link of links) {
     const matches =
-      pathname === link.href || pathname.startsWith(`${link.href}/`)
+      pathname === link.href ||
+      pathname.startsWith(`${link.href}/`) ||
+      (link.href === "/" && pathname.startsWith("/discover/events/"))
 
     if (matches && (!active || link.href.length > active.length)) {
       active = link.href

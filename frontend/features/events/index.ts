@@ -21,3 +21,4 @@ export type {
   EventLocation,
   EventStatus,
 } from "@/features/events/lib/types"
+export { EventDetails } from "@/features/events/components/event-details"

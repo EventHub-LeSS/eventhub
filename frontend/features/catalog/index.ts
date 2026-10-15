@@ -11,3 +11,4 @@ export type {
   PublishedEventsResult,
 } from "@/features/catalog/lib/get-published-events"
 export type { PublishedEvent } from "@/features/catalog/lib/types"
+export { getPublishedEvent } from "@/features/catalog/lib/get-published-event"
