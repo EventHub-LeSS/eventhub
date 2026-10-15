@@ -95,6 +95,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.POST("/api/v1/events/draft", setPrincipal, middleware.Audit(audit.EventCreated), h.SaveEventAsDraftHandler)
 	r.GET("/api/v1/events/:eventId", h.GetPublishedEventDetailsHandler)
 	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
+	r.GET("/api/v1/events/self/dashboard", setPrincipal, h.GetSalesDashboardHandler)
 	r.GET("/api/v1/events/org/:id", setPrincipal, h.ListOrganizationEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
