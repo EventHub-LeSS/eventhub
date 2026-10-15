@@ -1,4 +1,5 @@
 import { CalendarIcon, MapPinIcon } from "lucide-react"
+import Link from "next/link"
 
 import {
   formatEventDate,
@@ -17,33 +18,40 @@ interface EventCardProps {
   event: PublishedEvent
 }
 
+// Der Link umschließt die gesamte Kachel und öffnet die Besucher-Detailseite
+// des jeweiligen Events. Dadurch lässt sich die Kachel auch per Tastatur öffnen.
 export function EventCard({ event }: EventCardProps) {
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <div className="flex h-32 items-center justify-center bg-muted">
-        <span className="font-mono text-xs text-muted-foreground">
-          {event.category.category}
-        </span>
-      </div>
-      <CardHeader className="gap-2 pt-4 pb-0">
-        <Badge variant="secondary" className="w-fit uppercase">
-          {event.category.category}
-        </Badge>
-        <CardTitle>{event.title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1 pt-2 pb-4">
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <CalendarIcon className="size-3.5 shrink-0" />
-          {formatEventDate(event.startTime)}
-        </span>
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <MapPinIcon className="size-3.5 shrink-0" />
-          {event.location.name}, {event.location.city}
-        </span>
-        <span className="pt-2 text-sm font-semibold">
-          {formatEventPrice(event.price)}
-        </span>
-      </CardContent>
-    </Card>
+    <Link
+      href={`/discover/events/${event.eventId}`}
+      className="block rounded-xl transition-shadow outline-none hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card className="h-full gap-0 overflow-hidden py-0">
+        <div className="flex h-32 items-center justify-center bg-muted">
+          <span className="font-mono text-xs text-muted-foreground">
+            {event.category.category}
+          </span>
+        </div>
+        <CardHeader className="gap-2 pt-4 pb-0">
+          <Badge variant="secondary" className="w-fit uppercase">
+            {event.category.category}
+          </Badge>
+          <CardTitle>{event.title}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1 pt-2 pb-4">
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <CalendarIcon className="size-3.5 shrink-0" />
+            {formatEventDate(event.startTime)}
+          </span>
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPinIcon className="size-3.5 shrink-0" />
+            {event.location.name}, {event.location.city}
+          </span>
+          <span className="pt-2 text-sm font-semibold">
+            {formatEventPrice(event.price)}
+          </span>
+        </CardContent>
+      </Card>
+    </Link>
   )
 }

@@ -21,3 +21,6 @@ export type {
   EventLocation,
   EventStatus,
 } from "@/features/events/lib/types"
+// Macht die gemeinsame Event-Darstellung außerhalb dieses Bereichs verfügbar,
+// damit die Besucher-Detailseite denselben Aufbau wie die Organizer-Seite nutzt.
+export { EventDetails } from "@/features/events/components/event-details"

@@ -62,8 +62,13 @@ function activeHref(pathname: string, links: NavLink[]) {
   let active: string | undefined
 
   for (const link of links) {
+    // Die Besucher-Detailseiten gehören zu Discover. Da dessen Link auf die
+    // Startseite (/) zeigt, werden /discover/events/... zusätzlich zugeordnet,
+    // damit Discover auch beim Anzeigen eines einzelnen Events markiert bleibt.
     const matches =
-      pathname === link.href || pathname.startsWith(`${link.href}/`)
+      pathname === link.href ||
+      pathname.startsWith(`${link.href}/`) ||
+      (link.href === "/" && pathname.startsWith("/discover/events/"))
 
     if (matches && (!active || link.href.length > active.length)) {
       active = link.href
