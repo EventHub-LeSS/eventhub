@@ -413,15 +413,25 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
 		return nil, false
 	}
-
-	managedOrgIDs, ok := managedOrganizationIDs(c)
+	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return nil, false
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	var managedOrgIDs []string
+	if !globalAdmin {
+		managedOrgIDs, ok = managedOrganizationIDs(c)
+		if !ok {
+			return nil, false
+		}
 	}
 
 	statistics, err := h.eventService.GetEventStatistics(
 		eventID,
 		managedOrgIDs,
+		globalAdmin,
 	)
 	if err != nil {
 		writeEventActionError(c, err)
@@ -502,4 +512,30 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, details)
+}
+
+// EVENTHUB-242: Auslastung je Veranstaltung anzeigen
+// @Summary      Get Utilization Percentage
+// @Description  Returns the percentage of seats utilized by an event. Requires the event_manager role in the organization that owns the event. Reserved and cancelled bookings are not counted.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        eventId path string true "Event ID"
+// @Success      200 {object} model.UtilizationPercentageResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/utilization-percentage [get]
+func (h *EventHandler) GetUtilizationPercentageHandler(c *gin.Context) {
+	statistics, ok := h.getEventStatistics(c)
+	if !ok {
+		return
+	}
+
+	c.JSON(http.StatusOK, model.UtilizationPercentageResponse{
+		EventID:               statistics.EventID,
+		UtilizationPercentage: statistics.UtilizationPercentage,
+	})
 }
