@@ -357,7 +357,7 @@ func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
 // @Summary      Get sold tickets
-// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -383,7 +383,7 @@ func (h *EventHandler) GetSoldTicketsHandler(c *gin.Context) {
 
 // EVENTHUB-81: Freie Plätze pro Veranstaltung anzeigen
 // @Summary      Get available seats
-// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -516,7 +516,7 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 
 // EVENTHUB-242: Auslastung je Veranstaltung anzeigen
 // @Summary      Get Utilization Percentage
-// @Description  Returns the percentage of seats utilized by an event. Requires the event_manager role in the organization that owns the event. Reserved and cancelled bookings are not counted.
+// @Description  Returns the share of the capacity taken by confirmed bookings, in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved and cancelled bookings are not counted. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json

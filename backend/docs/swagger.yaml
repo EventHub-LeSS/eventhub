@@ -660,6 +660,13 @@ definitions:
     - startTime
     - title
     type: object
+  model.UtilizationPercentageResponse:
+    properties:
+      eventId:
+        type: string
+      utilizationPercentage:
+        type: number
+    type: object
 info:
   contact: {}
   description: REST API for the EventHub platform
@@ -1164,7 +1171,8 @@ paths:
   /events/{eventId}/available-seats:
     get:
       description: Returns the remaining available seats for an event. Requires the
-        event_manager role in the organization that owns the event.
+        event_manager role in the organization that owns the event or the global admin
+        role.
       parameters:
       - description: Event ID
         in: path
@@ -1241,7 +1249,8 @@ paths:
   /events/{eventId}/sold-tickets:
     get:
       description: Returns the number of confirmed tickets sold for an event. Requires
-        the event_manager role in the organization that owns the event.
+        the event_manager role in the organization that owns the event or the global
+        admin role.
       parameters:
       - description: Event ID
         in: path
@@ -1278,6 +1287,50 @@ paths:
       security:
       - BearerAuth: []
       summary: Get sold tickets
+      tags:
+      - events
+  /events/{eventId}/utilization-percentage:
+    get:
+      description: Returns the share of the capacity taken by confirmed bookings,
+        in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved
+        and cancelled bookings are not counted. Requires the event_manager role in
+        the organization that owns the event or the global admin role.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.UtilizationPercentageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Utilization Percentage
       tags:
       - events
   /events/{id}:
