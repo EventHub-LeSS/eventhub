@@ -13,6 +13,20 @@ definitions:
     - eventId
     - numberOfTickets
     type: object
+  handler.CreateEventRatingRequest:
+    properties:
+      score:
+        example: 5
+        maximum: 5
+        minimum: 1
+        type: integer
+      text:
+        example: Great event!
+        maxLength: 2000
+        type: string
+    required:
+    - score
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -417,6 +431,16 @@ definitions:
       updatedAt:
         type: string
     type: object
+  model.EventRatingSummary:
+    properties:
+      averageRating:
+        type: number
+        x-nullable: true
+      eventId:
+        type: string
+      ratingCount:
+        type: integer
+    type: object
   model.EventStatus:
     enum:
     - draft
@@ -452,6 +476,16 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.OrganizerRatingSummary:
+    properties:
+      averageRating:
+        type: number
+        x-nullable: true
+      organizationId:
+        type: string
+      ratedEventCount:
+        type: integer
+    type: object
   model.PaymentFailureReason:
     enum:
     - declined
@@ -592,6 +626,23 @@ definitions:
       status:
         $ref: '#/definitions/model.EventStatus'
       title:
+        type: string
+    type: object
+  model.RatingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      isVisible:
+        type: boolean
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+      updatedAt:
         type: string
     type: object
   model.SimulatedPaymentOutcome:
@@ -1183,6 +1234,41 @@ paths:
       summary: Get available seats
       tags:
       - events
+  /events/{eventId}/rating-summary:
+    get:
+      description: Public average score and review count. Only visible ratings with
+        scores 1–5 linked to confirmed bookings of this event count; ticket quantities
+        do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0.
+        Published events and ended completed events expose summaries; drafts and cancelled
+        events return 404. Averages are not rounded.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventRatingSummary'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get event rating summary
+      tags:
+      - events
   /events/{eventId}/sold-tickets:
     get:
       description: Returns the number of confirmed tickets sold for an event. Requires
@@ -1373,6 +1459,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Publish event
+      tags:
+      - events
+  /events/{id}/ratings:
+    post:
+      consumes:
+      - application/json
+      description: Creates one rating per authenticated visitor and event. The visitor
+        must have a confirmed booking for this event, and the event must have ended
+        without being cancelled. Text is optional (at most 2000 characters); score
+        must be between 1 and 5. Ratings are visible immediately.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rating
+        in: body
+        name: rating
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateEventRatingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.RatingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rate an event
       tags:
       - events
   /events/{id}/withdraw:
@@ -1717,6 +1859,42 @@ paths:
       security:
       - BearerAuth: []
       summary: Configure organization member roles
+      tags:
+      - organizations
+  /organizations/{organizationID}/rating-summary:
+    get:
+      description: Public average of unrounded event averages, with equal weight per
+        rated event. Includes only this organization's published or completed events
+        with endTime <= database time. Uses the same visible, score 1–5, confirmed-booking
+        ratings as event summaries. Unrated events do not contribute. No rated events
+        returns averageRating=null and ratedEventCount=0. Recommendations retain their
+        existing calculation.
+      parameters:
+      - description: Organization database UUID (not Keycloak ID or alias)
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizerRatingSummary'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get organizer rating summary
       tags:
       - organizations
   /recommendations:

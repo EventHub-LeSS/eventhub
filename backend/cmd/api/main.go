@@ -85,6 +85,7 @@ func main() {
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
+	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
@@ -94,6 +95,7 @@ func main() {
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
+	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -104,6 +106,8 @@ func main() {
 		v1.GET("/", handler.Healthcheck)
 		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
 		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
+		v1.GET("/events/:eventId/rating-summary", ratingHandler.GetEventRatingSummaryHandler)
+		v1.GET("/organizations/:organizationID/rating-summary", ratingHandler.GetOrganizerRatingSummaryHandler)
 
 		// DEBUG routes — disabled in production
 		if os.Getenv("DEBUG_ENABLED") == "true" {
@@ -121,6 +125,7 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
+			events.POST("/:id/ratings", ratingHandler.CreateEventRatingHandler)
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)

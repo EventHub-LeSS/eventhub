@@ -322,6 +322,34 @@ Log protokolliert; die bisherigen Audit-Einträge des Events bleiben bewusst erh
 `backend/internal/handler` (Rollen, fremde Organisation, alle Status, Buchungen in jedem Status,
 zweites Löschen, Rollback bei Audit-Fehler, Wettlauf mit dem Veröffentlichen in beiden Reihenfolgen).
 
+### Bewertungsdurchschnitte (EVENTHUB-238, EVENTHUB-239)
+
+Die folgenden Endpunkte sind öffentlich und verwenden Datenbank-UUIDs:
+
+- `GET /api/v1/events/{eventId}/rating-summary` liefert `eventId`, `averageRating` und
+  `ratingCount`. Veröffentlichten Events sowie beendeten Events mit Status `completed` kann
+  eine Zusammenfassung zugeordnet werden; Entwürfe und abgesagte Events ergeben `404`.
+- `GET /api/v1/organizations/{organizationID}/rating-summary` liefert `organizationId`,
+  `averageRating` und `ratedEventCount`. Die ID ist weder Keycloak-ID noch Organisationsalias.
+
+Gültig sind sichtbare Bewertungen mit Score 1–5, die über eine bestätigte Buchung dem Event
+zugeordnet sind. Jede Bewertung zählt einmal, unabhängig von der Ticketanzahl. Verwaiste
+Bewertungen und andere Buchungsstatus werden ausgeschlossen. Ohne gültige Bewertungen ist
+`averageRating` ausdrücklich `null`, die jeweilige Anzahl `0`.
+
+Der Veranstalterdurchschnitt ist der Durchschnitt der **ungerundeten Eventdurchschnitte**;
+jedes bewertete Event zählt gleich viel. Es zählen nur eigene Events mit Status `published`
+oder `completed`, deren `endTime <= NOW()` (Datenbankzeit) ist. Unbewertete Events bleiben aus
+dem Nenner ausgeschlossen. Ein Event mit einer 5-Sterne-Bewertung und eines mit neun
+1-Sterne-Bewertungen ergeben daher `3.0`, nicht `1.4`. Die API rundet nicht; Anzeige-Rundung
+übernimmt der Verbraucher. Empfehlungen behalten ihre bisherige Berechnung und können
+deshalb einen anderen internen Veranstalterscore verwenden.
+
+Ungültige UUIDs ergeben `400`, unbekannte Ressourcen `404`, Datenbankfehler `500` mit
+generischem Fehlertext. Die bestehenden Eventdetail-Antworten bleiben unverändert;
+abgeschlossene Events haben eine Bewertungszusammenfassung, sobald sie beendet sind,
+aber noch keine öffentliche Eventdetail-Antwort.
+
 ### Audit Log der Organisationen
 
 Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen/löschen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.

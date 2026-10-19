@@ -949,6 +949,53 @@
                 }
             }
         },
+        "/events/{eventId}/rating-summary": {
+            "get": {
+                "description": "Public average score and review count. Only visible ratings with scores 1–5 linked to confirmed bookings of this event count; ticket quantities do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0. Published events and ended completed events expose summaries; drafts and cancelled events return 404. Averages are not rounded.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get event rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/sold-tickets": {
             "get": {
                 "security": [
@@ -1214,6 +1261,88 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{id}/ratings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates one rating per authenticated visitor and event. The visitor must have a confirmed booking for this event, and the event must have ended without being cancelled. Text is optional (at most 2000 characters); score must be between 1 and 5. Ratings are visible immediately.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Rate an event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Rating",
+                        "name": "rating",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateEventRatingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.RatingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -1525,6 +1654,53 @@
                 }
             }
         },
+        "/organizations/{organizationID}/rating-summary": {
+            "get": {
+                "description": "Public average of unrounded event averages, with equal weight per rated event. Includes only this organization's published or completed events with endTime \u003c= database time. Uses the same visible, score 1–5, confirmed-booking ratings as event summaries. Unrated events do not contribute. No rated events returns averageRating=null and ratedEventCount=0. Recommendations retain their existing calculation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Get organizer rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization database UUID (not Keycloak ID or alias)",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/recommendations": {
             "get": {
                 "security": [
@@ -1628,6 +1804,25 @@
                     "type": "integer",
                     "minimum": 1,
                     "example": 2
+                }
+            }
+        },
+        "handler.CreateEventRatingRequest": {
+            "type": "object",
+            "required": [
+                "score"
+            ],
+            "properties": {
+                "score": {
+                    "type": "integer",
+                    "maximum": 5,
+                    "minimum": 1,
+                    "example": 5
+                },
+                "text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "example": "Great event!"
                 }
             }
         },
@@ -2218,6 +2413,21 @@
                 }
             }
         },
+        "model.EventRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "ratingCount": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.EventStatus": {
             "type": "string",
             "enum": [
@@ -2265,6 +2475,21 @@
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.OrganizerRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "ratedEventCount": {
+                    "type": "integer"
+                }
+            }
         },
         "model.PaymentFailureReason": {
             "type": "string",
@@ -2466,6 +2691,32 @@
                     "$ref": "#/definitions/model.EventStatus"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.RatingModel": {
+            "type": "object",
+            "properties": {
+                "bookingId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "isVisible": {
+                    "type": "boolean"
+                },
+                "ratingId": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "updatedAt": {
                     "type": "string"
                 }
             }
