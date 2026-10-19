@@ -343,8 +343,10 @@ Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen K
 
 ### Benachrichtigungen (EVENTHUB-240)
 
-Nach Migration 000009 liefert GET /api/v1/notifications die eigenen
-Benachrichtigungen, neueste zuerst ([] bei leerer Liste). Beide Endpunkte
+Nach Migrationen 000009 und 000010 liefert GET /api/v1/notifications die eigenen
+Benachrichtigungen, neueste zuerst. Die Antwort enthält items, page, limit und total;
+leere Seiten enthalten items: []. page beginnt bei 1, limit ist standardmäßig 50
+und maximal 100. Alle Benachrichtigungsendpunkte
 benötigen ein Bearer-Token und einen synchronisierten API-Nutzer.
 
 POST /api/v1/bookings/{bookingId}/reminder simuliert eine Erinnerung für eine
@@ -358,3 +360,16 @@ Die erste Erzeugung liefert 201, wiederholte oder parallele Aufrufe dieselbe
 Erinnerung mit 200. Fremde oder unbekannte Buchungen liefern 404; nicht
 bestätigte Buchungen und nicht mehr verfügbare Veranstaltungen 409.
 Das Frontend kann die Daten als Banner oder Benachrichtigungsliste darstellen.
+
+PATCH /api/v1/notifications/{notificationId}/read setzt readAt für eine eigene
+Benachrichtigung (null bedeutet ungelesen). Wiederholte Aufrufe erhalten den
+ersten Lesezeitpunkt; fremde oder unbekannte IDs liefern 404.
+
+Beim Abruf werden nur Erinnerungen auf der angeforderten Seite mit aktuellen
+Veranstaltungs- und Ortsdaten abgeglichen und bei Änderungen gespeichert.
+Titel, Startzeit, Veranstaltungsort und Adresse sowie Ticketanzahl bleiben
+dadurch aktuell. scheduledAt wird neu berechnet; für kurzfristige Termine
+dient der ursprüngliche Erstellungszeitpunkt als stabile Untergrenze.
+Geänderte Erinnerungen werden wieder ungelesen. Auch eine erneute Simulation
+aktualisiert die bestehende Erinnerung. Es gibt weiterhin keinen Versandjob;
+vor einem späteren echten Versand müsste dieser Abgleich ebenfalls erfolgen.

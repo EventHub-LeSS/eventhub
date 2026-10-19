@@ -120,6 +120,7 @@ func main() {
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
 		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
+		protected.PATCH("/notifications/:notificationId/read", notificationHandler.MarkNotificationReadHandler)
 		protected.POST("/bookings/:bookingId/reminder", notificationHandler.SimulateReminderHandler)
 
 		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)

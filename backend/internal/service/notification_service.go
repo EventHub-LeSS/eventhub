@@ -21,15 +21,29 @@ type NotificationService struct {
 func NewNotificationService(notifications repository.NotificationRepository, tx repository.Transactor) *NotificationService {
 	return &NotificationService{notifications: notifications, tx: tx}
 }
-func (s *NotificationService) ListForUser(ctx context.Context, userID uuid.UUID) ([]model.NotificationData, error) {
-	notifications, err := s.notifications.ListForUser(ctx, userID)
+
+var ErrNotificationNotFound = errors.New("notification not found")
+
+func (s *NotificationService) ListForUser(ctx context.Context, userID uuid.UUID, page, limit int) (*model.NotificationPage, error) {
+	notifications, total, err := s.notifications.ListForUser(ctx, userID, page, limit)
 	if err != nil {
 		return nil, err
 	}
 	if notifications == nil {
 		notifications = make([]model.NotificationData, 0)
 	}
-	return notifications, nil
+	return &model.NotificationPage{Items: notifications, Page: page, Limit: limit, Total: total}, nil
+}
+
+func (s *NotificationService) MarkRead(ctx context.Context, id, userID uuid.UUID) (*model.NotificationData, error) {
+	notification, err := s.notifications.MarkRead(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if notification == nil {
+		return nil, ErrNotificationNotFound
+	}
+	return notification, nil
 }
 
 // SimulateReminder uses the same event-before-booking lock order as payment confirmation.
@@ -78,8 +92,18 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 			return err
 		}
 		if existing != nil {
-			notification = existing
+			if err := tx.Notifications.RefreshReminder(existing.NotificationID, userID); err != nil {
+				return err
+			}
+			notification, err = tx.Notifications.GetReminder(bookingID, userID)
+			if err != nil {
+				return err
+			}
 			return nil
+		}
+		street := location.Street
+		if location.HouseNumber != nil {
+			street += " " + *location.HouseNumber
 		}
 		scheduled := event.StartTime.Add(-24 * time.Hour)
 		if scheduled.Before(now) {
@@ -90,7 +114,7 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 			Occasion: "event_reminder", Subject: "Erinnerung: " + event.Title,
 			Content: fmt.Sprintf("%s beginnt am %s in %s, %s (%s %s). Gebuchte Tickets: %d.",
 				event.Title, event.StartTime.Format(time.RFC3339), location.Name, location.City,
-				location.PostalCode, location.Street, booking.NumberOfTickets),
+				location.PostalCode, street, booking.NumberOfTickets),
 			ScheduledAt: &scheduled, Simulated: true, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Notifications.Create(notification); err != nil {

@@ -27,9 +27,9 @@ type notificationListStub struct {
 	err    error
 }
 
-func (s *notificationListStub) ListForUser(_ context.Context, id uuid.UUID) ([]model.NotificationData, error) {
+func (s *notificationListStub) ListForUser(_ context.Context, id uuid.UUID, _, _ int) ([]model.NotificationData, int64, error) {
 	s.userID = id
-	return nil, s.err
+	return nil, 0, s.err
 }
 func notificationRouter(h *NotificationHandler, principal *middleware.Principal) http.Handler {
 	gin.SetMode(gin.TestMode)
@@ -41,6 +41,7 @@ func notificationRouter(h *NotificationHandler, principal *middleware.Principal)
 		c.Next()
 	})
 	router.GET("/api/v1/notifications", h.ListNotificationsHandler)
+	router.PATCH("/api/v1/notifications/:notificationId/read", h.MarkNotificationReadHandler)
 	router.POST("/api/v1/bookings/:bookingId/reminder", h.SimulateReminderHandler)
 	return router
 }
@@ -70,7 +71,7 @@ func TestNotificationsAuthenticationAndErrors(t *testing.T) {
 			if strings.Contains(rec.Body.String(), "secret SQL") {
 				t.Fatal("database details leaked")
 			}
-			if tc.status == 200 && (rec.Body.String() != "[]" || repo.userID != id) {
+			if tc.status == 200 && (!strings.Contains(rec.Body.String(), "\"items\":[]") || repo.userID != id) {
 				t.Fatal("empty response or user resolution incorrect")
 			}
 			if tc.name == "anonymous" {
@@ -160,11 +161,11 @@ func TestNotificationsDatabaseLifecycle(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/notifications?userId="+other.String(), nil))
-	var notifications []model.NotificationData
+	var notifications model.NotificationPage
 	if err := json.Unmarshal(rec.Body.Bytes(), &notifications); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != 200 || len(notifications) != 1 || notifications[0].NotificationID != notification.NotificationID {
+	if rec.Code != 200 || len(notifications.Items) != 1 || notifications.Items[0].NotificationID != notification.NotificationID {
 		t.Fatalf("list=%s", rec.Body.String())
 	}
 	newer := model.NotificationData{NotificationID: uuid.New(), UserID: &owner, Subject: "new", Content: "new", CreatedAt: notification.CreatedAt.Add(time.Second)}
@@ -176,7 +177,7 @@ func TestNotificationsDatabaseLifecycle(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &notifications); err != nil {
 		t.Fatal(err)
 	}
-	if len(notifications) != 2 || notifications[0].NotificationID != newer.NotificationID {
+	if len(notifications.Items) != 2 || notifications.Items[0].NotificationID != newer.NotificationID {
 		t.Fatalf("ordering=%s", rec.Body.String())
 	}
 }
