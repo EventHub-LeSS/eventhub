@@ -22,6 +22,7 @@ definitions:
         type: integer
       text:
         example: Great event!
+        maxLength: 2000
         type: string
     required:
     - score
@@ -1268,57 +1269,6 @@ paths:
       summary: Get event rating summary
       tags:
       - events
-  /events/{eventId}/ratings:
-    post:
-      consumes:
-      - application/json
-      description: Creates one rating per authenticated visitor and event. The visitor
-        must have a confirmed booking for this event. Text is optional; score must
-        be between 1 and 5.
-      parameters:
-      - description: Event UUID
-        in: path
-        name: eventId
-        required: true
-        type: string
-      - description: Rating
-        in: body
-        name: rating
-        required: true
-        schema:
-          $ref: '#/definitions/handler.CreateEventRatingRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/model.RatingModel'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "409":
-          description: Conflict
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Rate an event
-      tags:
-      - events
   /events/{eventId}/sold-tickets:
     get:
       description: Returns the number of confirmed tickets sold for an event. Requires
@@ -1509,6 +1459,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Publish event
+      tags:
+      - events
+  /events/{id}/ratings:
+    post:
+      consumes:
+      - application/json
+      description: Creates one rating per authenticated visitor and event. The visitor
+        must have a confirmed booking for this event, and the event must have ended
+        without being cancelled. Text is optional (at most 2000 characters); score
+        must be between 1 and 5. Ratings are visible immediately.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rating
+        in: body
+        name: rating
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateEventRatingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.RatingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rate an event
       tags:
       - events
   /events/{id}/withdraw:

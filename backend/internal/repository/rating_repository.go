@@ -11,6 +11,8 @@ import (
 )
 
 var (
+	ErrRatingEventNotFound      = errors.New("event not found")
+	ErrRatingEventNotEnded      = errors.New("event has not taken place")
 	ErrNoConfirmedRatingBooking = errors.New("no confirmed booking for event")
 	ErrRatingAlreadyExists      = errors.New("rating already exists for event")
 )
@@ -84,6 +86,21 @@ func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventI
 			return err
 		}
 
+		// Drafts stay private like in the summaries. Only events that took place can be
+		// rated; database time keeps this consistent with the summaries.
+		var event struct {
+			Status model.EventStatus
+			Ended  bool
+		}
+		res := tx.Table("events").Select("status, end_time <= NOW() AS ended").
+			Where("event_id = ?", eventID).Scan(&event)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 || event.Status == model.EventStatusDraft {
+			return ErrRatingEventNotFound
+		}
+
 		var booking model.BookingModel
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("user_id = ? AND event_id = ? AND status = ?", userID, eventID, model.BookingStatusConfirmed).
@@ -93,6 +110,10 @@ func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventI
 		}
 		if err != nil {
 			return err
+		}
+
+		if !event.Ended || (event.Status != model.EventStatusPublished && event.Status != model.EventStatusCompleted) {
+			return ErrRatingEventNotEnded
 		}
 
 		var count int64
@@ -111,6 +132,7 @@ func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventI
 			BookingID: &booking.BookingID,
 			Score:     score,
 			Text:      text,
+			IsVisible: true,
 		}
 		return tx.Create(rating).Error
 	})

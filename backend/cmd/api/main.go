@@ -125,7 +125,7 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
-			events.POST("/:eventId/ratings", ratingHandler.CreateEventRatingHandler)
+			events.POST("/:id/ratings", ratingHandler.CreateEventRatingHandler)
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)

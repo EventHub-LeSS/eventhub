@@ -14,6 +14,7 @@ var (
 	ErrInvalidRating         = errors.New("rating score must be between 1 and 5")
 	ErrRatingBookingRequired = errors.New("a confirmed booking for this event is required to rate it")
 	ErrEventAlreadyRated     = errors.New("this event has already been rated by the visitor")
+	ErrEventNotRateable      = errors.New("only events that have taken place can be rated")
 )
 
 type RatingService struct {
@@ -65,6 +66,10 @@ func (s *RatingService) CreateEventRating(ctx context.Context, userID, eventID u
 	}
 	rating, err := s.ratingRepo.CreateEventRating(ctx, userID, eventID, score, text)
 	switch {
+	case errors.Is(err, repository.ErrRatingEventNotFound):
+		return nil, ErrEventNotFound
+	case errors.Is(err, repository.ErrRatingEventNotEnded):
+		return nil, ErrEventNotRateable
 	case errors.Is(err, repository.ErrNoConfirmedRatingBooking):
 		return nil, ErrRatingBookingRequired
 	case errors.Is(err, repository.ErrRatingAlreadyExists):

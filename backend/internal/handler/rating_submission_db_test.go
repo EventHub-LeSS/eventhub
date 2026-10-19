@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -31,16 +32,32 @@ func newRatingSubmissionRouter(db *gorm.DB, principal *middleware.Principal) htt
 			c.Next()
 		})
 	}
-	r.POST("/api/v1/events/:eventId/ratings", h.CreateEventRatingHandler)
+	r.POST("/api/v1/events/:id/ratings", h.CreateEventRatingHandler)
 	return r
+}
+
+// seedEndedRatingEvent seeds an event that ended yesterday, so it can be rated.
+func seedEndedRatingEvent(t *testing.T, db *gorm.DB, keycloakOrgID string, status model.EventStatus) seededEvent {
+	t.Helper()
+	event := seedEventForOrg(t, db, keycloakOrgID, status)
+	if err := db.Exec("UPDATE events SET start_time = NOW() - interval '2 day', end_time = NOW() - interval '1 day' WHERE event_id = ?",
+		event.eventID).Error; err != nil {
+		t.Fatalf("end event: %v", err)
+	}
+	return event
 }
 
 func seedRatingBooking(t *testing.T, db *gorm.DB, userID, eventID uuid.UUID, status string) uuid.UUID {
 	t.Helper()
 	bookingID := uuid.New()
+	var expiresAt *time.Time
+	if status == string(model.BookingStatusReserved) {
+		expiry := time.Now().Add(time.Hour)
+		expiresAt = &expiry
+	}
 	if err := db.Exec(
-		"INSERT INTO bookings (booking_id, user_id, event_id, number_of_tickets, status) VALUES (?, ?, ?, 1, ?)",
-		bookingID, userID, eventID, status,
+		"INSERT INTO bookings (booking_id, user_id, event_id, number_of_tickets, status, expires_at) VALUES (?, ?, ?, 1, ?, ?)",
+		bookingID, userID, eventID, status, expiresAt,
 	).Error; err != nil {
 		t.Fatalf("seed booking: %v", err)
 	}
@@ -58,18 +75,18 @@ func postEventRating(t *testing.T, router http.Handler, eventID any, body string
 
 func TestCreateEventRatingRequiresConfirmedOwnedBooking(t *testing.T) {
 	db := testdb.Open(t)
-	event := seedEventForOrg(t, db, "rating-submit", model.EventStatusPublished)
+	event := seedEndedRatingEvent(t, db, "rating-submit", model.EventStatusPublished)
 	userID := seedBookingUser(t, db, "kc-rating-submit")
 	otherUserID := seedBookingUser(t, db, "kc-rating-submit-other")
 	principal := &middleware.Principal{Subject: "kc-rating-submit"}
 	router := newRatingSubmissionRouter(db, principal)
 
-	noBookingEvent := seedEventForOrg(t, db, "rating-submit-no-booking", model.EventStatusPublished)
-	foreignBookingEvent := seedEventForOrg(t, db, "rating-submit-foreign", model.EventStatusPublished)
-	reservedEvent := seedEventForOrg(t, db, "rating-submit-reserved", model.EventStatusPublished)
-	cancelledEvent := seedEventForOrg(t, db, "rating-submit-cancelled", model.EventStatusPublished)
-	failedEvent := seedEventForOrg(t, db, "rating-submit-failed", model.EventStatusPublished)
-	expiredEvent := seedEventForOrg(t, db, "rating-submit-expired", model.EventStatusPublished)
+	noBookingEvent := seedEndedRatingEvent(t, db, "rating-submit-no-booking", model.EventStatusPublished)
+	foreignBookingEvent := seedEndedRatingEvent(t, db, "rating-submit-foreign", model.EventStatusPublished)
+	reservedEvent := seedEndedRatingEvent(t, db, "rating-submit-reserved", model.EventStatusPublished)
+	cancelledEvent := seedEndedRatingEvent(t, db, "rating-submit-cancelled", model.EventStatusPublished)
+	failedEvent := seedEndedRatingEvent(t, db, "rating-submit-failed", model.EventStatusPublished)
+	expiredEvent := seedEndedRatingEvent(t, db, "rating-submit-expired", model.EventStatusPublished)
 	for _, tc := range []struct {
 		name    string
 		userID  uuid.UUID
@@ -111,8 +128,11 @@ func TestCreateEventRatingRequiresConfirmedOwnedBooking(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode created rating: %v: %s", err, rec.Body.String())
 	}
-	if created.Score != 5 || created.Text != "" || created.BookingID == nil {
-		t.Fatalf("created rating did not preserve score, optional text, or booking: %+v", created)
+	if created.Score != 5 || created.Text != "" || created.BookingID == nil || !created.IsVisible {
+		t.Fatalf("created rating did not preserve score, optional text, booking, or visibility: %+v", created)
+	}
+	if _, count, err := repository.NewRatingRepository(db).GetEventRatingSummary(event.eventID); err != nil || count != 1 {
+		t.Fatalf("new rating does not count in event summary: count=%d err=%v", count, err)
 	}
 	var persisted struct {
 		UserID  uuid.UUID
@@ -130,7 +150,7 @@ func TestCreateEventRatingRequiresConfirmedOwnedBooking(t *testing.T) {
 
 func TestCreateEventRatingRejectsInvalidAndDuplicateRatings(t *testing.T) {
 	db := testdb.Open(t)
-	event := seedEventForOrg(t, db, "rating-submit-duplicate", model.EventStatusPublished)
+	event := seedEndedRatingEvent(t, db, "rating-submit-duplicate", model.EventStatusPublished)
 	userID := seedBookingUser(t, db, "kc-rating-submit-duplicate")
 	principal := &middleware.Principal{Subject: "kc-rating-submit-duplicate"}
 	router := newRatingSubmissionRouter(db, principal)
@@ -167,9 +187,48 @@ func TestCreateEventRatingRejectsInvalidAndDuplicateRatings(t *testing.T) {
 	}
 }
 
+func TestCreateEventRatingRequiresEndedPublicEvent(t *testing.T) {
+	db := testdb.Open(t)
+	userID := seedBookingUser(t, db, "kc-rating-submit-state")
+	router := newRatingSubmissionRouter(db, &middleware.Principal{Subject: "kc-rating-submit-state"})
+
+	future := seedEventForOrg(t, db, "rating-submit-future", model.EventStatusPublished)
+	cancelled := seedEndedRatingEvent(t, db, "rating-submit-cancelled-event", model.EventStatusCancelled)
+	draft := seedEndedRatingEvent(t, db, "rating-submit-draft", model.EventStatusDraft)
+	completed := seedEndedRatingEvent(t, db, "rating-submit-completed", model.EventStatusCompleted)
+	for _, event := range []seededEvent{future, cancelled, draft, completed} {
+		seedRatingBooking(t, db, userID, event.eventID, "confirmed")
+	}
+
+	for _, tc := range []struct {
+		name    string
+		eventID uuid.UUID
+		status  int
+	}{
+		{"not yet taken place", future.eventID, http.StatusConflict},
+		{"cancelled", cancelled.eventID, http.StatusConflict},
+		{"draft", draft.eventID, http.StatusNotFound},
+		{"unknown", uuid.New(), http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postEventRating(t, router, tc.eventID, `{"score":4}`)
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d body=%s, want %d", rec.Code, rec.Body.String(), tc.status)
+			}
+		})
+	}
+	if got := countRatings(t, db); got != 0 {
+		t.Fatalf("rejected requests persisted %d ratings", got)
+	}
+
+	if rec := postEventRating(t, router, completed.eventID, `{"score":4}`); rec.Code != http.StatusCreated {
+		t.Fatalf("ended completed event: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCreateEventRatingRequiresAuthentication(t *testing.T) {
 	db := testdb.Open(t)
-	event := seedEventForOrg(t, db, "rating-submit-auth", model.EventStatusPublished)
+	event := seedEndedRatingEvent(t, db, "rating-submit-auth", model.EventStatusPublished)
 	rec := postEventRating(t, newRatingSubmissionRouter(db, nil), event.eventID, `{"score":4}`)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
@@ -178,7 +237,7 @@ func TestCreateEventRatingRequiresAuthentication(t *testing.T) {
 
 func TestCreateEventRatingConcurrentDuplicateSubmissions(t *testing.T) {
 	db := testdb.Open(t)
-	event := seedEventForOrg(t, db, "rating-submit-concurrent", model.EventStatusPublished)
+	event := seedEndedRatingEvent(t, db, "rating-submit-concurrent", model.EventStatusPublished)
 	userID := seedBookingUser(t, db, "kc-rating-submit-concurrent")
 	principal := &middleware.Principal{Subject: "kc-rating-submit-concurrent"}
 	router := newRatingSubmissionRouter(db, principal)

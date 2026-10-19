@@ -23,24 +23,25 @@ func NewRatingHandler(ratingService *service.RatingService, userRepo repository.
 
 type CreateEventRatingRequest struct {
 	Score int    `json:"score" binding:"required,gte=1,lte=5" example:"5"`
-	Text  string `json:"text" example:"Great event!"`
+	Text  string `json:"text" binding:"max=2000" example:"Great event!"`
 }
 
 // @Summary      Rate an event
-// @Description  Creates one rating per authenticated visitor and event. The visitor must have a confirmed booking for this event. Text is optional; score must be between 1 and 5.
+// @Description  Creates one rating per authenticated visitor and event. The visitor must have a confirmed booking for this event, and the event must have ended without being cancelled. Text is optional (at most 2000 characters); score must be between 1 and 5. Ratings are visible immediately.
 // @Tags         events
 // @Accept       json
 // @Produce      json
-// @Param        eventId path string true "Event UUID"
+// @Param        id path string true "Event UUID"
 // @Param        rating body CreateEventRatingRequest true "Rating"
 // @Success      201 {object} model.RatingModel
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.ErrorResponse
 // @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
 // @Failure      409 {object} model.ErrorResponse
 // @Failure      500 {object} model.ErrorResponse
 // @Security     BearerAuth
-// @Router       /events/{eventId}/ratings [post]
+// @Router       /events/{id}/ratings [post]
 func (h *RatingHandler) CreateEventRatingHandler(c *gin.Context) {
 	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
@@ -48,9 +49,10 @@ func (h *RatingHandler) CreateEventRatingHandler(c *gin.Context) {
 		return
 	}
 
-	eventID, err := uuid.Parse(c.Param("eventId"))
+	// The POST siblings (publish, withdraw) name this segment :id; Gin requires matching names.
+	eventID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		writeProblem(c, http.StatusBadRequest, "id must be a valid event UUID")
 		return
 	}
 
@@ -71,7 +73,9 @@ func (h *RatingHandler) CreateEventRatingHandler(c *gin.Context) {
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrRatingBookingRequired):
 		writeProblem(c, http.StatusForbidden, err.Error())
-	case errors.Is(err, service.ErrEventAlreadyRated):
+	case errors.Is(err, service.ErrEventNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrEventNotRateable), errors.Is(err, service.ErrEventAlreadyRated):
 		writeProblem(c, http.StatusConflict, err.Error())
 	case err != nil:
 		slog.Error("create event rating failed", "error", err)

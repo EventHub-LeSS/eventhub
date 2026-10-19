@@ -59,6 +59,8 @@ func TestCreateEventRatingMapsRepositoryErrors(t *testing.T) {
 		repoErr error
 		wantErr error
 	}{
+		{repository.ErrRatingEventNotFound, ErrEventNotFound},
+		{repository.ErrRatingEventNotEnded, ErrEventNotRateable},
 		{repository.ErrNoConfirmedRatingBooking, ErrRatingBookingRequired},
 		{repository.ErrRatingAlreadyExists, ErrEventAlreadyRated},
 	} {
