@@ -1,7 +1,11 @@
 package handler
 
 import (
+	"backend/internal/middleware"
+	"backend/internal/repository"
 	"backend/internal/service"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,10 +14,71 @@ import (
 
 type RatingHandler struct {
 	ratingService *service.RatingService
+	userRepo      repository.UserRepository
 }
 
-func NewRatingHandler(ratingService *service.RatingService) *RatingHandler {
-	return &RatingHandler{ratingService: ratingService}
+func NewRatingHandler(ratingService *service.RatingService, userRepo repository.UserRepository) *RatingHandler {
+	return &RatingHandler{ratingService: ratingService, userRepo: userRepo}
+}
+
+type CreateEventRatingRequest struct {
+	Score int    `json:"score" binding:"required,gte=1,lte=5" example:"5"`
+	Text  string `json:"text" example:"Great event!"`
+}
+
+// @Summary      Rate an event
+// @Description  Creates one rating per authenticated visitor and event. The visitor must have a confirmed booking for this event. Text is optional; score must be between 1 and 5.
+// @Tags         events
+// @Accept       json
+// @Produce      json
+// @Param        eventId path string true "Event UUID"
+// @Param        rating body CreateEventRatingRequest true "Rating"
+// @Success      201 {object} model.RatingModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /events/{eventId}/ratings [post]
+func (h *RatingHandler) CreateEventRatingHandler(c *gin.Context) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+
+	eventID, err := uuid.Parse(c.Param("eventId"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		return
+	}
+
+	var req CreateEventRatingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	user, ok := resolveAPIUser(c, h.userRepo, principal)
+	if !ok {
+		return
+	}
+
+	rating, err := h.ratingService.CreateEventRating(c.Request.Context(), user.UserID, eventID, req.Score, req.Text)
+	switch {
+	case errors.Is(err, service.ErrInvalidRating):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrRatingBookingRequired):
+		writeProblem(c, http.StatusForbidden, err.Error())
+	case errors.Is(err, service.ErrEventAlreadyRated):
+		writeProblem(c, http.StatusConflict, err.Error())
+	case err != nil:
+		slog.Error("create event rating failed", "error", err)
+		writeProblem(c, http.StatusInternalServerError, "internal error")
+	default:
+		c.JSON(http.StatusCreated, rating)
+	}
 }
 
 // EVENTHUB-238: Bewertungsdurchschnitt für Veranstaltungen.

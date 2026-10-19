@@ -2,14 +2,23 @@ package repository
 
 import (
 	"backend/internal/model"
+	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+var (
+	ErrNoConfirmedRatingBooking = errors.New("no confirmed booking for event")
+	ErrRatingAlreadyExists      = errors.New("rating already exists for event")
 )
 
 type RatingRepository interface {
 	GetEventRatingSummary(eventID uuid.UUID) (*float64, int64, error)
 	GetOrganizerRatingSummary(organizationID uuid.UUID) (*float64, int64, error)
+	CreateEventRating(ctx context.Context, userID, eventID uuid.UUID, score int, text string) (*model.RatingModel, error)
 }
 
 type ratingRepository struct {
@@ -62,4 +71,51 @@ func (r *ratingRepository) GetOrganizerRatingSummary(organizationID uuid.UUID) (
 		return nil, 0, err
 	}
 	return row.AverageRating, row.RatedEventCount, nil
+}
+
+func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventID uuid.UUID, score int, text string) (*model.RatingModel, error) {
+	rating := &model.RatingModel{}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize submissions by this visitor so concurrent requests cannot both pass
+		// the per-event duplicate check.
+		var user model.UserModel
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("user_id").First(&user, "user_id = ?", userID).Error; err != nil {
+			return err
+		}
+
+		var booking model.BookingModel
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("user_id = ? AND event_id = ? AND status = ?", userID, eventID, model.BookingStatusConfirmed).
+			Order("created_at ASC").First(&booking).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNoConfirmedRatingBooking
+		}
+		if err != nil {
+			return err
+		}
+
+		var count int64
+		if err := tx.Table("ratings AS r").
+			Joins("JOIN bookings AS b ON b.booking_id = r.booking_id").
+			Where("b.user_id = ? AND b.event_id = ?", userID, eventID).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 0 {
+			return ErrRatingAlreadyExists
+		}
+
+		rating = &model.RatingModel{
+			RatingID:  uuid.New(),
+			BookingID: &booking.BookingID,
+			Score:     score,
+			Text:      text,
+		}
+		return tx.Create(rating).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rating, nil
 }

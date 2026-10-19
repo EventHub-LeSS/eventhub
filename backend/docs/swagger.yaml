@@ -13,6 +13,19 @@ definitions:
     - eventId
     - numberOfTickets
     type: object
+  handler.CreateEventRatingRequest:
+    properties:
+      score:
+        example: 5
+        maximum: 5
+        minimum: 1
+        type: integer
+      text:
+        example: Great event!
+        type: string
+    required:
+    - score
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -612,6 +625,23 @@ definitions:
       status:
         $ref: '#/definitions/model.EventStatus'
       title:
+        type: string
+    type: object
+  model.RatingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      isVisible:
+        type: boolean
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+      updatedAt:
         type: string
     type: object
   model.SimulatedPaymentOutcome:
@@ -1236,6 +1266,57 @@ paths:
           schema:
             $ref: '#/definitions/model.ErrorResponse'
       summary: Get event rating summary
+      tags:
+      - events
+  /events/{eventId}/ratings:
+    post:
+      consumes:
+      - application/json
+      description: Creates one rating per authenticated visitor and event. The visitor
+        must have a confirmed booking for this event. Text is optional; score must
+        be between 1 and 5.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Rating
+        in: body
+        name: rating
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateEventRatingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.RatingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rate an event
       tags:
       - events
   /events/{eventId}/sold-tickets:
