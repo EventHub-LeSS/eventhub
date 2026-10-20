@@ -135,6 +135,7 @@ func main() {
 			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
+			events.GET("/:eventId/utilization-percentage", eventHandler.GetUtilizationPercentageHandler)
 		}
 		adminUsers := v1.Group("/admin/users")
 		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))

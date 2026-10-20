@@ -357,7 +357,7 @@ func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
 // @Summary      Get sold tickets
-// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -383,7 +383,7 @@ func (h *EventHandler) GetSoldTicketsHandler(c *gin.Context) {
 
 // EVENTHUB-81: Freie Plätze pro Veranstaltung anzeigen
 // @Summary      Get available seats
-// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -413,15 +413,25 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
 		return nil, false
 	}
-
-	managedOrgIDs, ok := managedOrganizationIDs(c)
+	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return nil, false
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	var managedOrgIDs []string
+	if !globalAdmin {
+		managedOrgIDs, ok = managedOrganizationIDs(c)
+		if !ok {
+			return nil, false
+		}
 	}
 
 	statistics, err := h.eventService.GetEventStatistics(
 		eventID,
 		managedOrgIDs,
+		globalAdmin,
 	)
 	if err != nil {
 		writeEventActionError(c, err)
@@ -502,4 +512,30 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, details)
+}
+
+// EVENTHUB-242: Auslastung je Veranstaltung anzeigen
+// @Summary      Get Utilization Percentage
+// @Description  Returns the share of the capacity taken by confirmed bookings, in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved and cancelled bookings are not counted. Requires the event_manager role in the organization that owns the event or the global admin role.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        eventId path string true "Event ID"
+// @Success      200 {object} model.UtilizationPercentageResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/utilization-percentage [get]
+func (h *EventHandler) GetUtilizationPercentageHandler(c *gin.Context) {
+	statistics, ok := h.getEventStatistics(c)
+	if !ok {
+		return
+	}
+
+	c.JSON(http.StatusOK, model.UtilizationPercentageResponse{
+		EventID:               statistics.EventID,
+		UtilizationPercentage: statistics.UtilizationPercentage,
+	})
 }
