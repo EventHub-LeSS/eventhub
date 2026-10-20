@@ -5,12 +5,14 @@ import {
   EyeIcon,
   PencilIcon,
   SendIcon,
+  Trash2Icon,
   UndoIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
+import { DeleteDraftDialog } from "@/features/events/components/delete-draft-dialog"
 import {
   publishDraftAction,
   withdrawEventAction,
@@ -45,7 +47,8 @@ interface EventActionsProps {
 /**
  * "View details" links to the detail page, "Publish" calls the same action as
  * the drafts list's standalone button. "Withdraw" asks for confirmation first,
- * because a withdrawn event cannot be published again. "Edit" still only needs
+ * because a withdrawn event cannot be published again, and so does "Delete" for
+ * drafts, because a deleted draft is gone for good. "Edit" still only needs
  * an onClick handler once its action exists.
  */
 export function EventActions({
@@ -60,6 +63,7 @@ export function EventActions({
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
   const [withdrawError, setWithdrawError] = useState<string>()
   const [isWithdrawing, startWithdraw] = useTransition()
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 
   function handlePublish() {
     if (isPending) return
@@ -140,6 +144,18 @@ export function EventActions({
             <PencilIcon />
             Edit
           </DropdownMenuItem>
+          {status === "draft" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setIsDeleteOpen(true)}
+              >
+                <Trash2Icon />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {error && (
@@ -179,6 +195,13 @@ export function EventActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DeleteDraftDialog
+        eventId={eventId}
+        eventTitle={eventTitle}
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+      />
     </div>
   )
 }

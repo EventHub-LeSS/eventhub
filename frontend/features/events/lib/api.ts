@@ -150,6 +150,20 @@ export async function withdrawEvent(
 }
 
 /**
+ * EVENTHUB-256: irrevocably deletes a draft. The API refuses events that are no
+ * longer drafts (400) or already have bookings (409).
+ */
+export async function deleteEvent(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}`, {
+    accessToken,
+    method: "DELETE",
+  })
+}
+
+/**
  * Categories and locations are master data, but the API exposes no endpoint for
  * them yet. The public listing embeds both on every published event, so the
  * selectable values are derived from there until dedicated endpoints exist.

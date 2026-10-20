@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { getSession, requireOrganizer } from "@/features/auth"
 import {
+  DeleteDraftButton,
   type Event,
   EventApiError,
   listOwnEvents,
@@ -91,6 +92,10 @@ export default async function OrganizerDraftsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <DeleteDraftButton
+                  eventId={draft.eventId}
+                  eventTitle={draft.title}
+                />
                 <Button
                   render={
                     <Link href={`/organizer/events/${draft.eventId}/edit`} />
