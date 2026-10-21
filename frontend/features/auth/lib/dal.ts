@@ -5,6 +5,7 @@ import { cache } from "react"
 import { readActiveOrganization } from "@/features/auth/lib/active-organization"
 import { readSession, type Session } from "@/features/auth/lib/session"
 import {
+  canManageEventsFromAccessToken,
   isAdminFromAccessToken,
   roleFor,
   type SessionUser,
@@ -22,13 +23,19 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     return null
   }
 
+  const activeOrganization = await readActiveOrganization(session.organizations)
+
   return {
     name: session.name,
     email: session.email,
     organizations: session.organizations,
-    activeOrganization: await readActiveOrganization(session.organizations),
+    activeOrganization,
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
+    canManageEvents: canManageEventsFromAccessToken(
+      session.accessToken,
+      activeOrganization
+    ),
   }
 }
 

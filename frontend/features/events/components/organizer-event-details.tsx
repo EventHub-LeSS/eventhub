@@ -1,10 +1,14 @@
 import { notFound } from "next/navigation"
 
+import { getCurrentUser } from "@/features/auth"
 import { EventActions } from "@/features/events/components/event-actions"
 import { EventDetails } from "@/features/events/components/event-details"
 import { getOrganizerEvent } from "@/features/events/lib/get-organizer-events"
 export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
-  const result = await getOrganizerEvent(eventId)
+  const [result, user] = await Promise.all([
+    getOrganizerEvent(eventId),
+    getCurrentUser(),
+  ])
 
   // Also covers events of other organizations, so URLs cannot reach them.
   if (result.status === "not-found") {
@@ -32,6 +36,7 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
           eventTitle={event.title}
           status={event.status}
           showViewDetails={false}
+          canManage={user?.canManageEvents ?? false}
         />
       }
     />

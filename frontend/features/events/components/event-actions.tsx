@@ -40,6 +40,11 @@ interface EventActionsProps {
   status: EventStatus
   /** The detail page is the link target itself, so it leaves that entry out. */
   showViewDetails?: boolean
+  /**
+   * Publish, Withdraw and Edit need the event_manager role; the API answers 403
+   * otherwise, so they are left out for members without it.
+   */
+  canManage?: boolean
 }
 
 /**
@@ -53,6 +58,7 @@ export function EventActions({
   eventTitle,
   status,
   showViewDetails = true,
+  canManage = true,
 }: EventActionsProps) {
   const router = useRouter()
   const [error, setError] = useState<string>()
@@ -103,6 +109,10 @@ export function EventActions({
     })
   }
 
+  if (!showViewDetails && !canManage) {
+    return null
+  }
+
   return (
     <div className="flex flex-col items-end gap-1">
       <DropdownMenu>
@@ -121,25 +131,27 @@ export function EventActions({
                 <EyeIcon />
                 View details
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canManage && <DropdownMenuSeparator />}
             </>
           )}
-          {status === "draft" && (
+          {canManage && status === "draft" && (
             <DropdownMenuItem onClick={handlePublish}>
               <SendIcon />
               Publish
             </DropdownMenuItem>
           )}
-          {status === "published" && (
+          {canManage && status === "published" && (
             <DropdownMenuItem onClick={() => handleWithdrawOpenChange(true)}>
               <UndoIcon />
               Withdraw
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem>
-            <PencilIcon />
-            Edit
-          </DropdownMenuItem>
+          {canManage && (
+            <DropdownMenuItem>
+              <PencilIcon />
+              Edit
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {error && (

@@ -1,5 +1,6 @@
 import Link from "next/link"
 
+import { getCurrentUser } from "@/features/auth"
 import { EventActions } from "@/features/events/components/event-actions"
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
 import {
@@ -11,7 +12,11 @@ import {
 import { getOrganizerEvents } from "@/features/events/lib/get-organizer-events"
 
 export async function OrganizerEventList() {
-  const result = await getOrganizerEvents()
+  const [result, user] = await Promise.all([
+    getOrganizerEvents(),
+    getCurrentUser(),
+  ])
+  const canManage = user?.canManageEvents ?? false
 
   return (
     <section className="mt-4 flex flex-col gap-4">
@@ -63,6 +68,7 @@ export async function OrganizerEventList() {
                 eventId={event.eventId}
                 eventTitle={event.title}
                 status={event.status}
+                canManage={canManage}
               />
             </li>
           ))}

@@ -3,7 +3,12 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { getSession, requireOrganizer } from "@/features/auth"
-import { DraftForm, getEventCatalog, getOwnEvent } from "@/features/events"
+import {
+  DraftForm,
+  EventApiError,
+  getEventCatalog,
+  getOwnEvent,
+} from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
 
 export default async function EditEventDraftPage({
@@ -11,11 +16,25 @@ export default async function EditEventDraftPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireOrganizer()
+  const user = await requireOrganizer()
   const session = await getSession()
   const { id } = await params
 
-  const event = await getOwnEvent(session?.accessToken ?? "", id)
+  if (!user.canManageEvents) {
+    return <NotAllowed />
+  }
+
+  let event
+  try {
+    event = await getOwnEvent(session?.accessToken ?? "", id)
+  } catch (error) {
+    // The role in the session can be outdated, so a 403 is still possible.
+    if (error instanceof EventApiError && error.status === 403) {
+      return <NotAllowed />
+    }
+
+    throw error
+  }
 
   // Only drafts are editable here; a published event is a different story.
   if (!event || event.status !== "draft") {
@@ -45,6 +64,29 @@ export default async function EditEventDraftPage({
           </p>
         </div>
         <DraftForm catalog={catalog} event={event} />
+      </div>
+    </div>
+  )
+}
+
+function NotAllowed() {
+  return (
+    <div className="flex flex-1 justify-center p-6">
+      <div className="flex w-full max-w-xl flex-col gap-6">
+        <div>
+          <Button
+            render={<Link href="/organizer/events" />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+          >
+            <ArrowLeftIcon />
+            All events
+          </Button>
+        </div>
+        <p className="text-sm text-destructive">
+          You need the event manager role in this organization to edit events.
+        </p>
       </div>
     </div>
   )

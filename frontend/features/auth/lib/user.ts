@@ -15,6 +15,8 @@ export interface SessionUser {
   role: UserRole
   /** Platform-wide admin, from the "admin" backend client role. Independent of `role`/organization membership. */
   isAdmin: boolean
+  /** event_manager role in the active organization; required to create, edit, publish or withdraw events. */
+  canManageEvents: boolean
 }
 
 /**
@@ -50,7 +52,41 @@ export function isAdminFromAccessToken(accessToken: string): boolean {
       | Record<string, { roles?: string[] }>
       | undefined
 
-    return Boolean(resourceAccess?.[BACKEND_CLIENT_ID]?.roles?.includes("admin"))
+    return Boolean(
+      resourceAccess?.[BACKEND_CLIENT_ID]?.roles?.includes("admin")
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether the user holds the event_manager role in the given organization. The
+ * roles arrive as Keycloak groups ("/event_manager" or "/roles/event_manager")
+ * inside the organization claim, which the API reads the same way. Like
+ * isAdminFromAccessToken, this only gates UI.
+ */
+export function canManageEventsFromAccessToken(
+  accessToken: string,
+  organization: string | null
+): boolean {
+  if (!organization) {
+    return false
+  }
+
+  try {
+    const claim = decodeJwt(accessToken).organization as
+      | Record<string, { groups?: unknown }>
+      | undefined
+    const groups = claim?.[organization]?.groups
+
+    return (
+      Array.isArray(groups) &&
+      groups.some(
+        (group) =>
+          group === "/event_manager" || group === "/roles/event_manager"
+      )
+    )
   } catch {
     return false
   }
