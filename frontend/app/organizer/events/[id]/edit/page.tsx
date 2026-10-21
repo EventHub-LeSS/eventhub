@@ -35,13 +35,13 @@ export default async function EditEventDraftPage({
             size="sm"
           >
             <ArrowLeftIcon />
-            Drafts
+            Entwürfe
           </Button>
         </div>
         <div>
-          <h1 className="text-lg font-medium">Edit Draft</h1>
+          <h1 className="text-lg font-medium">Entwurf bearbeiten</h1>
           <p className="text-sm text-muted-foreground">
-            Still a draft and not visible to visitors.
+            Noch ein Entwurf und für Besucher nicht sichtbar.
           </p>
         </div>
         <DraftForm catalog={catalog} event={event} />

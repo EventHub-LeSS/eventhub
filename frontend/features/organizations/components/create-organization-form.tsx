@@ -63,14 +63,14 @@ export function CreateOrganizationForm({
         if (data.selfAdmin) {
           toast.add({
             type: "success",
-            title: "Successfully created organization",
-            description: `You're now managing ${data.name}.`,
+            title: "Organisation erfolgreich erstellt",
+            description: `Du verwaltest jetzt ${data.name}.`,
           });
           router.push("/organization");
         } else {
           toast.add({
-            title: "Organization created",
-            description: `${data.name} was created and assigned to ${draft.orgAdmin}.`,
+            title: "Organisation erstellt",
+            description: `${data.name} wurde erstellt und ${draft.orgAdmin} zugewiesen.`,
           });
           router.push("/organizations");
         }
@@ -114,14 +114,14 @@ export function CreateOrganizationForm({
           }}
         />
         <FieldDescription>
-          The permanent key used in URLs and tokens. It cannot be changed after
-          the organization is created.
+          Der dauerhafte Schlüssel für URLs und Tokens. Er kann nach dem
+          Erstellen der Organisation nicht mehr geändert werden.
         </FieldDescription>
         <FieldError>{errors.alias}</FieldError>
       </Field>
 
       <Field data-invalid={Boolean(errors.orgAdmin)}>
-        <FieldLabel htmlFor="organization-admin">Organization admin</FieldLabel>
+        <FieldLabel htmlFor="organization-admin">Organisations-Admin</FieldLabel>
         <Input
           id="organization-admin"
           value={draft.orgAdmin}
@@ -131,19 +131,19 @@ export function CreateOrganizationForm({
           onChange={(event) => update("orgAdmin", event.target.value)}
         />
         <FieldDescription>
-          Username or email of the person who will manage this organization.
-          They must already have an EventHub account.
+          Benutzername oder E-Mail-Adresse der Person, die diese Organisation
+          verwaltet. Sie muss bereits ein EventHub-Konto haben.
         </FieldDescription>
         <FieldError>{errors.orgAdmin}</FieldError>
       </Field>
 
       <FieldSet className="rounded-xl border border-border p-4">
-        <FieldLegend variant="label">Contact details</FieldLegend>
-        <FieldDescription>Optional, shown to members and visitors.</FieldDescription>
+        <FieldLegend variant="label">Kontaktdaten</FieldLegend>
+        <FieldDescription>Optional, sichtbar für Mitglieder und Besucher.</FieldDescription>
 
         <Field data-invalid={Boolean(errors.contactEmail)}>
           <FieldLabel htmlFor="organization-contact-email">
-            Contact email
+            Kontakt-E-Mail
           </FieldLabel>
           <Input
             id="organization-contact-email"
@@ -158,7 +158,7 @@ export function CreateOrganizationForm({
 
         <Field>
           <FieldLabel htmlFor="organization-contact-phone">
-            Contact phone number
+            Kontakt-Telefonnummer
           </FieldLabel>
           <Input
             id="organization-contact-phone"
@@ -173,12 +173,12 @@ export function CreateOrganizationForm({
       </FieldSet>
 
       <FieldSet className="rounded-xl border border-border p-4">
-        <FieldLegend variant="label">Address</FieldLegend>
+        <FieldLegend variant="label">Adresse</FieldLegend>
         <FieldDescription>Optional.</FieldDescription>
 
         <div className="flex gap-3">
           <Field className="flex-1">
-            <FieldLabel htmlFor="organization-street">Street</FieldLabel>
+            <FieldLabel htmlFor="organization-street">Straße</FieldLabel>
             <Input
               id="organization-street"
               value={draft.street}
@@ -188,7 +188,7 @@ export function CreateOrganizationForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="organization-house-number">
-              House no.
+              Hausnr.
             </FieldLabel>
             <Input
               id="organization-house-number"
@@ -203,7 +203,7 @@ export function CreateOrganizationForm({
         <div className="flex gap-3">
           <Field>
             <FieldLabel htmlFor="organization-postal-code">
-              Postal code
+              PLZ
             </FieldLabel>
             <Input
               id="organization-postal-code"
@@ -214,7 +214,7 @@ export function CreateOrganizationForm({
             />
           </Field>
           <Field className="flex-1">
-            <FieldLabel htmlFor="organization-city">City</FieldLabel>
+            <FieldLabel htmlFor="organization-city">Stadt</FieldLabel>
             <Input
               id="organization-city"
               value={draft.city}
@@ -224,7 +224,7 @@ export function CreateOrganizationForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="organization-country-code">
-              Country
+              Land
             </FieldLabel>
             <Input
               id="organization-country-code"
@@ -246,8 +246,8 @@ export function CreateOrganizationForm({
       <div className="flex gap-2">
         <Button type="submit" disabled={createOrganization.isPending}>
           {createOrganization.isPending
-            ? "Creating..."
-            : "Create organization"}
+            ? "Wird erstellt…"
+            : "Organisation erstellen"}
         </Button>
         <Button
           type="button"
@@ -259,7 +259,7 @@ export function CreateOrganizationForm({
             createOrganization.reset();
           }}
         >
-          Reset
+          Zurücksetzen
         </Button>
       </div>
     </form>

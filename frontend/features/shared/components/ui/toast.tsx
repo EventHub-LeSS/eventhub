@@ -52,7 +52,7 @@ function ToastItem({ toast }: { toast: ToastObject<any> }) {
       </div>
       <ToastPrimitive.Close
         className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        aria-label="Dismiss"
+        aria-label="Schließen"
       >
         <XIcon className="size-4" />
       </ToastPrimitive.Close>

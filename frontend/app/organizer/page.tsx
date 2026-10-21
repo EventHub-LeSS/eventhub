@@ -10,10 +10,10 @@ export default async function OrganizerPage() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
-        <h1 className="font-medium">Organizer Dashboard</h1>
+        <h1 className="font-medium">Veranstalter-Dashboard</h1>
         <p className="text-sm text-muted-foreground">
-          Publishing as {user.activeOrganization}. The organization can be
-          changed via the EventHub logo.
+          Du veröffentlichst als {user.activeOrganization}. Die Organisation
+          kannst du über das EventHub-Logo wechseln.
         </p>
       </div>
       <div className="flex gap-2">
@@ -23,14 +23,14 @@ export default async function OrganizerPage() {
           variant="outline"
         >
           <TicketsIcon />
-          My Events
+          Meine Veranstaltungen
         </Button>
         <Button
           render={<Link href="/organizer/events/new" />}
           nativeButton={false}
         >
           <CirclePlusIcon />
-          Create Event
+          Veranstaltung erstellen
         </Button>
       </div>
     </div>

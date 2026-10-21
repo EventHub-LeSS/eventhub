@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) {
     return NextResponse.json(
-      { error: { code: "UNAUTHENTICATED", message: "Authentication is required" } },
+      { error: { code: "UNAUTHENTICATED", message: "Anmeldung erforderlich" } },
       { status: 401 }
     )
   }

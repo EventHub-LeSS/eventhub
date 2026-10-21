@@ -5,18 +5,18 @@ export const EMPTY_VALUE = "—"
  * Locale and time zone are pinned, so the output does not depend on the server.
  * Events are shown in their local time.
  */
-const eventDateTimeFormat = new Intl.DateTimeFormat("en-GB", {
+const eventDateTimeFormat = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
   timeStyle: "short",
   timeZone: "Europe/Berlin",
 })
 
-const eventPriceFormat = new Intl.NumberFormat("en-GB", {
+const eventPriceFormat = new Intl.NumberFormat("de-DE", {
   style: "currency",
   currency: "EUR",
 })
 
-const eventCountFormat = new Intl.NumberFormat("en-GB")
+const eventCountFormat = new Intl.NumberFormat("de-DE")
 
 /**
  * A missing or unparsable timestamp must not reach Intl, which would throw a
@@ -41,7 +41,7 @@ export function formatEventDateTime(
 }
 
 /**
- * Same-day events read "5 Nov 2026, 18:00–20:30"; longer ones spell out both
+ * Same-day events read "05.11.2026, 18:00–20:30"; longer ones spell out both
  * dates. Without an end, the start is shown on its own.
  */
 export function formatEventTimeRange(
@@ -70,11 +70,11 @@ export function formatEventPrice(price: string | null | undefined): string {
     return EMPTY_VALUE
   }
 
-  return amount === 0 ? "Free" : eventPriceFormat.format(amount)
+  return amount === 0 ? "Kostenlos" : eventPriceFormat.format(amount)
 }
 
 export function formatEventCapacity(capacity: number): string {
-  const unit = capacity === 1 ? "seat" : "seats"
+  const unit = capacity === 1 ? "Platz" : "Plätze"
 
   return `${eventCountFormat.format(capacity)} ${unit}`
 }
@@ -83,7 +83,7 @@ export function formatSoldTickets(
   soldTickets: number,
   capacity: number
 ): string {
-  const unit = capacity === 1 ? "seat" : "seats"
+  const unit = capacity === 1 ? "Platz" : "Plätze"
 
   return `${eventCountFormat.format(soldTickets)} / ${eventCountFormat.format(capacity)} ${unit}`
 }
@@ -97,9 +97,9 @@ export function formatAvailableSeats(
     return EMPTY_VALUE
   }
 
-  const unit = availableSeats === 1 ? "seat" : "seats"
+  const unit = capacity === 1 ? "Platz" : "Plätzen"
 
-  return `${eventCountFormat.format(availableSeats)} of ${eventCountFormat.format(capacity)} ${unit} available`
+  return `${eventCountFormat.format(availableSeats)} von ${eventCountFormat.format(capacity)} ${unit} frei`
 }
 
 /**

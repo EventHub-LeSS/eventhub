@@ -7,14 +7,14 @@ const statusPresentation: Record<
   EventStatus,
   { label: string; variant: BadgeVariant }
 > = {
-  draft: { label: "Draft", variant: "secondary" },
-  published: { label: "Published", variant: "default" },
+  draft: { label: "Entwurf", variant: "secondary" },
+  published: { label: "Veröffentlicht", variant: "default" },
   // Organizers withdraw events; the backend stores that as "cancelled".
-  cancelled: { label: "Withdrawn", variant: "destructive" },
-  completed: { label: "Completed", variant: "outline" },
+  cancelled: { label: "Zurückgezogen", variant: "destructive" },
+  completed: { label: "Abgeschlossen", variant: "outline" },
 }
 
-const unknownStatus = { label: "Unknown", variant: "outline" } as const
+const unknownStatus = { label: "Unbekannt", variant: "outline" } as const
 
 export function EventStatusBadge({ status }: { status: EventStatus }) {
   // A status this UI does not know yet shows as a neutral badge, not an error.
