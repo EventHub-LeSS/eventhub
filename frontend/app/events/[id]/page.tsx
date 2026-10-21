@@ -62,22 +62,20 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   if (result.status === "unavailable") {
     return (
-      <div className="flex-1 bg-muted/40">
-        <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-4 p-6">
-          <Button
-            render={<Link href="/" />}
-            nativeButton={false}
-            variant="ghost"
-            size="sm"
-          >
-            <ArrowLeftIcon />
-            Zurück zur Übersicht
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Diese Veranstaltung kann aktuell nicht geladen werden. Bitte
-            versuche es später erneut.
-          </p>
-        </div>
+      <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-4 p-6">
+        <Button
+          render={<Link href="/" />}
+          nativeButton={false}
+          variant="ghost"
+          size="sm"
+        >
+          <ArrowLeftIcon />
+          Zurück zur Übersicht
+        </Button>
+        <p className="text-sm text-muted-foreground">
+          Diese Veranstaltung kann aktuell nicht geladen werden. Bitte versuche
+          es später erneut.
+        </p>
       </div>
     )
   }
@@ -107,107 +105,105 @@ export default async function EventDetailPage({ params }: PageProps) {
     : "Noch keine Bewertungen"
 
   return (
-    <div className="flex-1 bg-muted/40">
-      <div className="mx-auto flex w-full max-w-screen-xl flex-col gap-6 p-6">
-        <div>
-          <Button
-            render={<Link href="/" />}
-            nativeButton={false}
-            variant="ghost"
-            size="sm"
+    <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
+      <div>
+        <Button
+          render={<Link href="/" />}
+          nativeButton={false}
+          variant="ghost"
+          size="sm"
+        >
+          <ArrowLeftIcon />
+          Zurück zur Übersicht
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {/* Image placeholder: until real pictures exist, a light purple
+              banner marks where the event image will appear. */}
+          <div
+            className="relative aspect-video overflow-hidden rounded-xl"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(45deg, #f5f3ff 0 22px, #ede9fe 22px 44px)",
+            }}
           >
-            <ArrowLeftIcon />
-            Zurück zur Übersicht
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
-          <div className="flex min-w-0 flex-col gap-6">
-            {/* Image placeholder: until real pictures exist, a light purple
-                banner marks where the event image will appear. */}
-            <div
-              className="relative aspect-video overflow-hidden rounded-xl"
-              style={{
-                backgroundImage:
-                  "repeating-linear-gradient(45deg, #f5f3ff 0 22px, #ede9fe 22px 44px)",
-              }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center p-4">
-                <span className="rounded-full border border-purple-200 bg-white/85 px-4 py-1.5 text-sm font-medium text-muted-foreground">
-                  Bild: {category.category}-Veranstaltung
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-bold tracking-wider text-purple-700 uppercase">
-                {category.category}
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <span className="rounded-full border border-purple-200 bg-white/85 px-4 py-1.5 text-sm font-medium text-muted-foreground">
+                Bild: {category.category}-Veranstaltung
               </span>
-              <h1 className="text-3xl font-extrabold tracking-tight break-words text-foreground">
-                {event.title}
-              </h1>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <DetailRow label="Zeitpunkt">
-                {dateFormat.format(new Date(event.startTime))} –{" "}
-                {dateFormat.format(new Date(event.endTime))}
-              </DetailRow>
-              <DetailRow label="Ort">{address}</DetailRow>
-              <DetailRow label="Preis">
-                {formatAmount(event.price)} pro Ticket
-              </DetailRow>
-            </div>
-
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {event.description ??
-                "Für diese Veranstaltung liegt noch keine Beschreibung vor."}
-            </p>
-
-            <hr className="border-border" />
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {ratingSummary && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex items-center gap-0.5"
-                      aria-hidden="true"
-                    >
-                      {[0, 1, 2, 3, 4].map((star) => (
-                        <StarIcon
-                          key={star}
-                          className={
-                            star < filledStars
-                              ? "size-4 fill-amber-500 text-amber-500"
-                              : "size-4 text-muted-foreground/40"
-                          }
-                        />
-                      ))}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {ratingLabel}
-                    </span>
-                  </div>
-                  <div className="hidden h-9 w-px bg-border sm:block" />
-                </>
-              )}
-              <p className="text-sm text-muted-foreground">
-                Du erhältst eine Erinnerung vor Veranstaltungsbeginn
-              </p>
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
-            <BookingForm
-              eventId={event.eventId}
-              price={event.price}
-              availableSeats={event.availableSeats}
-              capacity={event.capacity}
-              bookable={event.bookable}
-              isAuthenticated={Boolean(user)}
-            />
+            <span className="text-xs font-bold tracking-wider text-purple-700 uppercase">
+              {category.category}
+            </span>
+            <h1 className="text-3xl font-extrabold tracking-tight break-words text-foreground">
+              {event.title}
+            </h1>
           </div>
+
+          <div className="flex flex-col gap-2">
+            <DetailRow label="Zeitpunkt">
+              {dateFormat.format(new Date(event.startTime))} –{" "}
+              {dateFormat.format(new Date(event.endTime))}
+            </DetailRow>
+            <DetailRow label="Ort">{address}</DetailRow>
+            <DetailRow label="Preis">
+              {formatAmount(event.price)} pro Ticket
+            </DetailRow>
+          </div>
+
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {event.description ??
+              "Für diese Veranstaltung liegt noch keine Beschreibung vor."}
+          </p>
+
+          <hr className="border-border" />
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {ratingSummary && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center gap-0.5"
+                    aria-hidden="true"
+                  >
+                    {[0, 1, 2, 3, 4].map((star) => (
+                      <StarIcon
+                        key={star}
+                        className={
+                          star < filledStars
+                            ? "size-4 fill-amber-500 text-amber-500"
+                            : "size-4 text-muted-foreground/40"
+                        }
+                      />
+                    ))}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {ratingLabel}
+                  </span>
+                </div>
+                <div className="hidden h-9 w-px bg-border sm:block" />
+              </>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Du erhältst eine Erinnerung vor Veranstaltungsbeginn
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <BookingForm
+            eventId={event.eventId}
+            price={event.price}
+            availableSeats={event.availableSeats}
+            capacity={event.capacity}
+            bookable={event.bookable}
+            isAuthenticated={Boolean(user)}
+          />
         </div>
       </div>
     </div>
