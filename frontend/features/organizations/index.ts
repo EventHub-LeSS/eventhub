@@ -13,11 +13,15 @@ export type {
   OrganizationPayload,
 } from "@/features/organizations/lib/organization";
 export {
+  useInviteMember,
   useOrganization,
   useOrganizationMembers,
+  useRemoveMember,
   useUpdateMemberRoles,
 } from "@/features/organizations/lib/api";
 export type {
+  InviteMemberResponse,
+  InviteMemberVariables,
   UpdateMemberRolesResponse,
   UpdateMemberRolesVariables,
 } from "@/features/organizations/lib/api";
@@ -25,6 +29,8 @@ export {
   KeycloakAdminError,
   getOrganizationByAlias,
   getOrganizationMembersWithRights,
+  inviteOrganizationMember,
+  removeOrganizationMemberByUsername,
 } from "@/features/organizations/lib/keycloak-admin";
 export {
   organizationRights,
