@@ -74,11 +74,13 @@
       "fullScopeAllowed": false,
       "redirectUris": [
         "http://localhost:3000/*",
-        "https://eventhub-ref.cookiee.org/*"
+        "https://eventhub-ref.cookiee.org/*",
+        "https://eventhub.cookiee.org/*"
       ],
       "webOrigins": [
         "http://localhost:3000",
-        "https://eventhub-ref.cookiee.org"
+        "https://eventhub-ref.cookiee.org",
+        "https://eventhub.cookiee.org"
       ],
       "defaultClientScopes": [
         "basic",
@@ -173,7 +175,9 @@
         }
       ],
       "clientRoles": {
-        "backend": ["admin"]
+        "backend": [
+          "admin"
+        ]
       }
     },
     {
@@ -181,11 +185,14 @@
       "enabled": true,
       "serviceAccountClientId": "backend",
       "clientRoles": {
-        "realm-management": ["manage-organizations", "manage-users", "view-clients"]
+        "realm-management": [
+          "manage-organizations",
+          "manage-users",
+          "view-clients"
+        ]
       }
     }
   ],
-  
   "clientScopes": [
     {
       "name": "basic",
@@ -358,7 +365,9 @@
           "composite": true,
           "composites": {
             "client": {
-              "realm-management": ["realm-admin"]
+              "realm-management": [
+                "realm-admin"
+              ]
             }
           }
         },
@@ -387,7 +396,11 @@
     "realm-management": [
       {
         "client": "backend",
-        "roles": ["manage-organizations", "manage-users", "view-clients"]
+        "roles": [
+          "manage-organizations",
+          "manage-users",
+          "view-clients"
+        ]
       }
     ]
   }
