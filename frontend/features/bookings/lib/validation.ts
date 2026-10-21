@@ -64,70 +64,25 @@ export function ticketCountError(
 }
 
 /**
- * Normalizes what the user typed into the amount field: trims and turns the
- * German decimal comma into the dot the API expects.
- */
-export function normalizeAmountInput(raw: string): string {
-  const trimmed = raw.trim()
-
-  if (trimmed.includes(",") && !trimmed.includes(".")) {
-    return trimmed.replace(",", ".")
-  }
-
-  return trimmed
-}
-
-/**
- * Parses a payment amount. Returns null for anything that is not a finite,
+ * Parses a payment amount — e.g. the stored amount the backend sends as an
+ * exact decimal string. Returns null for anything that is not a finite,
  * non-negative money value within the storable range — including the huge
  * exponents the backend rejects (AK4).
  */
 export function parseAmount(raw: string): number | null {
-  const normalized = normalizeAmountInput(raw)
+  const trimmed = raw.trim()
 
-  if (normalized === "") {
+  if (trimmed === "") {
     return null
   }
 
-  const value = Number(normalized)
+  const value = Number(trimmed)
 
   if (!Number.isFinite(value) || value < 0 || value > MAX_PAYMENT_AMOUNT) {
     return null
   }
 
   return value
-}
-
-/**
- * AK4: the confirmed amount must equal the amount shown before completion.
- * A deviation is caught here; the backend would reject it with 422 without
- * changing anything.
- */
-export function amountMismatchError(
-  raw: string,
-  expectedAmount: string
-): string | undefined {
-  if (raw.trim() === "") {
-    return "Bitte gib den zu zahlenden Betrag ein."
-  }
-
-  const confirmed = parseAmount(raw)
-
-  if (confirmed === null) {
-    return "Bitte gib einen gültigen Betrag ein, z. B. 40,00."
-  }
-
-  const expected = Number(expectedAmount)
-
-  if (!Number.isFinite(expected)) {
-    return "Der zu zahlende Betrag konnte nicht gelesen werden. Bitte lade die Seite neu."
-  }
-
-  if (confirmed !== expected) {
-    return "Der bestätigte Betrag weicht vom zu zahlenden Betrag ab. Bitte prüfe deine Eingabe."
-  }
-
-  return undefined
 }
 
 /** Server-side guard: a client may call a server action with any payload. */

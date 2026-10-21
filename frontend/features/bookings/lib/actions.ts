@@ -132,14 +132,14 @@ export async function startPaymentAction(
 }
 
 /**
- * Completes the pending payment with the simulated outcome. The confirmed
- * amount is the amount shown to the user; the backend rejects any deviation
- * without changing anything.
+ * Completes the pending payment with the simulated outcome. The amount sent
+ * along is the stored amount shown to the user; the backend rejects any
+ * deviation without changing anything.
  */
 export async function completePaymentAction(
   bookingId: string,
   outcome: string,
-  confirmedAmount: number
+  amount: number
 ): Promise<PaymentActionResult> {
   if (!isUUID(bookingId)) {
     return { message: "Ungültige Buchungs-ID." }
@@ -149,11 +149,7 @@ export async function completePaymentAction(
     return { message: "Ungültiges Simulationsergebnis." }
   }
 
-  if (
-    typeof confirmedAmount !== "number" ||
-    !Number.isFinite(confirmedAmount) ||
-    confirmedAmount < 0
-  ) {
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
     return { message: "Ungültiger Betrag." }
   }
 
@@ -161,12 +157,7 @@ export async function completePaymentAction(
 
   try {
     return {
-      payment: await simulatePayment(
-        accessToken,
-        bookingId,
-        outcome,
-        confirmedAmount
-      ),
+      payment: await simulatePayment(accessToken, bookingId, outcome, amount),
     }
   } catch (error) {
     if (error instanceof BookingApiError && error.status === 409) {

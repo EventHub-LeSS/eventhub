@@ -25,10 +25,7 @@ import type {
   Payment,
   SimulatedPaymentOutcome,
 } from "@/features/bookings/lib/types"
-import {
-  amountMismatchError,
-  parseAmount,
-} from "@/features/bookings/lib/validation"
+import { parseAmount } from "@/features/bookings/lib/validation"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
 import {
@@ -38,7 +35,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/shared/components/ui/card"
-import { Input } from "@/features/shared/components/ui/input"
 
 /**
  * EVENTHUB-235: the view that carries out the simulated payment process of a
@@ -49,7 +45,6 @@ import { Input } from "@/features/shared/components/ui/input"
 export function PaymentView({ bookingId }: { bookingId: string }) {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [message, setMessage] = useState<string>()
-  const [amountInput, setAmountInput] = useState("")
   const [now, setNow] = useState(() => Date.now())
   const [isPending, startTransition] = useTransition()
 
@@ -60,9 +55,6 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
 
       if (result.payment) {
         setPayment(result.payment)
-        // The amount must be typed in by the user, never prefilled: only a
-        // deliberately entered amount confirms that they saw what they pay.
-        setAmountInput("")
         setMessage(undefined)
       } else {
         setMessage(
@@ -92,14 +84,10 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
 
   const isPendingPayment = payment?.status === "pending"
 
-  // AK4: the confirmed amount is validated live, before anything is sent.
-  // An untouched field is not an error — the buttons simply stay disabled —
-  // so the prompt to type the amount reads as guidance, not as a complaint.
-  const amountError =
-    isPendingPayment && amountInput.trim() !== ""
-      ? amountMismatchError(amountInput, payment.amount)
-      : undefined
-  const confirmedAmount = isPendingPayment ? parseAmount(amountInput) : null
+  // AK4: what gets confirmed is the stored amount — read from the server's
+  // response, not from anything the user could mistype. The backend rejects
+  // any deviation from the amount it stored when the payment started (422).
+  const storedAmount = isPendingPayment ? parseAmount(payment.amount) : null
 
   const expiresAt = payment?.expiresAt
   const deadline = expiresAt ? Date.parse(expiresAt) : null
@@ -108,14 +96,10 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
   const expired = deadlineKnown && deadline <= now
 
   const canComplete =
-    isPendingPayment &&
-    confirmedAmount !== null &&
-    !amountError &&
-    !expired &&
-    !isPending
+    isPendingPayment && storedAmount !== null && !expired && !isPending
 
   function complete(outcome: SimulatedPaymentOutcome) {
-    if (!payment || confirmedAmount === null || amountError) {
+    if (!payment || storedAmount === null) {
       return
     }
 
@@ -125,7 +109,7 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
       const result = await completePaymentAction(
         bookingId,
         outcome,
-        confirmedAmount
+        storedAmount
       )
 
       if (result.payment) {
@@ -253,38 +237,6 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
             </p>
           ) : (
             <>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="payment-amount" className="text-sm font-medium">
-                  Betrag bestätigen (€)
-                </label>
-                <Input
-                  id="payment-amount"
-                  className="max-w-40"
-                  inputMode="decimal"
-                  value={amountInput}
-                  onChange={(changed) => {
-                    setMessage(undefined)
-                    setAmountInput(changed.target.value)
-                  }}
-                  aria-invalid={Boolean(amountError)}
-                  disabled={isPending}
-                />
-                {amountError ? (
-                  <p className="text-xs text-destructive" role="alert">
-                    {amountError}
-                  </p>
-                ) : amountInput.trim() === "" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Gib den zu zahlenden Betrag ein, um die Zahlung
-                    abzuschließen.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Stimmt mit dem zu zahlenden Betrag überein.
-                  </p>
-                )}
-              </div>
-
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   onClick={() => complete("success")}
