@@ -9,6 +9,73 @@ export const TRANSACTION_COOKIE = "eh_oidc_tx"
 
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8
 const TRANSACTION_MAX_AGE_SECONDS = 60 * 10
+const SESSION_CHUNK_SIZE = 3800
+
+interface NamedCookie {
+  name: string
+  value: string
+}
+
+function chunkIndex(name: string) {
+  const prefix = `${SESSION_COOKIE}.`
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  const index = Number(name.slice(prefix.length))
+
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+/** Splits a sealed session into the cookies that should be set. */
+export function splitSessionCookie(value: string): NamedCookie[] {
+  const chunks: NamedCookie[] = []
+
+  for (let i = 0; i * SESSION_CHUNK_SIZE < value.length; i++) {
+    chunks.push({
+      name: `${SESSION_COOKIE}.${i}`,
+      value: value.slice(i * SESSION_CHUNK_SIZE, (i + 1) * SESSION_CHUNK_SIZE),
+    })
+  }
+
+  return chunks
+}
+
+/** Reassembles the sealed session. A missing chunk yields a broken value, which fails to unseal. */
+export function joinSessionCookie(
+  requestCookies: NamedCookie[]
+): string | undefined {
+  const chunks = requestCookies
+    .map((cookie) => ({ index: chunkIndex(cookie.name), value: cookie.value }))
+    .filter((chunk) => chunk.index !== null)
+    .toSorted((a, b) => a.index! - b.index!)
+
+  if (chunks.length === 0) {
+    return undefined
+  }
+
+  return chunks.map((chunk) => chunk.value).join("")
+}
+
+/**
+ * Session cookies to delete, either all of them or those beyond the first `keep` chunks
+ * (left over from a larger session). Includes the unchunked cookie from before chunking.
+ */
+export function staleSessionCookieNames(
+  requestCookies: { name: string }[],
+  keep = 0
+): string[] {
+  return requestCookies
+    .map((cookie) => cookie.name)
+    .filter((name) => {
+      if (name === SESSION_COOKIE) {
+        return true
+      }
+
+      const index = chunkIndex(name)
+      return index !== null && index >= keep
+    })
+}
 
 export interface Session {
   sub: string
@@ -87,15 +154,21 @@ export async function unsealSession(value: string | undefined) {
 export const sessionCookieOptions = () => cookieOptions(SESSION_MAX_AGE_SECONDS)
 
 export async function createSessionCookie(session: Session) {
-  const value = await sealSession(session)
+  const chunks = splitSessionCookie(await sealSession(session))
   const store = await cookies()
 
-  store.set(SESSION_COOKIE, value, cookieOptions(SESSION_MAX_AGE_SECONDS))
+  for (const name of staleSessionCookieNames(store.getAll(), chunks.length)) {
+    store.delete(name)
+  }
+
+  for (const chunk of chunks) {
+    store.set(chunk.name, chunk.value, cookieOptions(SESSION_MAX_AGE_SECONDS))
+  }
 }
 
 export async function readSession(): Promise<Session | null> {
   const store = await cookies()
-  const session = await unsealSession(store.get(SESSION_COOKIE)?.value)
+  const session = await unsealSession(joinSessionCookie(store.getAll()))
 
   if (!session || session.expiresAt < Date.now()) {
     return null
@@ -107,7 +180,9 @@ export async function readSession(): Promise<Session | null> {
 export async function clearSessionCookie() {
   const store = await cookies()
 
-  store.delete(SESSION_COOKIE)
+  for (const name of staleSessionCookieNames(store.getAll())) {
+    store.delete(name)
+  }
 }
 
 export async function createTransactionCookie(transaction: OidcTransaction) {
