@@ -42,11 +42,13 @@ export function splitSessionCookie(value: string): NamedCookie[] {
 }
 
 /** Reassembles the sealed session. A missing chunk yields a broken value, which fails to unseal. */
-export function joinSessionCookie(cookies: NamedCookie[]): string | undefined {
-  const chunks = cookies
+export function joinSessionCookie(
+  requestCookies: NamedCookie[]
+): string | undefined {
+  const chunks = requestCookies
     .map((cookie) => ({ index: chunkIndex(cookie.name), value: cookie.value }))
     .filter((chunk) => chunk.index !== null)
-    .sort((a, b) => a.index! - b.index!)
+    .toSorted((a, b) => a.index! - b.index!)
 
   if (chunks.length === 0) {
     return undefined
@@ -60,10 +62,10 @@ export function joinSessionCookie(cookies: NamedCookie[]): string | undefined {
  * (left over from a larger session). Includes the unchunked cookie from before chunking.
  */
 export function staleSessionCookieNames(
-  cookies: { name: string }[],
+  requestCookies: { name: string }[],
   keep = 0
 ): string[] {
-  return cookies
+  return requestCookies
     .map((cookie) => cookie.name)
     .filter((name) => {
       if (name === SESSION_COOKIE) {
