@@ -136,3 +136,77 @@ export function isSimulatedOutcome(
 ): value is SimulatedPaymentOutcome {
   return value === "success" || value === "failure"
 }
+
+/**
+ * AK4: the card data of the simulated checkout is validated in the frontend
+ * before anything is booked. Every check stays silent while the field is
+ * untouched — the submit button simply remains disabled — and only speaks
+ * up once something was typed, like the amount checks above.
+ */
+export function cardholderError(raw: string): string | undefined {
+  const trimmed = raw.trim()
+
+  if (trimmed === "") {
+    return undefined
+  }
+
+  if (trimmed.length < 2) {
+    return "Bitte gib den Namen des Karteninhabers an."
+  }
+
+  return undefined
+}
+
+export function cardNumberError(raw: string): string | undefined {
+  const trimmed = raw.trim()
+
+  if (trimmed === "") {
+    return undefined
+  }
+
+  if (!/^\d{12,19}$/.test(trimmed.replace(/[\s-]/g, ""))) {
+    return "Bitte gib eine gültige Kartennummer an (12–19 Ziffern)."
+  }
+
+  return undefined
+}
+
+export function cardExpiryError(raw: string): string | undefined {
+  const trimmed = raw.trim()
+
+  if (trimmed === "") {
+    return undefined
+  }
+
+  const match = /^(0?[1-9]|1[0-2])\/(\d{2})$/.exec(trimmed)
+
+  if (!match) {
+    return "Bitte gib das Ablaufdatum im Format MM/JJ an."
+  }
+
+  // Expired at the end of the month: a card from 10/26 is invalid from 11/26.
+  const expires = new Date(2000 + Number(match[2]), Number(match[1]), 1)
+  const now = new Date()
+  now.setDate(1)
+  now.setHours(0, 0, 0, 0)
+
+  if (expires <= now) {
+    return "Diese Karte ist abgelaufen."
+  }
+
+  return undefined
+}
+
+export function cardCvcError(raw: string): string | undefined {
+  const trimmed = raw.trim()
+
+  if (trimmed === "") {
+    return undefined
+  }
+
+  if (!/^\d{3,4}$/.test(trimmed)) {
+    return "Bitte gib eine gültige CVC an (3–4 Ziffern)."
+  }
+
+  return undefined
+}

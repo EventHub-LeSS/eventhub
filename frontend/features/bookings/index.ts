@@ -1,6 +1,7 @@
 export { BookingForm } from "@/features/bookings/components/booking-form"
 export { PaymentResult } from "@/features/bookings/components/payment-result"
 export { PaymentView } from "@/features/bookings/components/payment-view"
+export { formatAmount } from "@/features/bookings/lib/format"
 export {
   completePaymentAction,
   createBookingAction,

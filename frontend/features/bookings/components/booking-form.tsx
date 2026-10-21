@@ -6,6 +6,10 @@ import { useState, useTransition } from "react"
 import { createBookingAction } from "@/features/bookings/lib/actions"
 import { formatAmount } from "@/features/bookings/lib/format"
 import {
+  cardCvcError,
+  cardExpiryError,
+  cardNumberError,
+  cardholderError,
   MAX_TICKETS_PER_BOOKING,
   parseTicketCount,
   ticketCountError,
@@ -26,19 +30,33 @@ interface BookingFormProps {
   price: string
   /** Snapshot from the event details; the backend counts capacity itself when reserving. */
   availableSeats: number | null
+  /** Total capacity, only shown as context next to the remaining seats. */
+  capacity: number
   /** False when the event is sold out or live reservations block booking. */
   bookable: boolean
   isAuthenticated: boolean
 }
 
+/**
+ * AK1: the checkout card of the event detail page. The amount to pay is
+ * calculated from ticket count and price here, before anything is reserved.
+ * The card data belongs to the simulated payment — it is validated in the
+ * frontend (AK4) but never leaves the browser, and completing the payment
+ * happens in the payment view the booking redirects to.
+ */
 export function BookingForm({
   eventId,
   price,
   availableSeats,
+  capacity,
   bookable,
   isAuthenticated,
 }: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState("1")
+  const [cardholder, setCardholder] = useState("")
+  const [cardNumber, setCardNumber] = useState("")
+  const [cardExpiry, setCardExpiry] = useState("")
+  const [cardCvc, setCardCvc] = useState("")
   const [message, setMessage] = useState<string>()
   const [isPending, startTransition] = useTransition()
 
@@ -56,7 +74,28 @@ export function BookingForm({
   const total =
     priceKnown && count !== null && count >= 1 ? unitPrice * count : null
 
-  const canSubmit = priceKnown && !countError && bookable && !isPending
+  // AK4: the simulated card data is validated live, before anything is sent.
+  // Untouched fields stay silent; the submit button just stays disabled.
+  const holderError = cardholderError(cardholder)
+  const numberError = cardNumberError(cardNumber)
+  const expiryError = cardExpiryError(cardExpiry)
+  const cvcError = cardCvcError(cardCvc)
+  const cardFilled =
+    cardholder.trim() !== "" &&
+    cardNumber.trim() !== "" &&
+    cardExpiry.trim() !== "" &&
+    cardCvc.trim() !== ""
+
+  const canSubmit =
+    priceKnown &&
+    !countError &&
+    cardFilled &&
+    !holderError &&
+    !numberError &&
+    !expiryError &&
+    !cvcError &&
+    bookable &&
+    !isPending
 
   function updateCount(next: number) {
     setMessage(undefined)
@@ -80,57 +119,60 @@ export function BookingForm({
   }
 
   return (
-    <Card>
+    <Card className="gap-4 shadow-md">
       <CardHeader>
-        <CardTitle>Tickets buchen</CardTitle>
+        <CardTitle className="text-xl font-bold">Tickets buchen</CardTitle>
         <CardDescription>
-          Der zu zahlende Betrag wird vor dem Abschluss angezeigt und von der
-          API gespeichert.
+          {availableSeats === null
+            ? "Die Platzanzeige ist derzeit nicht verfügbar."
+            : `${availableSeats} von ${capacity} Plätzen frei`}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="ticket-count" className="text-sm font-medium">
-              Ticketanzahl
-            </label>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                aria-label="Ein Ticket weniger"
-                disabled={isPending || (count ?? 1) <= 1}
-                onClick={() => updateCount(Math.max(1, (count ?? 1) - 1))}
-              >
-                <MinusIcon />
-              </Button>
-              <Input
-                id="ticket-count"
-                className="w-20 text-center"
-                inputMode="numeric"
-                value={ticketCount}
-                onChange={(changed) => {
-                  setMessage(undefined)
-                  setTicketCount(changed.target.value)
-                }}
-                aria-invalid={Boolean(countError)}
-                disabled={isPending}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                aria-label="Ein Ticket mehr"
-                disabled={isPending || (count ?? 1) >= MAX_TICKETS_PER_BOOKING}
-                onClick={() =>
-                  updateCount(
-                    Math.min(MAX_TICKETS_PER_BOOKING, (count ?? 1) + 1)
-                  )
-                }
-              >
-                <PlusIcon />
-              </Button>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="ticket-count" className="text-sm font-medium">
+                Anzahl Tickets
+              </label>
+              <div className="flex items-center rounded-full border border-border bg-muted focus-within:ring-2 focus-within:ring-ring/50">
+                <button
+                  type="button"
+                  aria-label="Ein Ticket weniger"
+                  className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  disabled={isPending || (count ?? 1) <= 1}
+                  onClick={() => updateCount(Math.max(1, (count ?? 1) - 1))}
+                >
+                  <MinusIcon className="size-4" />
+                </button>
+                <input
+                  id="ticket-count"
+                  inputMode="numeric"
+                  value={ticketCount}
+                  onChange={(changed) => {
+                    setMessage(undefined)
+                    setTicketCount(changed.target.value)
+                  }}
+                  aria-invalid={Boolean(countError)}
+                  disabled={isPending}
+                  className="h-8 w-10 bg-transparent text-center text-sm font-medium tabular-nums outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  aria-label="Ein Ticket mehr"
+                  className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  disabled={
+                    isPending || (count ?? 1) >= MAX_TICKETS_PER_BOOKING
+                  }
+                  onClick={() =>
+                    updateCount(
+                      Math.min(MAX_TICKETS_PER_BOOKING, (count ?? 1) + 1)
+                    )
+                  }
+                >
+                  <PlusIcon className="size-4" />
+                </button>
+              </div>
             </div>
             {countError ? (
               <p className="text-xs text-destructive" role="alert">
@@ -143,20 +185,16 @@ export function BookingForm({
             )}
           </div>
 
-          <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/40 p-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm text-muted-foreground">
-                Preis pro Ticket
-              </span>
-              <span className="text-sm font-medium tabular-nums">
-                {priceKnown ? formatAmount(price) : "—"}
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4">
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="text-muted-foreground">Zwischensumme</span>
+              <span className="font-medium tabular-nums">
+                {total !== null ? formatAmount(total) : "—"}
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm text-muted-foreground">
-                Zu zahlender Betrag
-              </span>
-              <span className="text-2xl font-semibold tabular-nums">
+              <span className="text-sm font-semibold">Gesamt</span>
+              <span className="text-2xl font-extrabold tabular-nums">
                 {total !== null ? formatAmount(total) : "—"}
               </span>
             </div>
@@ -165,6 +203,97 @@ export function BookingForm({
                 {count} × {formatAmount(price)}
               </p>
             )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="cardholder"
+                aria-label="Karteninhaber"
+                placeholder="Karteninhaber"
+                autoComplete="cc-name"
+                value={cardholder}
+                onChange={(changed) => {
+                  setMessage(undefined)
+                  setCardholder(changed.target.value)
+                }}
+                aria-invalid={Boolean(holderError)}
+                disabled={isPending}
+                className="bg-muted"
+              />
+              {holderError ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {holderError}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Input
+                id="card-number"
+                aria-label="Kartennummer"
+                placeholder="Kartennummer"
+                inputMode="numeric"
+                autoComplete="cc-number"
+                value={cardNumber}
+                onChange={(changed) => {
+                  setMessage(undefined)
+                  setCardNumber(changed.target.value)
+                }}
+                aria-invalid={Boolean(numberError)}
+                disabled={isPending}
+                className="bg-muted"
+              />
+              {numberError ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {numberError}
+                </p>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  id="card-expiry"
+                  aria-label="Ablaufdatum (MM/JJ)"
+                  placeholder="MM/JJ"
+                  autoComplete="cc-exp"
+                  value={cardExpiry}
+                  onChange={(changed) => {
+                    setMessage(undefined)
+                    setCardExpiry(changed.target.value)
+                  }}
+                  aria-invalid={Boolean(expiryError)}
+                  disabled={isPending}
+                  className="bg-muted"
+                />
+                {expiryError ? (
+                  <p className="text-xs text-destructive" role="alert">
+                    {expiryError}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Input
+                  id="card-cvc"
+                  aria-label="CVC"
+                  placeholder="CVC"
+                  inputMode="numeric"
+                  autoComplete="cc-csc"
+                  value={cardCvc}
+                  onChange={(changed) => {
+                    setMessage(undefined)
+                    setCardCvc(changed.target.value)
+                  }}
+                  aria-invalid={Boolean(cvcError)}
+                  disabled={isPending}
+                  className="bg-muted"
+                />
+                {cvcError ? (
+                  <p className="text-xs text-destructive" role="alert">
+                    {cvcError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
 
           {!bookable && (
@@ -186,10 +315,15 @@ export function BookingForm({
             </p>
           )}
 
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" disabled={!canSubmit} className="w-full">
             <TicketIcon />
-            {isPending ? "Reserviere …" : "Tickets reservieren & zur Kasse"}
+            {isPending
+              ? "Bestellung läuft …"
+              : "Jetzt kostenpflichtig bestellen"}
           </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            Simulierte Zahlung – es erfolgt keine echte Abbuchung.
+          </p>
         </form>
       </CardContent>
     </Card>
