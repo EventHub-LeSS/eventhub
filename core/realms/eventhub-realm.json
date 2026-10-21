@@ -73,10 +73,12 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "http://localhost:3000/*"
+        "http://localhost:3000/*",
+        "https://eventhub-ref.cookiee.org/*"
       ],
       "webOrigins": [
-        "http://localhost:3000"
+        "http://localhost:3000",
+        "https://eventhub-ref.cookiee.org"
       ],
       "defaultClientScopes": [
         "basic",
