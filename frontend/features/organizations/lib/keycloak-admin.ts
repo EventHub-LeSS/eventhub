@@ -66,7 +66,7 @@ async function keycloakFetch<T>(
 
   if (!response.ok) {
     throw new KeycloakAdminError(
-      `Keycloak admin request to ${path} failed`,
+      `Keycloak-Admin Anfrage an ${path} fehlgeschlagen`,
       response.status,
     );
   }
@@ -90,7 +90,7 @@ export async function getOrganizationByAlias(
   const match = orgs.find((org) => org.alias === alias);
 
   if (!match) {
-    throw new KeycloakAdminError(`Organization "${alias}" not found`, 404);
+    throw new KeycloakAdminError(`Organisation „${alias}“ nicht gefunden`, 404);
   }
 
   return {

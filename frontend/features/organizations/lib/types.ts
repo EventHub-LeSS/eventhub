@@ -23,18 +23,18 @@ export interface OrganizationRightOption {
 export const organizationRights: OrganizationRightOption[] = [
   {
     value: "org_admin",
-    label: "Organization admin",
-    description: "Manage organization settings and members.",
+    label: "Organisations-Admin",
+    description: "Einstellungen und Mitglieder der Organisation verwalten.",
   },
   {
     value: "event_manager",
-    label: "Event manager",
-    description: "Create, edit and publish events.",
+    label: "Event-Manager",
+    description: "Veranstaltungen erstellen, bearbeiten und veröffentlichen.",
   },
   {
     value: "finance_viewer",
-    label: "Finance viewer",
-    description: "View ticket sales and financial reports.",
+    label: "Finanzeinsicht",
+    description: "Ticketverkäufe und Finanzberichte einsehen.",
   },
 ];
 

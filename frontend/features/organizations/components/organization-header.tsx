@@ -61,7 +61,7 @@ export function OrganizationHeader({
         <div className="flex flex-col gap-2">
           <Button variant="outline" className="w-full">
             <UserPlusIcon />
-            Invite member
+            Mitglied einladen
           </Button>
           {isEditing ? (
             <Button
@@ -74,12 +74,12 @@ export function OrganizationHeader({
               )}
             >
               <CheckIcon />
-              Save changes
+              Änderungen speichern
             </Button>
           ) : (
             <Button variant="outline" className="w-full" onClick={onEditClick}>
               <PencilIcon />
-              Edit organization
+              Organisation bearbeiten
             </Button>
           )}
         </div>
@@ -93,7 +93,7 @@ export function OrganizationHeader({
             ) : (
               <ShieldOffIcon className="size-4 shrink-0" />
             )}
-            {organization.enabled ? "Enabled" : "Disabled"}
+            {organization.enabled ? "Aktiviert" : "Deaktiviert"}
           </li>
           {organization.domains.map((domain) => (
             <li key={domain.name} className="flex items-center gap-2">
@@ -104,7 +104,7 @@ export function OrganizationHeader({
                   variant="outline"
                   className="h-4 shrink-0 px-1.5 text-[10px]"
                 >
-                  Unverified
+                  Nicht verifiziert
                 </Badge>
               )}
             </li>

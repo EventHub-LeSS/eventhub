@@ -19,7 +19,7 @@ import {
 
 const chartConfig = {
   revenue: {
-    label: "Revenue",
+    label: "Umsatz",
     color: "var(--color-chart-2)",
   },
 } satisfies ChartConfig
@@ -28,8 +28,8 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales</CardTitle>
-        <CardDescription>Ticket revenue per month</CardDescription>
+        <CardTitle>Verkäufe</CardTitle>
+        <CardDescription>Ticketumsatz pro Monat</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer
@@ -51,7 +51,9 @@ export function SalesChart({ data }: { data: SalesPoint[] }) {
               width={56}
               domain={[0, "dataMax"]}
               tickCount={3}
-              tickFormatter={(value: number) => `€${value.toLocaleString()}`}
+              tickFormatter={(value: number) =>
+                `${value.toLocaleString("de-DE")} €`
+              }
             />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Line
