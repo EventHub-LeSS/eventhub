@@ -1,15 +1,20 @@
 "use client"
 
 import { MinusIcon, PlusIcon, TicketIcon } from "lucide-react"
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 
 import { createBookingAction } from "@/features/bookings/lib/actions"
+import {
+  savePendingCheckout,
+  takePendingCheckout,
+} from "@/features/bookings/lib/checkout-state"
 import { formatAmount } from "@/features/bookings/lib/format"
 import {
   cardCvcError,
   cardExpiryError,
   cardNumberError,
   cardholderError,
+  formatCardExpiry,
   MAX_TICKETS_PER_BOOKING,
   parseTicketCount,
   ticketCountError,
@@ -42,7 +47,9 @@ interface BookingFormProps {
  * calculated from ticket count and price here, before anything is reserved.
  * The card data belongs to the simulated payment — it is validated in the
  * frontend (AK4) but never leaves the browser, and completing the payment
- * happens in the payment view the booking redirects to.
+ * happens in the payment view the booking redirects to. Anonymous
+ * visitors park their checkout for the login roundtrip and continue with
+ * the booking straight after signing in.
  */
 export function BookingForm({
   eventId,
@@ -97,6 +104,50 @@ export function BookingForm({
     bookable &&
     !isPending
 
+  // A checkout parked for the login roundtrip is taken up here: signed-in
+  // visitors continue straight with the booking, anonymous ones at least
+  // find their input restored. The entry is consumed, so it never books
+  // again later.
+  //
+  // This effect exists to synchronize the form with the checkout parked in
+  // sessionStorage — an external system that is only readable in the
+  // browser, so the values cannot be derived during render.
+  // oxlint-disable react/set-state-in-effect
+  useEffect(() => {
+    const stored = takePendingCheckout(eventId)
+
+    if (!stored) {
+      return
+    }
+
+    setTicketCount(stored.ticketCount)
+    setCardholder(stored.cardholder)
+    setCardNumber(stored.cardNumber)
+    setCardExpiry(stored.cardExpiry)
+    setCardCvc(stored.cardCvc)
+
+    if (!isAuthenticated || !bookable) {
+      return
+    }
+
+    const storedCount = parseTicketCount(stored.ticketCount)
+
+    if (
+      storedCount === null ||
+      ticketCountError(stored.ticketCount, availableSeats)
+    ) {
+      return
+    }
+
+    startTransition(async () => {
+      // On success the action redirects to the payment view, so a result
+      // only arrives when reserving failed.
+      const result = await createBookingAction(eventId, storedCount)
+      setMessage(result.message)
+    })
+  }, [eventId, isAuthenticated, bookable, availableSeats, startTransition])
+  // oxlint-enable react/set-state-in-effect
+
   function updateCount(next: number) {
     setMessage(undefined)
     setTicketCount(String(next))
@@ -108,6 +159,19 @@ export function BookingForm({
 
     if (count === null || countError || !canSubmit) {
       return
+    }
+
+    if (!isAuthenticated) {
+      // The booking needs a login roundtrip that loses this form's state;
+      // park it, so the checkout continues right after the login.
+      savePendingCheckout({
+        eventId,
+        ticketCount,
+        cardholder,
+        cardNumber,
+        cardExpiry,
+        cardCvc,
+      })
     }
 
     startTransition(async () => {
@@ -186,12 +250,6 @@ export function BookingForm({
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4">
-            <div className="flex items-baseline justify-between gap-2 text-sm">
-              <span className="text-muted-foreground">Zwischensumme</span>
-              <span className="font-medium tabular-nums">
-                {total !== null ? formatAmount(total) : "—"}
-              </span>
-            </div>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-sm font-semibold">Gesamt</span>
               <span className="text-2xl font-extrabold tabular-nums">
@@ -259,7 +317,7 @@ export function BookingForm({
                   value={cardExpiry}
                   onChange={(changed) => {
                     setMessage(undefined)
-                    setCardExpiry(changed.target.value)
+                    setCardExpiry(formatCardExpiry(changed.target.value))
                   }}
                   aria-invalid={Boolean(expiryError)}
                   disabled={isPending}
@@ -304,8 +362,9 @@ export function BookingForm({
 
           {!isAuthenticated && (
             <p className="text-xs text-muted-foreground">
-              Beim Absenden wirst du aufgefordert, dich anzumelden, und kehrst
-              anschließend hierher zurück.
+              Beim Absenden wirst du aufgefordert, dich anzumelden. Deine
+              Eingaben bleiben erhalten und die Buchung geht nach dem Login
+              direkt weiter.
             </p>
           )}
 
@@ -317,9 +376,7 @@ export function BookingForm({
 
           <Button type="submit" disabled={!canSubmit} className="w-full">
             <TicketIcon />
-            {isPending
-              ? "Bestellung läuft …"
-              : "Jetzt kostenpflichtig bestellen"}
+            {isPending ? "Checkout läuft …" : "Zum Checkout"}
           </Button>
           <p className="text-center text-xs text-muted-foreground">
             Simulierte Zahlung – es erfolgt keine echte Abbuchung.

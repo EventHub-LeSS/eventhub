@@ -152,6 +152,21 @@ export function cardExpiryError(raw: string): string | undefined {
   return undefined
 }
 
+/**
+ * Formats what is typed into the expiry field: digits only, and the MM/JJ
+ * slash appears by itself once the month is complete, so it never has to
+ * be typed.
+ */
+export function formatCardExpiry(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 4)
+
+  if (digits.length <= 2) {
+    return digits
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`
+}
+
 export function cardCvcError(raw: string): string | undefined {
   const trimmed = raw.trim()
 
