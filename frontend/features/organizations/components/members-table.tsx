@@ -61,7 +61,7 @@ function formatDate(value: string | null) {
   if (!value) {
     return "—"
   }
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleDateString("de-DE", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -139,11 +139,11 @@ export function MembersTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Member</TableHead>
-            <TableHead>Rights</TableHead>
-            <TableHead className="text-right">Joined</TableHead>
+            <TableHead>Mitglied</TableHead>
+            <TableHead>Rechte</TableHead>
+            <TableHead className="text-right">Beigetreten</TableHead>
             <TableHead className="w-0">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">Aktionen</span>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -211,10 +211,10 @@ export function MembersTable({
       <Dialog open={editingMember !== null} onOpenChange={closeEditDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit organizational rights</DialogTitle>
+            <DialogTitle>Organisationsrechte bearbeiten</DialogTitle>
             <DialogDescription>
-              Choose the rights {editingMember?.name} has within this
-              organization.
+              Wähle die Rechte, die {editingMember?.name} in dieser Organisation
+              hat.
             </DialogDescription>
           </DialogHeader>
 
@@ -248,13 +248,13 @@ export function MembersTable({
               onClick={() => setEditingMember(null)}
               disabled={updateMemberRoles.isPending}
             >
-              Cancel
+              Abbrechen
             </Button>
             <Button
               onClick={handleSaveRights}
               disabled={updateMemberRoles.isPending}
             >
-              {updateMemberRoles.isPending ? "Saving…" : "Save changes"}
+              {updateMemberRoles.isPending ? "Wird gespeichert…" : "Änderungen speichern"}
             </Button>
           </DialogFooter>
         </DialogContent>

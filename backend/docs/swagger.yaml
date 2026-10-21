@@ -13,6 +13,20 @@ definitions:
     - eventId
     - numberOfTickets
     type: object
+  handler.CreateEventRatingRequest:
+    properties:
+      score:
+        example: 5
+        maximum: 5
+        minimum: 1
+        type: integer
+      text:
+        example: Great event!
+        maxLength: 2000
+        type: string
+    required:
+    - score
+    type: object
   handler.CurrentOrganizationResponse:
     properties:
       alias:
@@ -614,6 +628,23 @@ definitions:
       title:
         type: string
     type: object
+  model.RatingModel:
+    properties:
+      bookingId:
+        type: string
+      createdAt:
+        type: string
+      isVisible:
+        type: boolean
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+      updatedAt:
+        type: string
+    type: object
   model.SimulatedPaymentOutcome:
     enum:
     - success
@@ -659,6 +690,13 @@ definitions:
     - locationId
     - startTime
     - title
+    type: object
+  model.UtilizationPercentageResponse:
+    properties:
+      eventId:
+        type: string
+      utilizationPercentage:
+        type: number
     type: object
 info:
   contact: {}
@@ -1164,7 +1202,8 @@ paths:
   /events/{eventId}/available-seats:
     get:
       description: Returns the remaining available seats for an event. Requires the
-        event_manager role in the organization that owns the event.
+        event_manager role in the organization that owns the event or the global admin
+        role.
       parameters:
       - description: Event ID
         in: path
@@ -1241,7 +1280,8 @@ paths:
   /events/{eventId}/sold-tickets:
     get:
       description: Returns the number of confirmed tickets sold for an event. Requires
-        the event_manager role in the organization that owns the event.
+        the event_manager role in the organization that owns the event or the global
+        admin role.
       parameters:
       - description: Event ID
         in: path
@@ -1278,6 +1318,50 @@ paths:
       security:
       - BearerAuth: []
       summary: Get sold tickets
+      tags:
+      - events
+  /events/{eventId}/utilization-percentage:
+    get:
+      description: Returns the share of the capacity taken by confirmed bookings,
+        in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved
+        and cancelled bookings are not counted. Requires the event_manager role in
+        the organization that owns the event or the global admin role.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.UtilizationPercentageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Utilization Percentage
       tags:
       - events
   /events/{id}:
@@ -1428,6 +1512,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Publish event
+      tags:
+      - events
+  /events/{id}/ratings:
+    post:
+      consumes:
+      - application/json
+      description: Creates one rating per authenticated visitor and event. The visitor
+        must have a confirmed booking for this event, and the event must have ended
+        without being cancelled. Text is optional (at most 2000 characters); score
+        must be between 1 and 5. Ratings are visible immediately.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rating
+        in: body
+        name: rating
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateEventRatingRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.RatingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rate an event
       tags:
       - events
   /events/{id}/withdraw:

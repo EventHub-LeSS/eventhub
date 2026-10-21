@@ -21,11 +21,11 @@ import {
 
 const chartConfig = {
   created: {
-    label: "Events created",
+    label: "Erstellt",
     color: "var(--color-chart-2)",
   },
   held: {
-    label: "Events held",
+    label: "Durchgeführt",
     color: "var(--color-chart-4)",
   },
 } satisfies ChartConfig
@@ -34,9 +34,9 @@ export function ActivityChart({ data }: { data: ActivityPoint[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Activity</CardTitle>
+        <CardTitle>Aktivität</CardTitle>
         <CardDescription>
-          Events created vs. events held, per month
+          Erstellte vs. durchgeführte Veranstaltungen pro Monat
         </CardDescription>
       </CardHeader>
       <CardContent>

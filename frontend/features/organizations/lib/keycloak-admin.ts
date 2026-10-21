@@ -102,7 +102,7 @@ export async function getOrganizationByAlias(
   const match = orgs.find((org) => org.alias === alias);
 
   if (!match) {
-    throw new KeycloakAdminError(`Organization "${alias}" not found`, 404);
+    throw new KeycloakAdminError(`Organisation „${alias}“ nicht gefunden`, 404);
   }
 
   return {

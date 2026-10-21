@@ -54,62 +54,63 @@ export function validateDraft(draft: EventDraft): DraftErrors {
   const title = draft.title.trim()
 
   if (!title) {
-    errors.title = "A title is required."
+    errors.title = "Bitte gib einen Titel ein."
   } else if (title.length < TITLE_MIN_LENGTH) {
-    errors.title = `Use at least ${TITLE_MIN_LENGTH} characters.`
+    errors.title = `Mindestens ${TITLE_MIN_LENGTH} Zeichen.`
   } else if (title.length > TITLE_MAX_LENGTH) {
-    errors.title = `Use at most ${TITLE_MAX_LENGTH} characters.`
+    errors.title = `Höchstens ${TITLE_MAX_LENGTH} Zeichen.`
   }
 
   if (draft.description.trim().length > DESCRIPTION_MAX_LENGTH) {
-    errors.description = `Use at most ${DESCRIPTION_MAX_LENGTH} characters.`
+    errors.description = `Höchstens ${DESCRIPTION_MAX_LENGTH} Zeichen.`
   }
 
   const start = Date.parse(draft.startTime)
   const end = Date.parse(draft.endTime)
 
   if (!draft.startTime) {
-    errors.startTime = "A start is required."
+    errors.startTime = "Bitte gib einen Beginn an."
   } else if (Number.isNaN(start)) {
-    errors.startTime = "Enter a valid date and time."
+    errors.startTime = "Gib ein gültiges Datum und eine gültige Uhrzeit ein."
   } else if (start <= Date.now()) {
-    errors.startTime = "The start must be in the future."
+    errors.startTime = "Der Beginn muss in der Zukunft liegen."
   }
 
   if (!draft.endTime) {
-    errors.endTime = "An end is required."
+    errors.endTime = "Bitte gib ein Ende an."
   } else if (Number.isNaN(end)) {
-    errors.endTime = "Enter a valid date and time."
+    errors.endTime = "Gib ein gültiges Datum und eine gültige Uhrzeit ein."
   } else if (!Number.isNaN(start) && end <= start) {
-    errors.endTime = "The end must be after the start."
+    errors.endTime = "Das Ende muss nach dem Beginn liegen."
   }
 
   const capacity = Number(draft.capacity)
 
   if (!draft.capacity) {
-    errors.capacity = "A capacity is required."
+    errors.capacity = "Bitte gib eine Kapazität an."
   } else if (!Number.isInteger(capacity) || capacity < 1) {
-    errors.capacity = "Enter a whole number of at least 1."
+    errors.capacity = "Gib eine ganze Zahl von mindestens 1 ein."
   } else if (capacity > CAPACITY_MAX) {
-    errors.capacity = `Enter at most ${CAPACITY_MAX.toLocaleString("en")}.`
+    errors.capacity = `Höchstens ${CAPACITY_MAX.toLocaleString("de-DE")}.`
   }
 
   const price = Number(draft.price)
 
   if (!draft.price) {
-    errors.price = "A price is required. Use 0 for a free event."
+    errors.price =
+      "Bitte gib einen Preis an. 0 für eine kostenlose Veranstaltung."
   } else if (Number.isNaN(price) || price < 0) {
-    errors.price = "Enter 0 or a positive amount."
+    errors.price = "Gib 0 oder einen positiven Betrag ein."
   } else if (price > PRICE_MAX) {
-    errors.price = `Enter at most ${PRICE_MAX.toLocaleString("en")}.`
+    errors.price = `Höchstens ${PRICE_MAX.toLocaleString("de-DE")}.`
   }
 
   if (!draft.categoryId) {
-    errors.categoryId = "A category is required."
+    errors.categoryId = "Bitte wähle eine Kategorie."
   }
 
   if (!draft.locationId) {
-    errors.locationId = "A location is required."
+    errors.locationId = "Bitte wähle einen Veranstaltungsort."
   }
 
   return errors

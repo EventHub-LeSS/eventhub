@@ -81,7 +81,7 @@ export function OrganizationOverview({
     return (
       <Card>
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Loading organization…
+          Organisation wird geladen…
         </CardContent>
       </Card>
     )
@@ -92,7 +92,7 @@ export function OrganizationOverview({
       <Card>
         <CardContent className="py-10 text-center text-sm text-destructive">
           {organizationQuery.error?.message ??
-            "Could not load this organization. You may not have permission to view it."}
+            "Die Organisation konnte nicht geladen werden. Möglicherweise fehlt dir die Berechtigung."}
         </CardContent>
       </Card>
     )
@@ -115,7 +115,7 @@ export function OrganizationOverview({
       <Card>
         <CardContent className="py-10 text-center text-sm text-destructive">
           {membersQuery.error?.message ??
-            "Could not load the member list for this organization."}
+            "Die Mitgliederliste dieser Organisation konnte nicht geladen werden."}
         </CardContent>
       </Card>
     )
@@ -136,17 +136,17 @@ export function OrganizationOverview({
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">Übersicht</TabsTrigger>
           {canViewMembers && (
-            <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
+            <TabsTrigger value="members">Mitglieder ({members.length})</TabsTrigger>
           )}
           {canViewEvents && (
-            <TabsTrigger value="events">Events ({mockEvents.length})</TabsTrigger>
+            <TabsTrigger value="events">Veranstaltungen ({mockEvents.length})</TabsTrigger>
           )}
-          {canViewSales && <TabsTrigger value="sales">Sales</TabsTrigger>}
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+          {canViewSales && <TabsTrigger value="sales">Verkäufe</TabsTrigger>}
+          <TabsTrigger value="settings">Einstellungen</TabsTrigger>
           {canViewAuditLog && (
-            <TabsTrigger value="audit-log">Audit log</TabsTrigger>
+            <TabsTrigger value="audit-log">Audit-Log</TabsTrigger>
           )}
         </TabsList>
 
@@ -158,7 +158,7 @@ export function OrganizationOverview({
           <TabsContent value="members">
             <Card>
               <CardHeader>
-                <CardTitle>Members</CardTitle>
+                <CardTitle>Mitglieder</CardTitle>
               </CardHeader>
               <CardContent>
                 <MembersTable members={members} alias={alias} />
@@ -171,7 +171,7 @@ export function OrganizationOverview({
           <TabsContent value="events">
             <Card>
               <CardHeader>
-                <CardTitle>Events</CardTitle>
+                <CardTitle>Veranstaltungen</CardTitle>
               </CardHeader>
               <CardContent>
                 <EventsTable events={mockEvents} />
@@ -190,7 +190,7 @@ export function OrganizationOverview({
           <TabsContent value="audit-log">
             <Card>
               <CardHeader>
-                <CardTitle>Audit log</CardTitle>
+                <CardTitle>Audit-Log</CardTitle>
               </CardHeader>
               <CardContent>
                 <AuditLogTable entries={mockAuditLog} />
@@ -202,7 +202,7 @@ export function OrganizationOverview({
         <TabsContent value="settings">
           <Card>
             <CardHeader>
-              <CardTitle>Organization details</CardTitle>
+              <CardTitle>Organisationsdetails</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col divide-y divide-border">
               <SettingsRow
@@ -223,9 +223,9 @@ export function OrganizationOverview({
               />
               <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Enabled</p>
+                  <p className="text-sm font-medium text-foreground">Aktiviert</p>
                   <p className="text-sm text-muted-foreground">
-                    Disabled organizations cannot be used to publish events.
+                    Deaktivierte Organisationen können keine Veranstaltungen veröffentlichen.
                   </p>
                 </div>
                 <Switch

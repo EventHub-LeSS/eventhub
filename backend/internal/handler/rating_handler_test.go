@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
 	"backend/internal/service"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,9 +49,13 @@ func (s *ratingRepoStub) GetOrganizerRatingSummary(uuid.UUID) (*float64, int64, 
 	return nil, 0, s.err
 }
 
+func (s *ratingRepoStub) CreateEventRating(context.Context, uuid.UUID, uuid.UUID, int, string) (*model.RatingModel, error) {
+	return nil, s.err
+}
+
 func ratingRouter(s *service.RatingService) http.Handler {
 	gin.SetMode(gin.TestMode)
-	h := NewRatingHandler(s)
+	h := NewRatingHandler(s, nil)
 	r := gin.New()
 	// Include the existing wildcard siblings to catch Gin parameter-name conflicts.
 	r.GET("/api/v1/events/:eventId", func(c *gin.Context) { c.Status(http.StatusNoContent) })
@@ -107,5 +113,48 @@ func TestRatingSummaryEmptyJSON(t *testing.T) {
 				t.Fatalf("expected explicit null average: %d %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestCreateEventRatingRejectsInvalidInputBeforeUserLookup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewRatingHandler(service.NewRatingService(&ratingRepoStub{}, nil, nil), nil)
+	noop := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	r := gin.New()
+	// Register the POST siblings from main.go; Gin panics on wildcard name conflicts.
+	r.POST("/api/v1/events/draft", noop)
+	r.POST("/api/v1/events/:id/publish", noop)
+	r.POST("/api/v1/events/:id/withdraw", noop)
+	r.POST("/api/v1/events/:id/ratings", func(c *gin.Context) {
+		middleware.SetPrincipalForRequest(c, &middleware.Principal{Subject: "visitor"})
+		c.Next()
+	}, h.CreateEventRatingHandler)
+
+	for _, tc := range []struct {
+		eventID string
+		body    string
+	}{
+		{"invalid", `{"score":4}`},
+		{uuid.NewString(), `{"score":0}`},
+		{uuid.NewString(), `{"score":6}`},
+		{uuid.NewString(), `{}`},
+		{uuid.NewString(), `{"score":4,"text":"` + strings.Repeat("ä", 2001) + `"}`},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/events/"+tc.eventID+"/ratings", strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("input %s/%.40s: status=%d body=%.200s", tc.eventID, tc.body, rec.Code, rec.Body.String())
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	r = gin.New()
+	r.POST("/api/v1/events/:id/ratings", h.CreateEventRatingHandler)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost,
+		"/api/v1/events/"+uuid.NewString()+"/ratings", strings.NewReader(`{"score":4}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("unauthenticated request: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -95,7 +95,7 @@ func main() {
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
-	ratingHandler := handler.NewRatingHandler(ratingService)
+	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -125,6 +125,7 @@ func main() {
 		// events
 		events := protected.Group("/events")
 		{
+			events.POST("/:id/ratings", ratingHandler.CreateEventRatingHandler)
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
@@ -134,6 +135,7 @@ func main() {
 			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
+			events.GET("/:eventId/utilization-percentage", eventHandler.GetUtilizationPercentageHandler)
 		}
 		adminUsers := v1.Group("/admin/users")
 		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))

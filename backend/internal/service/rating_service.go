@@ -3,9 +3,18 @@ package service
 import (
 	"backend/internal/model"
 	"backend/internal/repository"
+	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrInvalidRating         = errors.New("rating score must be between 1 and 5")
+	ErrRatingBookingRequired = errors.New("a confirmed booking for this event is required to rate it")
+	ErrEventAlreadyRated     = errors.New("this event has already been rated by the visitor")
+	ErrEventNotRateable      = errors.New("only events that have taken place can be rated")
 )
 
 type RatingService struct {
@@ -49,4 +58,25 @@ func (s *RatingService) GetOrganizerRatingSummary(organizationID uuid.UUID) (*mo
 		return nil, err
 	}
 	return &model.OrganizerRatingSummary{OrganizationID: organizationID, AverageRating: average, RatedEventCount: count}, nil
+}
+
+func (s *RatingService) CreateEventRating(ctx context.Context, userID, eventID uuid.UUID, score int, text string) (*model.RatingModel, error) {
+	if score < 1 || score > 5 {
+		return nil, ErrInvalidRating
+	}
+	rating, err := s.ratingRepo.CreateEventRating(ctx, userID, eventID, score, text)
+	switch {
+	case errors.Is(err, repository.ErrRatingEventNotFound):
+		return nil, ErrEventNotFound
+	case errors.Is(err, repository.ErrRatingEventNotEnded):
+		return nil, ErrEventNotRateable
+	case errors.Is(err, repository.ErrNoConfirmedRatingBooking):
+		return nil, ErrRatingBookingRequired
+	case errors.Is(err, repository.ErrRatingAlreadyExists):
+		return nil, ErrEventAlreadyRated
+	case err != nil:
+		return nil, err
+	default:
+		return rating, nil
+	}
 }

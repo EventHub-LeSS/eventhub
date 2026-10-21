@@ -69,7 +69,7 @@ function errorMessage(body: unknown, status: number): string {
     }
   }
 
-  return `Request failed (${status}).`;
+  return `Anfrage fehlgeschlagen (${status}).`;
 }
 
 export function useOrganization(alias: string) {

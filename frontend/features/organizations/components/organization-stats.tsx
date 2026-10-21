@@ -37,27 +37,27 @@ export function OrganizationStats({
 
   const stats: StatDefinition[] = [
     {
-      label: "Members",
+      label: "Mitglieder",
       value: members.length.toString(),
-      hint: `${membersWithRights} with rights`,
+      hint: `${membersWithRights} mit Rechten`,
       icon: UsersIcon,
     },
     {
-      label: "Upcoming events",
+      label: "Bevorstehende Veranstaltungen",
       value: upcomingEvents.toString(),
-      hint: `${events.length} total`,
+      hint: `${events.length} insgesamt`,
       icon: CalendarDaysIcon,
     },
     {
-      label: "Tickets sold",
-      value: ticketsSold.toLocaleString(),
-      hint: "across all events",
+      label: "Verkaufte Tickets",
+      value: ticketsSold.toLocaleString("de-DE"),
+      hint: "über alle Veranstaltungen",
       icon: TicketIcon,
     },
     {
-      label: "Revenue",
-      value: `€${revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-      hint: "estimated, this year",
+      label: "Umsatz",
+      value: `${revenue.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €`,
+      hint: "geschätzt, dieses Jahr",
       icon: BanknoteIcon,
     },
   ]

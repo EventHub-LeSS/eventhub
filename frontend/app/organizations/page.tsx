@@ -11,20 +11,20 @@ export default async function OrganizationsPage() {
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-medium">Organizations</h1>
+          <h1 className="font-medium">Organisationen</h1>
           <p className="text-sm text-muted-foreground">
-            Organizations you are a member of.
+            Organisationen, in denen du Mitglied bist.
           </p>
         </div>
         <Button render={<Link href="/organizations/create" />} nativeButton={false}>
           <CirclePlusIcon />
-          Create Organization
+          Organisation erstellen
         </Button>
       </div>
 
       {user.organizations.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          You are not a member of any organization yet.
+          Du bist noch in keiner Organisation Mitglied.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -35,7 +35,7 @@ export default async function OrganizationsPage() {
             >
               <span className="text-sm font-medium">{organization}</span>
               {organization === user.activeOrganization && (
-                <span className="text-xs text-muted-foreground">Active</span>
+                <span className="text-xs text-muted-foreground">Aktiv</span>
               )}
             </li>
           ))}
