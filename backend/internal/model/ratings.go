@@ -18,6 +18,23 @@ type RatingModel struct {
 
 func (RatingModel) TableName() string { return "ratings" }
 
+// RatingModerationTarget is a rating together with the organization that owns the rated event.
+// EventID and KeycloakOrgID are nil if the rating is no longer attached to an event or organization.
+type RatingModerationTarget struct {
+	RatingID      uuid.UUID  `gorm:"column:rating_id"`
+	IsVisible     bool       `gorm:"column:is_visible"`
+	EventID       *uuid.UUID `gorm:"column:event_id"`
+	KeycloakOrgID *string    `gorm:"column:keycloak_org_id"`
+}
+
+// RatingVisibilityResponse is the visibility of a rating after moderation. changed is false if the
+// rating already had the requested visibility; nothing was changed or recorded then.
+type RatingVisibilityResponse struct {
+	RatingID uuid.UUID `json:"ratingId"`
+	Hidden   bool      `json:"hidden"`
+	Changed  bool      `json:"changed"`
+}
+
 // EVENTHUB-238: Bewertungsdurchschnitt für Veranstaltungen.
 type EventRatingSummary struct {
 	EventID       uuid.UUID `json:"eventId"`
