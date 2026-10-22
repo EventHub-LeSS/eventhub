@@ -88,6 +88,7 @@ func main() {
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
+	moderationService := service.NewModerationService(tx)
 
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
@@ -102,6 +103,7 @@ func main() {
 	ownBookingHandler := handler.NewOwnBookingHandler(ownBookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
+	moderationHandler := handler.NewModerationHandler(moderationService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -152,6 +154,13 @@ func main() {
 			adminUsers.GET("", userAdminHandler.ListUsers)
 			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
 			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
+		}
+
+		// Platform moderation of user content by global admins and moderators.
+		moderation := v1.Group("/moderation")
+		moderation.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin, middleware.RoleModerator))
+		{
+			moderation.PUT("/ratings/:ratingId/visibility", middleware.Audit(audit.RatingVisibilityChanged), moderationHandler.SetRatingVisibilityHandler)
 		}
 
 		// bookings
