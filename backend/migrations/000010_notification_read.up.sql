@@ -1,0 +1,1 @@
+ALTER TABLE notification_data ADD COLUMN read_at TIMESTAMPTZ;
