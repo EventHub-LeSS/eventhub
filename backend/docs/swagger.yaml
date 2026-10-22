@@ -466,6 +466,44 @@ definitions:
       time:
         type: string
     type: object
+  model.NotificationData:
+    properties:
+      bookingId:
+        type: string
+      content:
+        type: string
+      createdAt:
+        type: string
+      notificationId:
+        type: string
+      occasion:
+        type: string
+      readAt:
+        type: string
+      scheduledAt:
+        type: string
+      simulated:
+        type: boolean
+      subject:
+        type: string
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  model.NotificationPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.NotificationData'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   model.OrganizationRole:
     enum:
     - org_admin
@@ -1082,6 +1120,59 @@ paths:
       summary: Zahlung simulieren
       tags:
       - payments
+  /bookings/{bookingId}/reminder:
+    post:
+      description: Creates an in-app reminder for an own confirmed booking of an upcoming
+        published event. scheduledAt is 24 hours before the event or now for short-notice
+        bookings. Simulation displays it immediately. Repeated calls refresh the existing
+        reminder from current event data. Changed reminders become unread. No email
+        or external delivery service is used. Foreign bookings return 404.
+      parameters:
+      - description: Booking UUID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Existing reminder
+          schema:
+            $ref: '#/definitions/model.NotificationData'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.NotificationData'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Simulate own booking reminder
+      tags:
+      - notifications
   /debug/token:
     post:
       consumes:
@@ -1746,6 +1837,98 @@ paths:
       summary: List own events
       tags:
       - events
+  /notifications:
+    get:
+      description: 'Returns only the authenticated user''s notifications, newest first.
+        The response contains items, page, limit and total; empty pages return items:
+        []. readAt is null for unread notifications. Simulated reminder content and
+        scheduledAt are refreshed from current event and location data before display;
+        changed reminders become unread. Simulation is immediately visible, even before
+        scheduledAt; no email is sent.'
+      parameters:
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.NotificationPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List own notifications
+      tags:
+      - notifications
+  /notifications/{notificationId}/read:
+    patch:
+      description: Idempotently sets readAt. Foreign and unknown notifications return
+        404. Changed simulated reminders become unread again on their next refresh.
+      parameters:
+      - description: Notification UUID
+        in: path
+        name: notificationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.NotificationData'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Mark own notification as read
+      tags:
+      - notifications
   /organizations/:
     post:
       consumes:

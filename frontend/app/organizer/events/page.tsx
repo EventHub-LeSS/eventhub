@@ -12,7 +12,7 @@ import {
 } from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
 
-const dateFormat = new Intl.DateTimeFormat("en-GB", {
+const dateFormat = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
   timeStyle: "short",
 })
@@ -56,10 +56,10 @@ export default async function OrganizerDraftsPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="font-medium">Drafts</h1>
+          <h1 className="font-medium">Entwürfe</h1>
           <p className="text-sm text-muted-foreground">
-            Only you and your organization can see these. Visitors do not find
-            them until you publish.
+            Nur du und deine Organisation können diese sehen. Besucher finden
+            sie erst, wenn du sie veröffentlichst.
           </p>
         </div>
         <Button
@@ -67,14 +67,16 @@ export default async function OrganizerDraftsPage() {
           nativeButton={false}
         >
           <CirclePlusIcon />
-          Create Event
+          Veranstaltung erstellen
         </Button>
       </div>
 
       {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
       {!loadError && drafts.length === 0 && (
-        <p className="text-sm text-muted-foreground">You have no drafts yet.</p>
+        <p className="text-sm text-muted-foreground">
+          Du hast noch keine Entwürfe.
+        </p>
       )}
 
       {drafts.length > 0 && (
@@ -87,7 +89,7 @@ export default async function OrganizerDraftsPage() {
               <div>
                 <p className="text-sm font-medium">{draft.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatTimeSpan(draft)} · {draft.capacity} seats ·{" "}
+                  {formatTimeSpan(draft)} · {draft.capacity} Plätze ·{" "}
                   {draft.price}
                 </p>
               </div>
@@ -104,7 +106,7 @@ export default async function OrganizerDraftsPage() {
                   variant="outline"
                   size="sm"
                 >
-                  Edit
+                  Bearbeiten
                 </Button>
                 <PublishDraftButton eventId={draft.eventId} />
               </div>

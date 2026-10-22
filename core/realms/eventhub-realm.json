@@ -15,6 +15,15 @@
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "noreply@eventhub.local",
+    "fromDisplayName": "EventHub",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
   "organizations": [
     {
       "name": "Provadis Hochschule",
@@ -64,14 +73,19 @@
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "redirectUris": [
-        "http://localhost:3000/*"
+        "http://localhost:3000/*",
+        "https://eventhub-ref.cookiee.org/*",
+        "https://eventhub.cookiee.org/*"
       ],
       "webOrigins": [
-        "http://localhost:3000"
+        "http://localhost:3000",
+        "https://eventhub-ref.cookiee.org",
+        "https://eventhub.cookiee.org"
       ],
       "defaultClientScopes": [
         "basic",
         "profile",
+        "email",
         "roles",
         "backend-audience"
       ],
@@ -161,7 +175,9 @@
         }
       ],
       "clientRoles": {
-        "backend": ["admin"]
+        "backend": [
+          "admin"
+        ]
       }
     },
     {
@@ -169,11 +185,14 @@
       "enabled": true,
       "serviceAccountClientId": "backend",
       "clientRoles": {
-        "realm-management": ["manage-organizations", "manage-users", "view-clients"]
+        "realm-management": [
+          "manage-organizations",
+          "manage-users",
+          "view-clients"
+        ]
       }
     }
   ],
-  
   "clientScopes": [
     {
       "name": "basic",
@@ -213,6 +232,32 @@
           "config": {
             "user.attribute": "username",
             "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "EventHub user email claim",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
             "jsonType.label": "String",
             "id.token.claim": "true",
             "access.token.claim": "true",
@@ -320,7 +365,9 @@
           "composite": true,
           "composites": {
             "client": {
-              "realm-management": ["realm-admin"]
+              "realm-management": [
+                "realm-admin"
+              ]
             }
           }
         },
@@ -349,7 +396,11 @@
     "realm-management": [
       {
         "client": "backend",
-        "roles": ["manage-organizations", "manage-users", "view-clients"]
+        "roles": [
+          "manage-organizations",
+          "manage-users",
+          "view-clients"
+        ]
       }
     ]
   }

@@ -37,7 +37,7 @@ async function problemDetail(response: Response): Promise<string> {
     // Not a problem body, fall through to the generic message.
   }
 
-  return `Request failed with status ${response.status}.`
+  return `Anfrage fehlgeschlagen (Status ${response.status}).`
 }
 
 async function apiFetch<T>(

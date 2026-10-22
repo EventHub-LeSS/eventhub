@@ -17,8 +17,11 @@ export type { SessionUser, UserRole } from "@/features/auth/lib/user"
 export { refreshAccessToken } from "@/features/auth/lib/oidc"
 export {
   createSessionCookie,
+  joinSessionCookie,
   sealSession,
   sessionCookieOptions,
+  splitSessionCookie,
+  staleSessionCookieNames,
   unsealSession,
 } from "@/features/auth/lib/session"
 export type { Session } from "@/features/auth/lib/session"

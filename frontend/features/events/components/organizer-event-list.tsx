@@ -16,22 +16,23 @@ export async function OrganizerEventList() {
   return (
     <section className="mt-4 flex flex-col gap-4">
       <div>
-        <h2 className="font-medium">All events</h2>
+        <h2 className="font-medium">Alle Veranstaltungen</h2>
         <p className="text-sm text-muted-foreground">
-          Every event of your active organization, from drafts to completed
-          ones.
+          Alle Veranstaltungen deiner aktiven Organisation, vom Entwurf bis zur
+          abgeschlossenen Veranstaltung.
         </p>
       </div>
 
       {result.status === "unavailable" && (
         <p className="text-sm text-destructive">
-          Your events can&apos;t be loaded right now. Please try again later.
+          Deine Veranstaltungen können gerade nicht geladen werden. Bitte
+          versuche es später erneut.
         </p>
       )}
 
       {result.status === "ok" && result.events.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Your organization has no events yet.
+          Deine Organisation hat noch keine Veranstaltungen.
         </p>
       )}
 
