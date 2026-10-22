@@ -119,10 +119,10 @@ export async function publishDraftAction(
 
 /** The API's technical reasons for refusing a deletion, in plain words. */
 const deleteRefusals: Record<number, string> = {
-  400: "Only drafts can be deleted. This event is no longer a draft.",
-  403: "You are not allowed to delete events of this organization.",
-  404: "This draft no longer exists.",
-  409: "This event already has bookings and cannot be deleted.",
+  400: "Nur Entwürfe können gelöscht werden. Diese Veranstaltung ist kein Entwurf mehr.",
+  403: "Du darfst keine Veranstaltungen dieser Organisation löschen.",
+  404: "Diesen Entwurf gibt es nicht mehr.",
+  409: "Für diese Veranstaltung gibt es bereits Buchungen, deshalb kann sie nicht gelöscht werden.",
 }
 
 /** EVENTHUB-256: delete a draft for good. */

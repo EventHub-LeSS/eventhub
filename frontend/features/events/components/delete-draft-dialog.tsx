@@ -57,7 +57,7 @@ export function DeleteDraftDialog({
       // meantime leaves the drafts list on the refresh, and this dialog with it.
       if (result.message) {
         toast.add({
-          title: "Draft could not be deleted",
+          title: "Entwurf konnte nicht gelöscht werden",
           description: result.message,
         })
         router.refresh()
@@ -66,8 +66,8 @@ export function DeleteDraftDialog({
 
       toast.add({
         type: "success",
-        title: "Draft deleted",
-        description: `"${eventTitle}" was deleted.`,
+        title: "Entwurf gelöscht",
+        description: `"${eventTitle}" wurde gelöscht.`,
       })
 
       if (pathname !== DRAFTS_PATH) {
@@ -80,10 +80,10 @@ export function DeleteDraftDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Delete draft?</DialogTitle>
+          <DialogTitle>Entwurf löschen?</DialogTitle>
           <DialogDescription>
-            &quot;{eventTitle}&quot; will be deleted permanently. This cannot be
-            undone.
+            &quot;{eventTitle}&quot; wird endgültig gelöscht. Das kann nicht
+            rückgängig gemacht werden.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,14 +93,14 @@ export function DeleteDraftDialog({
             onClick={() => handleOpenChange(false)}
             disabled={isDeleting}
           >
-            Cancel
+            Abbrechen
           </Button>
           <Button
             variant="destructive"
             onClick={handleDelete}
             disabled={isDeleting}
           >
-            {isDeleting ? "Deleting…" : "Delete draft"}
+            {isDeleting ? "Wird gelöscht…" : "Entwurf löschen"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -121,7 +121,7 @@ export function DeleteDraftButton({
   return (
     <>
       <Button variant="destructive" size="sm" onClick={() => setIsOpen(true)}>
-        Delete
+        Löschen
       </Button>
       <DeleteDraftDialog
         eventId={eventId}

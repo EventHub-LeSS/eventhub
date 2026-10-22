@@ -12,6 +12,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
+import type { OrganizationRole } from "@/features/auth"
 import { DeleteDraftDialog } from "@/features/events/components/delete-draft-dialog"
 import {
   publishDraftAction,
@@ -42,6 +43,8 @@ interface EventActionsProps {
   status: EventStatus
   /** The detail page is the link target itself, so it leaves that entry out. */
   showViewDetails?: boolean
+  /** Roles in the event's organization; actions the API would refuse are left out. */
+  roles: OrganizationRole[]
 }
 
 /**
@@ -56,6 +59,7 @@ export function EventActions({
   eventTitle,
   status,
   showViewDetails = true,
+  roles,
 }: EventActionsProps) {
   const router = useRouter()
   const [error, setError] = useState<string>()
@@ -107,6 +111,16 @@ export function EventActions({
     })
   }
 
+  // Mirrors the API: event managers manage events, org admins may also delete
+  // drafts. A finance viewer only gets "Details anzeigen".
+  const canManage = roles.includes("event_manager")
+  const canDelete =
+    status === "draft" && (canManage || roles.includes("org_admin"))
+
+  if (!showViewDetails && !canManage && !canDelete) {
+    return null
+  }
+
   return (
     <div className="flex flex-col items-end gap-1">
       <DropdownMenu>
@@ -125,34 +139,36 @@ export function EventActions({
                 <EyeIcon />
                 Details anzeigen
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {(canManage || canDelete) && <DropdownMenuSeparator />}
             </>
           )}
-          {status === "draft" && (
+          {canManage && status === "draft" && (
             <DropdownMenuItem onClick={handlePublish}>
               <SendIcon />
               Veröffentlichen
             </DropdownMenuItem>
           )}
-          {status === "published" && (
+          {canManage && status === "published" && (
             <DropdownMenuItem onClick={() => handleWithdrawOpenChange(true)}>
               <UndoIcon />
               Zurückziehen
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem>
-            <PencilIcon />
-            Bearbeiten
-          </DropdownMenuItem>
-          {status === "draft" && (
+          {canManage && (
+            <DropdownMenuItem>
+              <PencilIcon />
+              Bearbeiten
+            </DropdownMenuItem>
+          )}
+          {canDelete && (
             <>
-              <DropdownMenuSeparator />
+              {canManage && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 variant="destructive"
                 onClick={() => setIsDeleteOpen(true)}
               >
                 <Trash2Icon />
-                Delete
+                Löschen
               </DropdownMenuItem>
             </>
           )}
