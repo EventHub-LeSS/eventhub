@@ -554,6 +554,82 @@ const docTemplate = `{
                 }
             }
         },
+        "/bookings/{bookingId}/reminder": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates an in-app reminder for an own confirmed booking of an upcoming published event. scheduledAt is 24 hours before the event or now for short-notice bookings. Simulation displays it immediately. Repeated calls refresh the existing reminder from current event data. Changed reminders become unread. No email or external delivery service is used. Foreign bookings return 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Simulate own booking reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking UUID",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Existing reminder",
+                        "schema": {
+                            "$ref": "#/definitions/model.NotificationData"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.NotificationData"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/debug/token": {
             "post": {
                 "description": "TEST ONLY — accepts username/password and returns a Keycloak access token. Disabled in production (requires DEBUG_ENABLED=true).",
@@ -945,7 +1021,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event.",
+                "description": "Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event or the global admin role.",
                 "produces": [
                     "application/json"
                 ],
@@ -1002,6 +1078,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/rating-summary": {
+            "get": {
+                "description": "Public average score and review count. Only visible ratings with scores 1–5 linked to confirmed bookings of this event count; ticket quantities do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0. Published events and ended completed events expose summaries; drafts and cancelled events return 404. Averages are not rounded.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get event rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/sold-tickets": {
             "get": {
                 "security": [
@@ -1009,7 +1132,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event.",
+                "description": "Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event or the global admin role.",
                 "produces": [
                     "application/json"
                 ],
@@ -1031,6 +1154,70 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/model.SoldTicketsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{eventId}/utilization-percentage": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the share of the capacity taken by confirmed bookings, in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved and cancelled bookings are not counted. Requires the event_manager role in the organization that owns the event or the global admin role.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get Utilization Percentage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.UtilizationPercentageResponse"
                         }
                     },
                     "400": {
@@ -1280,6 +1467,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{id}/ratings": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates one rating per authenticated visitor and event. The visitor must have a confirmed booking for this event, and the event must have ended without being cancelled. Text is optional (at most 2000 characters); score must be between 1 and 5. Ratings are visible immediately.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Rate an event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Rating",
+                        "name": "rating",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.CreateEventRatingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.RatingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{id}/withdraw": {
             "post": {
                 "security": [
@@ -1321,6 +1590,138 @@ const docTemplate = `{
                         "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "List own notifications",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-indexed)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.NotificationPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/{notificationId}/read": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Idempotently sets readAt. Foreign and unknown notifications return 404. Changed simulated reminders become unread again on their next refresh.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notifications"
+                ],
+                "summary": "Mark own notification as read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Notification UUID",
+                        "name": "notificationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.NotificationData"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
                         }
                     },
                     "403": {
@@ -1578,6 +1979,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/organizations/{organizationID}/rating-summary": {
+            "get": {
+                "description": "Public average of unrounded event averages, with equal weight per rated event. Includes only this organization's published or completed events with endTime \u003c= database time. Uses the same visible, score 1–5, confirmed-booking ratings as event summaries. Unrated events do not contribute. No rated events returns averageRating=null and ratedEventCount=0. Recommendations retain their existing calculation.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Get organizer rating summary",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization database UUID (not Keycloak ID or alias)",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerRatingSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/recommendations": {
             "get": {
                 "security": [
@@ -1681,6 +2129,25 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1,
                     "example": 2
+                }
+            }
+        },
+        "handler.CreateEventRatingRequest": {
+            "type": "object",
+            "required": [
+                "score"
+            ],
+            "properties": {
+                "score": {
+                    "type": "integer",
+                    "maximum": 5,
+                    "minimum": 1,
+                    "example": 5
+                },
+                "text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "example": "Great event!"
                 }
             }
         },
@@ -2271,6 +2738,21 @@ const docTemplate = `{
                 }
             }
         },
+        "model.EventRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "ratingCount": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.EventStatus": {
             "type": "string",
             "enum": [
@@ -2306,6 +2788,64 @@ const docTemplate = `{
                 }
             }
         },
+        "model.NotificationData": {
+            "type": "object",
+            "properties": {
+                "bookingId": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "notificationId": {
+                    "type": "string"
+                },
+                "occasion": {
+                    "type": "string"
+                },
+                "readAt": {
+                    "type": "string"
+                },
+                "scheduledAt": {
+                    "type": "string"
+                },
+                "simulated": {
+                    "type": "boolean"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.NotificationPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.NotificationData"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.OrganizationRole": {
             "type": "string",
             "enum": [
@@ -2318,6 +2858,21 @@ const docTemplate = `{
                 "RoleEventManager",
                 "RoleFinanceViewer"
             ]
+        },
+        "model.OrganizerRatingSummary": {
+            "type": "object",
+            "properties": {
+                "averageRating": {
+                    "type": "number",
+                    "x-nullable": true
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "ratedEventCount": {
+                    "type": "integer"
+                }
+            }
         },
         "model.PaymentFailureReason": {
             "type": "string",
@@ -2523,6 +3078,32 @@ const docTemplate = `{
                 }
             }
         },
+        "model.RatingModel": {
+            "type": "object",
+            "properties": {
+                "bookingId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "isVisible": {
+                    "type": "boolean"
+                },
+                "ratingId": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
         "model.SalesDashboardEventResponse": {
             "type": "object",
             "properties": {
@@ -2604,6 +3185,17 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 200,
                     "minLength": 3
+                }
+            }
+        },
+        "model.UtilizationPercentageResponse": {
+            "type": "object",
+            "properties": {
+                "eventId": {
+                    "type": "string"
+                },
+                "utilizationPercentage": {
+                    "type": "number"
                 }
             }
         }

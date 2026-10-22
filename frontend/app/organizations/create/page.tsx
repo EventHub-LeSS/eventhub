@@ -8,9 +8,9 @@ export default async function CreateOrganizationPage() {
     <div className="flex flex-1 justify-center p-6">
       <div className="flex w-full max-w-xl flex-col gap-6">
         <div>
-          <h1 className="text-lg font-medium">Create an Organization</h1>
+          <h1 className="text-lg font-medium">Organisation erstellen</h1>
           <p className="text-sm text-muted-foreground">
-            Go do and create great things
+            Leg los und schaffe Großartiges.
           </p>
         </div>
         <CreateOrganizationForm defaultOrgAdmin={user.email} />

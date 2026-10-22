@@ -26,11 +26,13 @@ type fakeEventRepo struct {
 	listOrgIDs []uuid.UUID
 	listStatus model.EventStatus
 
-	ticketCounts   map[uuid.UUID]int64
-	ticketCountErr error
-	hasBookings    bool
-	deleted        []uuid.UUID
-	deleteMisses   bool
+	ticketCounts     map[uuid.UUID]int64
+	ticketCountErr   error
+	confirmedTickets int64
+
+	hasBookings  bool
+	deleted      []uuid.UUID
+	deleteMisses bool
 }
 
 func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
@@ -71,7 +73,12 @@ func (f *fakeEventRepo) GetConfirmedTicketCount(eventID uuid.UUID) (int64, error
 	if f.ticketCountErr != nil {
 		return 0, f.ticketCountErr
 	}
-	return f.ticketCounts[eventID], nil
+
+	if f.ticketCounts != nil {
+		return f.ticketCounts[eventID], nil
+	}
+
+	return f.confirmedTickets, nil
 }
 
 func (f *fakeEventRepo) HasBookings(uuid.UUID) (bool, error) {

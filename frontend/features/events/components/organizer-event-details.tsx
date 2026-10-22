@@ -41,7 +41,8 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
   if (result.status === "unavailable") {
     return (
       <p className="text-sm text-destructive">
-        This event can&apos;t be loaded right now. Please try again later.
+        Diese Veranstaltung kann gerade nicht geladen werden. Bitte versuche es
+        später erneut.
       </p>
     )
   }
@@ -81,10 +82,10 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
       </div>
 
       <dl className="grid gap-4 sm:grid-cols-2">
-        <Detail label="Date & time">
+        <Detail label="Datum & Uhrzeit">
           {formatEventTimeRange(event.startTime, event.endTime)}
         </Detail>
-        <Detail label="Location">
+        <Detail label="Veranstaltungsort">
           {location ? (
             <span className="flex flex-col">
               <span>{location.name}</span>
@@ -101,20 +102,20 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
             EMPTY_VALUE
           )}
         </Detail>
-        <Detail label="Category">
+        <Detail label="Kategorie">
           {event.category?.category ?? EMPTY_VALUE}
         </Detail>
-        <Detail label="Capacity">{formatEventCapacity(event.capacity)}</Detail>
+        <Detail label="Kapazität">{formatEventCapacity(event.capacity)}</Detail>
         {event.soldTickets.status !== "forbidden" && (
-          <Detail label="Sold tickets">
+          <Detail label="Verkaufte Tickets">
             {event.soldTickets.status === "ok"
               ? formatSoldTickets(event.soldTickets.count, event.capacity)
               : EMPTY_VALUE}
           </Detail>
         )}
-        <Detail label="Price">{formatEventPrice(event.price)}</Detail>
-        <Detail label="Created">{formatEventDateTime(event.createdAt)}</Detail>
-        <Detail label="Last updated">
+        <Detail label="Preis">{formatEventPrice(event.price)}</Detail>
+        <Detail label="Erstellt">{formatEventDateTime(event.createdAt)}</Detail>
+        <Detail label="Zuletzt aktualisiert">
           {formatEventDateTime(event.updatedAt)}
         </Detail>
       </dl>

@@ -410,6 +410,7 @@ func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, key
 func (s *EventService) GetEventStatistics(
 	eventID uuid.UUID,
 	keycloakOrgIDs []string,
+	globalAdmin bool,
 ) (*model.EventStatistics, error) {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
@@ -418,16 +419,17 @@ func (s *EventService) GetEventStatistics(
 	if event == nil {
 		return nil, ErrEventNotFound
 	}
-	if event.OrganizerID == nil {
-		return nil, ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return nil, err
-	}
-	if !managesOrganization(org, keycloakOrgIDs) {
-		return nil, ErrForbidden
+	if !globalAdmin {
+		if event.OrganizerID == nil {
+			return nil, ErrForbidden
+		}
+		org, err := s.orgRepo.GetByID(*event.OrganizerID)
+		if err != nil {
+			return nil, err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return nil, ErrForbidden
+		}
 	}
 
 	soldTickets, err := s.eventRepo.GetConfirmedTicketCount(eventID)
@@ -440,11 +442,18 @@ func (s *EventService) GetEventStatistics(
 		availableSeats = 0
 	}
 
+	var utilization float64
+	if event.Capacity > 0 {
+		ratio := float64(soldTickets) / float64(event.Capacity)
+		utilization = math.Round(math.Min(1, math.Max(0, ratio))*10000) / 100
+	}
+
 	return &model.EventStatistics{
-		EventID:        event.EventID,
-		Capacity:       event.Capacity,
-		SoldTickets:    soldTickets,
-		AvailableSeats: availableSeats,
+		EventID:               event.EventID,
+		Capacity:              event.Capacity,
+		SoldTickets:           soldTickets,
+		AvailableSeats:        availableSeats,
+		UtilizationPercentage: utilization,
 	}, nil
 }
 

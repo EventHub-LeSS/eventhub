@@ -75,6 +75,7 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	eventRepo := repository.NewEventRepository(db)
 	bookingRepo := repository.NewBookingRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	tx := repository.NewTransactor(db)
 
@@ -85,15 +86,20 @@ func main() {
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
+	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
+
+	notificationService := service.NewNotificationService(notificationRepo, tx)
 
 	// Initialize Handlers
 	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
+	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -104,6 +110,8 @@ func main() {
 		v1.GET("/", handler.Healthcheck)
 		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
 		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
+		v1.GET("/events/:eventId/rating-summary", ratingHandler.GetEventRatingSummaryHandler)
+		v1.GET("/organizations/:organizationID/rating-summary", ratingHandler.GetOrganizerRatingSummaryHandler)
 
 		// DEBUG routes — disabled in production
 		if os.Getenv("DEBUG_ENABLED") == "true" {
@@ -115,12 +123,16 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(authenticator.Middleware())
 		protected.GET("/users/me", handler.CurrentUser)
+		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
+		protected.PATCH("/notifications/:notificationId/read", notificationHandler.MarkNotificationReadHandler)
+		protected.POST("/bookings/:bookingId/reminder", notificationHandler.SimulateReminderHandler)
 
 		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
 
 		// events
 		events := protected.Group("/events")
 		{
+			events.POST("/:id/ratings", ratingHandler.CreateEventRatingHandler)
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
 			events.GET("/self/dashboard", eventHandler.GetSalesDashboardHandler)
@@ -131,6 +143,7 @@ func main() {
 			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
+			events.GET("/:eventId/utilization-percentage", eventHandler.GetUtilizationPercentageHandler)
 		}
 		adminUsers := v1.Group("/admin/users")
 		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
