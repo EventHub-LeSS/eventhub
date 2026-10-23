@@ -13,6 +13,15 @@ type OrganizationRepository interface {
 	CreateOrganization(org *model.OrganizationModel) error
 	GetByID(organizationID uuid.UUID) (*model.OrganizationModel, error)
 	GetByKeycloakOrgID(keycloakOrgID string) (*model.OrganizationModel, error)
+	// GetByAnyRef returns the organization referenced by its Keycloak organization ID, its alias
+	// or its name. Keycloak keeps all three unique across organizations, so at most one row
+	// matches; matching by alias or name survives realm re-imports, which change the ID but
+	// keep alias and name.
+	GetByAnyRef(keycloakOrgID, alias, name string) (*model.OrganizationModel, error)
+	// UpdateKeycloakRefs follows an organization that Keycloak re-created with a new ID, e.g.
+	// after a realm re-import: the database keeps its single row and only the Keycloak-owned
+	// identity columns move. An empty alias or name leaves the column unchanged.
+	UpdateKeycloakRefs(organizationID uuid.UUID, keycloakOrgID, alias, name string) error
 	// ListByKeycloakOrgIDsOrAliases returns the organizations whose Keycloak ID or alias is in refs.
 	// Tokens identify organizations by alias when the claim carries no ID.
 	ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error)
@@ -53,6 +62,34 @@ func (r *organizationRepository) GetByKeycloakOrgID(keycloakOrgID string) (*mode
 		return nil, err
 	}
 	return org, nil
+}
+
+func (r *organizationRepository) GetByAnyRef(keycloakOrgID, alias, name string) (*model.OrganizationModel, error) {
+	org := &model.OrganizationModel{}
+	err := r.db.Where(
+		"keycloak_org_id = ? OR (COALESCE(alias, '') <> '' AND alias = ?) OR name = ?",
+		keycloakOrgID, alias, name,
+	).Order("created_at").First(org).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return org, nil
+}
+
+func (r *organizationRepository) UpdateKeycloakRefs(organizationID uuid.UUID, keycloakOrgID, alias, name string) error {
+	updates := map[string]any{"keycloak_org_id": keycloakOrgID}
+	if alias != "" {
+		updates["alias"] = alias
+	}
+	if name != "" {
+		updates["name"] = name
+	}
+	return r.db.Model(&model.OrganizationModel{}).
+		Where("organization_id = ?", organizationID).
+		Updates(updates).Error
 }
 
 func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error) {

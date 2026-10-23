@@ -98,6 +98,14 @@ func (f *fakeOrgRepo) GetByKeycloakOrgID(string) (*model.OrganizationModel, erro
 	return nil, nil
 }
 
+func (f *fakeOrgRepo) GetByAnyRef(string, string, string) (*model.OrganizationModel, error) {
+	return nil, nil
+}
+
+func (f *fakeOrgRepo) UpdateKeycloakRefs(uuid.UUID, string, string, string) error {
+	return nil
+}
+
 func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	return f.orgs[id], nil
 }
