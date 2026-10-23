@@ -23,14 +23,14 @@ const categoryVariant: Record<
 }
 
 const categoryLabel: Record<AuditCategory, string> = {
-  member: "Member",
-  event: "Event",
-  settings: "Settings",
-  finance: "Finance",
+  member: "Mitglied",
+  event: "Veranstaltung",
+  settings: "Einstellungen",
+  finance: "Finanzen",
 }
 
 function formatTimestamp(value: string) {
-  return new Date(value).toLocaleString(undefined, {
+  return new Date(value).toLocaleString("de-DE", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -43,7 +43,7 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
   if (entries.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
-        No activity has been recorded for this organization yet.
+        Für diese Organisation wurde noch keine Aktivität erfasst.
       </p>
     )
   }
@@ -52,10 +52,10 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>When</TableHead>
-          <TableHead>Actor</TableHead>
-          <TableHead>Action</TableHead>
-          <TableHead>Category</TableHead>
+          <TableHead>Zeitpunkt</TableHead>
+          <TableHead>Person</TableHead>
+          <TableHead>Aktion</TableHead>
+          <TableHead>Kategorie</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

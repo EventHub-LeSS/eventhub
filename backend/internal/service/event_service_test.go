@@ -26,9 +26,10 @@ type fakeEventRepo struct {
 	listOrgIDs []uuid.UUID
 	listStatus model.EventStatus
 
-	hasBookings  bool
-	deleted      []uuid.UUID
-	deleteMisses bool
+	hasBookings      bool
+	confirmedTickets int64
+	deleted          []uuid.UUID
+	deleteMisses     bool
 }
 
 func (f *fakeEventRepo) CreateEvent(event *model.EventModel) error {
@@ -66,7 +67,7 @@ func (f *fakeEventRepo) ListByOrganizers(organizationIDs []uuid.UUID, status mod
 }
 
 func (f *fakeEventRepo) GetConfirmedTicketCount(uuid.UUID) (int64, error) {
-	return 0, nil
+	return f.confirmedTickets, nil
 }
 
 func (f *fakeEventRepo) HasBookings(uuid.UUID) (bool, error) {
@@ -95,6 +96,18 @@ func (f *fakeOrgRepo) AddMembership(*model.OrganizationMembershipModel) error {
 
 func (f *fakeOrgRepo) GetByKeycloakOrgID(string) (*model.OrganizationModel, error) {
 	return nil, nil
+}
+
+func (f *fakeOrgRepo) GetByAnyRef(string, string, string) (*model.OrganizationModel, error) {
+	return nil, nil
+}
+
+func (f *fakeOrgRepo) UpdateKeycloakRefs(uuid.UUID, string, string, string) error {
+	return nil
+}
+
+func (f *fakeOrgRepo) UpdateOrganization(*model.OrganizationModel) error {
+	return nil
 }
 
 func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {

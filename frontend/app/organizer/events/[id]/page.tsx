@@ -24,7 +24,7 @@ export default async function OrganizerEventPage({
             size="sm"
           >
             <ArrowLeftIcon />
-            All events
+            Alle Veranstaltungen
           </Button>
         </div>
         <OrganizerEventDetails eventId={id} />

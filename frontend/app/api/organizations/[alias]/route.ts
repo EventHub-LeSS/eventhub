@@ -15,7 +15,7 @@ export async function GET(
   const session = await getSession();
   if (!session) {
     return NextResponse.json(
-      { error: { code: "UNAUTHENTICATED", message: "Authentication is required" } },
+      { error: { code: "UNAUTHENTICATED", message: "Anmeldung erforderlich" } },
       { status: 401 },
     );
   }
@@ -24,7 +24,7 @@ export async function GET(
 
   if (!session.organizations.includes(alias)) {
     return NextResponse.json(
-      { error: { code: "FORBIDDEN", message: "You are not a member of this organization" } },
+      { error: { code: "FORBIDDEN", message: "Du bist kein Mitglied dieser Organisation" } },
       { status: 403 },
     );
   }

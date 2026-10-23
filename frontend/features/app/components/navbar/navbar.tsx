@@ -42,25 +42,23 @@ interface NavbarProps {
 }
 
 const visitorLinks: NavLink[] = [
-  { label: "Discover", href: "/", icon: CompassIcon },
-  { label: "Bookings", href: "/bookings", icon: ClipboardListIcon },
-  { label: "Tickets", href: "/tickets", icon: TicketIcon },
-  { label: "Favorites", href: "/favorites", icon: HeartIcon },
-  { label: "Calendar", href: "/calendar", icon: CalendarDaysIcon },
+  { label: "Entdecken", href: "/", icon: CompassIcon },
+  { label: "Meine Tickets", href: "/tickets", icon: TicketIcon },
+  { label: "Favoriten", href: "/favorites", icon: HeartIcon },
+  { label: "Kalender", href: "/calendar", icon: CalendarDaysIcon },
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
   // Anonymous users must sign in before they get visitor functions, so their nav stays minimal.
   guest: [
-    { label: "Discover", href: "/", icon: CompassIcon },
-    { label: "Categories", href: "/categories", icon: TagsIcon },
+    { label: "Entdecken", href: "/", icon: CompassIcon },
+    { label: "Kategorien", href: "/categories", icon: TagsIcon },
   ],
   visitor: visitorLinks,
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [
     ...visitorLinks,
-    { label: "Event Management", href: "/organizer", icon: LayoutDashboardIcon },
-    { label: "Sales", href: "/organizer/sales", icon: BarChart3Icon },
+    { label: "Veranstalter", href: "/organizer", icon: LayoutDashboardIcon },
   ],
 }
 
@@ -135,11 +133,11 @@ export function Navbar({ user }: NavbarProps) {
             <div className="hidden items-center gap-1 md:flex">
               <form method="get" action="/api/auth/login">
                 <Button type="submit" variant="outline">
-                  Log in
+                  Anmelden
                 </Button>
               </form>
               <form method="get" action="/api/auth/register">
-                <Button type="submit">Register</Button>
+                <Button type="submit">Registrieren</Button>
               </form>
             </div>
           )}
@@ -148,7 +146,7 @@ export function Navbar({ user }: NavbarProps) {
               render={
                 <Button variant="ghost" size="icon-lg" className="md:hidden" />
               }
-              aria-label="Open menu"
+              aria-label="Menü öffnen"
             >
               <MenuIcon className="size-5" />
             </SheetTrigger>
@@ -170,12 +168,12 @@ export function Navbar({ user }: NavbarProps) {
                         variant="outline"
                         className="w-full"
                       >
-                        Log in
+                        Anmelden
                       </Button>
                     </form>
                     <form method="get" action="/api/auth/register">
                       <Button type="submit" className="w-full">
-                        Register
+                        Registrieren
                       </Button>
                     </form>
                   </div>

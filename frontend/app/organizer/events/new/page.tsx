@@ -20,14 +20,14 @@ export default async function NewEventDraftPage() {
             size="sm"
           >
             <ArrowLeftIcon />
-            Drafts
+            Entwürfe
           </Button>
         </div>
         <div>
-          <h1 className="text-lg font-medium">Create an Event</h1>
+          <h1 className="text-lg font-medium">Veranstaltung erstellen</h1>
           <p className="text-sm text-muted-foreground">
-            Saved as a draft for {user.activeOrganization}. You can edit and
-            publish it later.
+            Die Veranstaltung wird als Entwurf für {user.activeOrganization}
+            gespeichert. Du kannst sie später bearbeiten und veröffentlichen.
           </p>
         </div>
         <DraftForm catalog={catalog} />

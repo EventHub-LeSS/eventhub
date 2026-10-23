@@ -61,13 +61,13 @@ export function Brand({ user }: { user: SessionUser | null }) {
         render={
           <Button variant="ghost" className="h-auto shrink-0 gap-2 px-2 py-1" />
         }
-        aria-label="Switch organization"
+        aria-label="Organisation wechseln"
       >
         <BrandContent organization={user.activeOrganization} switchable />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Switch organization</DropdownMenuLabel>
+          <DropdownMenuLabel>Organisation wechseln</DropdownMenuLabel>
           <form method="post" action="/api/auth/organization">
             <input type="hidden" name="returnTo" value={pathname} />
             {user.organizations.map((organization) => (
@@ -79,7 +79,7 @@ export function Brand({ user }: { user: SessionUser | null }) {
                     type="submit"
                     name="organization"
                     value={organization}
-                    aria-label={`Switch to ${organization}`}
+                    aria-label={`Zu ${organization} wechseln`}
                   />
                 }
                 className="w-full justify-between"

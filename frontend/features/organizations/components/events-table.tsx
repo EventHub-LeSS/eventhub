@@ -20,13 +20,13 @@ const statusVariant: Record<EventStatus, "default" | "secondary" | "outline"> =
   }
 
 const statusLabel: Record<EventStatus, string> = {
-  upcoming: "Upcoming",
-  draft: "Draft",
-  past: "Past",
+  upcoming: "Bevorstehend",
+  draft: "Entwurf",
+  past: "Vergangen",
 }
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, {
+  return new Date(value).toLocaleDateString("de-DE", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -38,9 +38,9 @@ export function EventsTable({ events }: { events: OrganizationEvent[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Event</TableHead>
+          <TableHead>Veranstaltung</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead>Date</TableHead>
+          <TableHead>Datum</TableHead>
           <TableHead className="text-right">Tickets</TableHead>
         </TableRow>
       </TableHeader>

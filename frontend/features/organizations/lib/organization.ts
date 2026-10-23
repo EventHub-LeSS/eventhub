@@ -46,23 +46,23 @@ export function validateDraft(draft: OrganizationDraft): DraftErrors {
   const errors: DraftErrors = {};
 
   if (!draft.name.trim()) {
-    errors.name = "A name is required.";
+    errors.name = "Bitte gib einen Namen ein.";
   } else if (draft.name.trim().length > 255) {
-    errors.name = "Keep the name under 255 characters.";
+    errors.name = "Der Name darf höchstens 255 Zeichen lang sein.";
   }
 
   if (!draft.alias.trim()) {
-    errors.alias = "An alias is required.";
+    errors.alias = "Bitte gib einen Alias ein.";
   } else if (!ALIAS_PATTERN.test(draft.alias)) {
-    errors.alias = "Use lowercase letters, digits and single dashes.";
+    errors.alias = "Nur Kleinbuchstaben, Ziffern und einzelne Bindestriche.";
   }
 
   if (!draft.orgAdmin.trim()) {
-    errors.orgAdmin = "An organization admin is required.";
+    errors.orgAdmin = "Bitte gib einen Organisations-Admin an.";
   }
 
   if (draft.contactEmail && !EMAIL_PATTERN.test(draft.contactEmail)) {
-    errors.contactEmail = "Must be a valid email address.";
+    errors.contactEmail = "Bitte gib eine gültige E-Mail-Adresse ein.";
   }
 
   return errors;

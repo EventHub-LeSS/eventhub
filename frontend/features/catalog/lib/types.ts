@@ -23,3 +23,25 @@ export interface PublishedEvent {
     houseNumber: string | null
   }
 }
+
+/** Mirrors `model.EventAvailability`: why an event can or cannot be booked right now. */
+export type EventAvailability =
+  | "available"
+  | "almost_sold_out"
+  | "sold_out"
+  | "temporarily_unavailable"
+
+/**
+ * Mirrors `model.PublishedEventDetailsResponse` from `GET /events/{eventId}`
+ * (see backend/internal/model/event_details.go). `bookable` is a snapshot;
+ * booking checks availability again in its own transaction.
+ */
+export interface PublishedEventDetails extends PublishedEvent {
+  description: string | null
+  capacity: number
+  availableSeats: number
+  bookable: boolean
+  soldTickets: number
+  occupancyPercent: number
+  availability: EventAvailability
+}

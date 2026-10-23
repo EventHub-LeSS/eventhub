@@ -357,7 +357,7 @@ func (h *EventHandler) ListOrganizationEventsHandler(c *gin.Context) {
 
 // EVENTHUB-80: Verkaufte Tickets pro Veranstaltung anzeigen
 // @Summary      Get sold tickets
-// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the number of confirmed tickets sold for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -383,7 +383,7 @@ func (h *EventHandler) GetSoldTicketsHandler(c *gin.Context) {
 
 // EVENTHUB-81: Freie Plätze pro Veranstaltung anzeigen
 // @Summary      Get available seats
-// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event.
+// @Description  Returns the remaining available seats for an event. Requires the event_manager role in the organization that owns the event or the global admin role.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -413,15 +413,25 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
 		return nil, false
 	}
-
-	managedOrgIDs, ok := managedOrganizationIDs(c)
+	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return nil, false
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	var managedOrgIDs []string
+	if !globalAdmin {
+		managedOrgIDs, ok = managedOrganizationIDs(c)
+		if !ok {
+			return nil, false
+		}
 	}
 
 	statistics, err := h.eventService.GetEventStatistics(
 		eventID,
 		managedOrgIDs,
+		globalAdmin,
 	)
 	if err != nil {
 		writeEventActionError(c, err)
@@ -436,7 +446,7 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse
@@ -481,7 +491,7 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 
 // GetPublishedEventDetailsHandler handles EVENTHUB-211 and EVENTHUB-212.
 // @Summary Get published event details
-// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
+// @Description Public event details with description, category, location, organizer alias, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category, location or organizer return 404.
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event UUID"
@@ -502,4 +512,30 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, details)
+}
+
+// EVENTHUB-242: Auslastung je Veranstaltung anzeigen
+// @Summary      Get Utilization Percentage
+// @Description  Returns the share of the capacity taken by confirmed bookings, in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved and cancelled bookings are not counted. Requires the event_manager role in the organization that owns the event or the global admin role.
+// @Tags         events
+// @Security     BearerAuth
+// @Produce      json
+// @Param        eventId path string true "Event ID"
+// @Success      200 {object} model.UtilizationPercentageResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/utilization-percentage [get]
+func (h *EventHandler) GetUtilizationPercentageHandler(c *gin.Context) {
+	statistics, ok := h.getEventStatistics(c)
+	if !ok {
+		return
+	}
+
+	c.JSON(http.StatusOK, model.UtilizationPercentageResponse{
+		EventID:               statistics.EventID,
+		UtilizationPercentage: statistics.UtilizationPercentage,
+	})
 }

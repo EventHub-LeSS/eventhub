@@ -108,26 +108,37 @@ func main() {
 			continue
 		}
 		orgIDs = append(orgIDs, *kcOrg.ID)
-		existing, err := orgRepo.GetByKeycloakOrgID(*kcOrg.ID)
+		alias := safeStr(kcOrg.Alias)
+		name := safeStr(kcOrg.Name)
+		existing, err := orgRepo.GetByAnyRef(*kcOrg.ID, alias, name)
 		if err != nil {
-			log.Printf("  skip org %s: lookup error: %v", safeStr(kcOrg.Name), err)
+			log.Printf("  skip org %s: lookup error: %v", name, err)
 			continue
 		}
 		if existing != nil {
+			// A realm re-import re-creates organizations with new IDs; follow the new ID
+			// instead of inserting a duplicate row for the same organization.
+			if existing.KeycloakOrgID != *kcOrg.ID || existing.Alias != alias {
+				if err := orgRepo.UpdateKeycloakRefs(existing.OrganizationID, *kcOrg.ID, alias, name); err != nil {
+					log.Printf("  skip org %s: update error: %v", name, err)
+					continue
+				}
+				log.Printf("  reconciled org %s to Keycloak ID %s", name, *kcOrg.ID)
+			}
 			continue
 		}
 		org := &model.OrganizationModel{
 			OrganizationID: uuid.New(),
 			KeycloakOrgID:  *kcOrg.ID,
-			Alias:          safeStr(kcOrg.Alias),
-			Name:           safeStr(kcOrg.Name),
+			Alias:          alias,
+			Name:           name,
 		}
 		if err := orgRepo.CreateOrganization(org); err != nil {
-			log.Printf("  skip org %s: create error: %v", safeStr(kcOrg.Name), err)
+			log.Printf("  skip org %s: create error: %v", name, err)
 			continue
 		}
 		orgsSynced++
-		log.Printf("  created org %s (%s)", safeStr(kcOrg.Name), org.OrganizationID)
+		log.Printf("  created org %s (%s)", name, org.OrganizationID)
 	}
 
 	// --- Sync memberships ---
