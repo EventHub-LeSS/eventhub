@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation"
 import { Brand } from "@/features/app/components/navbar/brand"
 import { UserMenu } from "@/features/app/components/navbar/user-menu"
 import type { SessionUser, UserRole } from "@/features/auth"
+import { NotificationBell } from "@/features/notifications"
 import { Button } from "@/features/shared/components/ui/button"
 import { Separator } from "@/features/shared/components/ui/separator"
 import {
@@ -107,7 +108,10 @@ export function Navbar({ user }: NavbarProps) {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {user ? (
-            <UserMenu user={user} />
+            <>
+              <NotificationBell />
+              <UserMenu user={user} />
+            </>
           ) : (
             <div className="hidden items-center gap-1 md:flex">
               <form method="get" action="/api/auth/login">
