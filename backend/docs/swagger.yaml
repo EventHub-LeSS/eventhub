@@ -691,6 +691,19 @@ definitions:
       updatedAt:
         type: string
     type: object
+  model.SalesDashboardEventResponse:
+    properties:
+      availableSeats:
+        type: integer
+      capacity:
+        type: integer
+      eventId:
+        type: string
+      soldTickets:
+        type: integer
+      title:
+        type: string
+    type: object
   model.SimulatedPaymentOutcome:
     enum:
     - success
@@ -2037,6 +2050,46 @@ paths:
       security:
       - BearerAuth: []
       summary: List organization audit log
+      tags:
+      - organizations
+  /organizations/{organizationID}/dashboard:
+    get:
+      description: Returns sales figures for events of the selected organization.
+        Requires the finance_viewer role in that organization. The organization can
+        be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only
+        confirmed bookings. Available seats are capacity minus confirmed tickets,
+        with a minimum of zero. Returns an empty array if the organization has no
+        events.
+      parameters:
+      - description: Organization UUID, Keycloak ID or alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.SalesDashboardEventResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get organization sales dashboard
       tags:
       - organizations
   /organizations/{organizationID}/members/{username}/roles:

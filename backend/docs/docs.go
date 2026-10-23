@@ -1844,6 +1844,61 @@ const docTemplate = `{
                 }
             }
         },
+        "/organizations/{organizationID}/dashboard": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns sales figures for events of the selected organization. Requires the finance_viewer role in that organization. The organization can be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if the organization has no events.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Get organization sales dashboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID, Keycloak ID or alias",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.SalesDashboardEventResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/organizations/{organizationID}/members/{username}/roles": {
             "put": {
                 "security": [
@@ -3062,6 +3117,26 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.SalesDashboardEventResponse": {
+            "type": "object",
+            "properties": {
+                "availableSeats": {
+                    "type": "integer"
+                },
+                "capacity": {
+                    "type": "integer"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "soldTickets": {
+                    "type": "integer"
+                },
+                "title": {
                     "type": "string"
                 }
             }
