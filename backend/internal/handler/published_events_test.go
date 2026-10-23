@@ -113,10 +113,11 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 	}
 	if event.Category.CategoryID != published.categoryID || event.Category.Category != "cat-"+published.categoryID.String() ||
 		event.Location.LocationID != published.locationID || event.Location.Name != "loc-"+published.locationID.String() ||
-		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil {
+		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil ||
+		event.Alias != "alias-listing" {
 		t.Fatalf("wrong display data: %+v", event)
 	}
-	for _, column := range []string{"category_id", "location_id"} {
+	for _, column := range []string{"category_id", "location_id", "organizer_id"} {
 		if err := db.Exec("UPDATE events SET "+column+" = NULL WHERE event_id = ?", published.eventID).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +125,7 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 			t.Fatalf("event missing %s is visible", column)
 		}
 		if err := db.Model(&model.EventModel{}).Where("event_id = ?", published.eventID).
-			Updates(map[string]any{"category_id": published.categoryID, "location_id": published.locationID}).Error; err != nil {
+			Updates(map[string]any{"category_id": published.categoryID, "location_id": published.locationID, "organizer_id": published.ownerOrgID}).Error; err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -17,6 +17,8 @@ type PublishedEventResponse struct {
 	Price     decimal.Decimal        `json:"price" swaggertype:"string" example:"20.00"`
 	Category  PublishedEventCategory `json:"category" gorm:"embedded;embeddedPrefix:category_"`
 	Location  PublishedEventLocation `json:"location" gorm:"embedded;embeddedPrefix:location_"`
+	// Alias of the organization that owns the event, as tokens and GET /users/me carry it.
+	Alias string `json:"organizerAlias" gorm:"column:organizer_alias"`
 }
 
 type PublishedEventCategory struct {
