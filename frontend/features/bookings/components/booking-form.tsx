@@ -378,9 +378,6 @@ export function BookingForm({
             <TicketIcon />
             {isPending ? "Checkout läuft …" : "Zum Checkout"}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Simulierte Zahlung – es erfolgt keine echte Abbuchung.
-          </p>
         </form>
       </CardContent>
     </Card>

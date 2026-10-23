@@ -2965,6 +2965,10 @@ const docTemplate = `{
                     "description": "Alias of the organization that owns the event, as tokens and GET /users/me carry it.",
                     "type": "string"
                 },
+                "organizerId": {
+                    "description": "Database UUID of the organization that owns the event, as GET /organizations/{organizationID}/rating-summary expects it.",
+                    "type": "string"
+                },
                 "price": {
                     "type": "string",
                     "example": "20.00"
@@ -3023,6 +3027,10 @@ const docTemplate = `{
                 },
                 "organizerAlias": {
                     "description": "Alias of the organization that owns the event, as tokens and GET /users/me carry it.",
+                    "type": "string"
+                },
+                "organizerId": {
+                    "description": "Database UUID of the organization that owns the event, as GET /organizations/{organizationID}/rating-summary expects it.",
                     "type": "string"
                 },
                 "price": {
