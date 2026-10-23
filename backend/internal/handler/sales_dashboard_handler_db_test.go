@@ -12,10 +12,13 @@ import (
 	"github.com/google/uuid"
 )
 
-func getSalesDashboard(router http.Handler) *httptest.ResponseRecorder {
+func getSalesDashboard(
+	router http.Handler,
+	organizationRef string,
+) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(
 		http.MethodGet,
-		"/api/v1/events/self/dashboard",
+		"/api/v1/organizations/"+organizationRef+"/dashboard",
 		nil,
 	)
 	rec := httptest.NewRecorder()
@@ -31,45 +34,43 @@ func TestGetSalesDashboardHandler_ListsOnlyOwnEvents(t *testing.T) {
 	foreignOrg := "dashboard-foreign-" + uuid.NewString()
 
 	ownA := seedEventForOrg(t, db, orgA, model.EventStatusPublished)
-	ownB := seedEventForOrg(t, db, orgB, model.EventStatusDraft)
+	seedEventForOrg(t, db, orgB, model.EventStatusDraft)
 	seedEventForOrg(t, db, foreignOrg, model.EventStatusPublished)
 
-	router := newEventRouter(db, principalManaging(orgA, orgB))
+	// The caller can view both A and B, but requests only A.
+	router := newEventRouter(
+		db,
+		principalViewingFinance(orgA, orgB),
+	)
 
-	rec := getSalesDashboard(router)
+	rec := getSalesDashboard(router, ownA.ownerOrgID.String())
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf(
+			"expected 200, got %d: %s",
+			rec.Code,
+			rec.Body.String(),
+		)
 	}
 
 	var dashboard []model.SalesDashboardEventResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &dashboard); err != nil {
 		t.Fatalf("decode dashboard: %v; body: %s", err, rec.Body.String())
 	}
-	if len(dashboard) != 2 {
-		t.Fatalf("expected 2 own events, got %s", rec.Body.String())
+
+	if len(dashboard) != 1 {
+		t.Fatalf("expected only one event from organization A, got %s", rec.Body.String())
 	}
 
-	wantIDs := map[uuid.UUID]bool{
-		ownA.eventID: true,
-		ownB.eventID: true,
+	want := model.SalesDashboardEventResponse{
+		EventID:        ownA.eventID,
+		Title:          "Altes Konzert",
+		Capacity:       100,
+		SoldTickets:    0,
+		AvailableSeats: 100,
 	}
 
-	for _, event := range dashboard {
-		if !wantIDs[event.EventID] {
-			t.Fatalf("unexpected or duplicate event %s", event.EventID)
-		}
-		delete(wantIDs, event.EventID)
-
-		if event.Title != "Altes Konzert" ||
-			event.Capacity != 100 ||
-			event.SoldTickets != 0 ||
-			event.AvailableSeats != 100 {
-			t.Errorf("unexpected dashboard figures: %+v", event)
-		}
-	}
-
-	if len(wantIDs) != 0 {
-		t.Errorf("missing own events: %v", wantIDs)
+	if dashboard[0] != want {
+		t.Errorf("got %+v, want %+v", dashboard[0], want)
 	}
 }
 
@@ -80,12 +81,33 @@ func TestGetSalesDashboardHandler_ReturnsEmptyArray(t *testing.T) {
 	seedEventForOrg(t, db, foreignOrg, model.EventStatusPublished)
 
 	ownOrg := "dashboard-empty-" + uuid.NewString()
-	router := newEventRouter(db, principalManaging(ownOrg))
+	ownOrgID := uuid.New()
 
-	rec := getSalesDashboard(router)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	err := db.Exec(
+		`INSERT INTO organizations (organization_id, keycloak_org_id, name)
+		 VALUES (?, ?, ?)`,
+		ownOrgID,
+		ownOrg,
+		"Empty dashboard organization",
+	).Error
+	if err != nil {
+		t.Fatalf("seed organization: %v", err)
 	}
+
+	router := newEventRouter(
+		db,
+		principalViewingFinance(ownOrg),
+	)
+
+	rec := getSalesDashboard(router, ownOrgID.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf(
+			"expected 200, got %d: %s",
+			rec.Code,
+			rec.Body.String(),
+		)
+	}
+
 	if rec.Body.String() != "[]" {
 		t.Fatalf("expected [], got %s", rec.Body.String())
 	}
@@ -104,12 +126,12 @@ func TestGetSalesDashboardHandler_StatusCodes(t *testing.T) {
 			want: http.StatusUnauthorized,
 		},
 		{
-			name:      "no event_manager role",
+			name:      "no finance_viewer role",
 			principal: &middleware.Principal{Subject: "u"},
 			want:      http.StatusForbidden,
 		},
 		{
-			name: "organization member without event_manager role",
+			name: "organization member without finance_viewer role",
 			principal: &middleware.Principal{
 				Subject: "u",
 				Organizations: []*middleware.OrganizationAccess{
@@ -122,12 +144,17 @@ func TestGetSalesDashboardHandler_StatusCodes(t *testing.T) {
 			},
 			want: http.StatusForbidden,
 		},
+		{
+			name:      "event_manager without finance_viewer role",
+			principal: principalManaging("dashboard-member"),
+			want:      http.StatusForbidden,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := newEventRouter(db, tt.principal)
-			rec := getSalesDashboard(router)
+			rec := getSalesDashboard(router, "dashboard-member")
 
 			if rec.Code != tt.want {
 				t.Fatalf(
@@ -140,11 +167,43 @@ func TestGetSalesDashboardHandler_StatusCodes(t *testing.T) {
 
 			var problem model.ErrorResponse
 			if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
-				t.Fatalf("decode error response: %v; body: %s", err, rec.Body.String())
+				t.Fatalf(
+					"decode error response: %v; body: %s",
+					err,
+					rec.Body.String(),
+				)
 			}
+
 			if problem.Status != tt.want || problem.Type != "about:blank" {
-				t.Errorf("unexpected error response: %s", rec.Body.String())
+				t.Errorf(
+					"unexpected error response: %s",
+					rec.Body.String(),
+				)
 			}
 		})
+	}
+}
+
+func TestGetSalesDashboardHandler_RejectsForeignOrganization(t *testing.T) {
+	db := testdb.Open(t)
+
+	ownOrg := "dashboard-own-" + uuid.NewString()
+	foreignOrg := "dashboard-foreign-" + uuid.NewString()
+
+	seedEventForOrg(t, db, ownOrg, model.EventStatusPublished)
+	foreign := seedEventForOrg(t, db, foreignOrg, model.EventStatusPublished)
+
+	router := newEventRouter(
+		db,
+		principalViewingFinance(ownOrg),
+	)
+
+	rec := getSalesDashboard(router, foreign.ownerOrgID.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf(
+			"expected 403, got %d: %s",
+			rec.Code,
+			rec.Body.String(),
+		)
 	}
 }

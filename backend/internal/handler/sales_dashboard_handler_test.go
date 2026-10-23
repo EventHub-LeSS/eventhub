@@ -78,6 +78,28 @@ func (f *dashboardOrgRepo) ListByKeycloakOrgIDsOrAliases(
 	return orgs, nil
 }
 
+func principalViewingFinance(orgRefs ...string) *middleware.Principal {
+	principal := &middleware.Principal{
+		Subject:  "finance-user",
+		Username: "finance-tester",
+	}
+
+	for _, ref := range orgRefs {
+		principal.Organizations = append(
+			principal.Organizations,
+			&middleware.OrganizationAccess{
+				ID:    ref,
+				Alias: ref,
+				Roles: map[middleware.OrganizationRole]struct{}{
+					middleware.RoleFinanceViewer: {},
+				},
+			},
+		)
+	}
+
+	return principal
+}
+
 func newDashboardUnitRouter(
 	principal *middleware.Principal,
 	eventRepo *dashboardEventRepo,
@@ -90,7 +112,7 @@ func newDashboardUnitRouter(
 
 	r := gin.New()
 	r.GET(
-		"/api/v1/events/self/dashboard",
+		"/api/v1/organizations/:organizationID/dashboard",
 		func(c *gin.Context) {
 			if principal != nil {
 				middleware.SetPrincipalForRequest(c, principal)
@@ -146,11 +168,11 @@ func TestGetSalesDashboardHandlerUnit_ReturnsOwnSalesFigures(t *testing.T) {
 	}
 
 	router := newDashboardUnitRouter(
-		principalManaging("kc-own"),
+		principalViewingFinance("kc-own"),
 		eventRepo,
 		orgRepo,
 	)
-	rec := getSalesDashboard(router)
+	rec := getSalesDashboard(router, "kc-own")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -193,11 +215,11 @@ func TestGetSalesDashboardHandlerUnit_ReturnsEmptyArray(t *testing.T) {
 	}
 
 	router := newDashboardUnitRouter(
-		principalManaging("kc-own"),
+		principalViewingFinance("kc-own"),
 		&dashboardEventRepo{},
 		orgRepo,
 	)
-	rec := getSalesDashboard(router)
+	rec := getSalesDashboard(router, "kc-own")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
@@ -223,7 +245,7 @@ func TestGetSalesDashboardHandlerUnit_StatusCodes(t *testing.T) {
 			want:      http.StatusForbidden,
 		},
 		{
-			name: "organization member without event_manager role",
+			name: "organization member without finance_viewer role",
 			principal: &middleware.Principal{
 				Subject: "u",
 				Organizations: []*middleware.OrganizationAccess{
@@ -236,6 +258,11 @@ func TestGetSalesDashboardHandlerUnit_StatusCodes(t *testing.T) {
 			},
 			want: http.StatusForbidden,
 		},
+		{
+			name:      "event_manager without finance_viewer role",
+			principal: principalManaging("kc-own"),
+			want:      http.StatusForbidden,
+		},
 	}
 
 	for _, tt := range tests {
@@ -245,7 +272,7 @@ func TestGetSalesDashboardHandlerUnit_StatusCodes(t *testing.T) {
 				&dashboardEventRepo{},
 				&dashboardOrgRepo{},
 			)
-			rec := getSalesDashboard(router)
+			rec := getSalesDashboard(router, "kc-own")
 
 			if rec.Code != tt.want {
 				t.Fatalf(
@@ -293,11 +320,11 @@ func TestGetSalesDashboardHandlerUnit_ReturnsInternalServerError(t *testing.T) {
 	}
 
 	router := newDashboardUnitRouter(
-		principalManaging("kc-own"),
+		principalViewingFinance("kc-own"),
 		eventRepo,
 		orgRepo,
 	)
-	rec := getSalesDashboard(router)
+	rec := getSalesDashboard(router, "kc-own")
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
@@ -311,5 +338,143 @@ func TestGetSalesDashboardHandlerUnit_ReturnsInternalServerError(t *testing.T) {
 		problem.Type != "about:blank" ||
 		problem.Detail != "internal error" {
 		t.Errorf("unexpected error response: %s", rec.Body.String())
+	}
+}
+
+func TestGetSalesDashboardHandlerUnit_SelectsOnlyRequestedOrganization(t *testing.T) {
+	orgAID := uuid.New()
+	orgBID := uuid.New()
+	eventAID := uuid.New()
+	eventBID := uuid.New()
+
+	eventRepo := &dashboardEventRepo{
+		events: []*model.EventModel{
+			{
+				EventID:     eventAID,
+				Title:       "Event A",
+				Capacity:    100,
+				OrganizerID: &orgAID,
+			},
+			{
+				EventID:     eventBID,
+				Title:       "Event B",
+				Capacity:    50,
+				OrganizerID: &orgBID,
+			},
+		},
+		ticketCounts: map[uuid.UUID]int64{
+			eventAID: 30,
+			eventBID: 20,
+		},
+	}
+
+	orgRepo := &dashboardOrgRepo{
+		orgs: []*model.OrganizationModel{
+			{
+				OrganizationID: orgAID,
+				KeycloakOrgID:  "kc-a",
+				Alias:          "alias-a",
+			},
+			{
+				OrganizationID: orgBID,
+				KeycloakOrgID:  "kc-b",
+				Alias:          "alias-b",
+			},
+		},
+	}
+
+	router := newDashboardUnitRouter(
+		principalViewingFinance("kc-a", "kc-b"),
+		eventRepo,
+		orgRepo,
+	)
+
+	for _, ref := range []string{
+		orgAID.String(),
+		"kc-a",
+		"alias-a",
+	} {
+		t.Run(ref, func(t *testing.T) {
+			rec := getSalesDashboard(router, ref)
+			if rec.Code != http.StatusOK {
+				t.Fatalf(
+					"expected 200, got %d: %s",
+					rec.Code,
+					rec.Body.String(),
+				)
+			}
+
+			var dashboard []model.SalesDashboardEventResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &dashboard); err != nil {
+				t.Fatalf("decode dashboard: %v", err)
+			}
+
+			if len(dashboard) != 1 || dashboard[0].EventID != eventAID {
+				t.Fatalf(
+					"expected only event A, got %s",
+					rec.Body.String(),
+				)
+			}
+
+			if len(eventRepo.listOrgIDs) != 1 ||
+				eventRepo.listOrgIDs[0] != orgAID {
+				t.Fatalf(
+					"expected only organization A, got %v",
+					eventRepo.listOrgIDs,
+				)
+			}
+		})
+	}
+}
+
+func TestGetSalesDashboardHandlerUnit_RejectsForeignAndUnknownOrganizations(t *testing.T) {
+	orgAID := uuid.New()
+	orgBID := uuid.New()
+
+	orgRepo := &dashboardOrgRepo{
+		orgs: []*model.OrganizationModel{
+			{
+				OrganizationID: orgAID,
+				KeycloakOrgID:  "kc-a",
+				Alias:          "alias-a",
+			},
+			{
+				OrganizationID: orgBID,
+				KeycloakOrgID:  "kc-b",
+				Alias:          "alias-b",
+			},
+		},
+	}
+
+	eventRepo := &dashboardEventRepo{}
+	router := newDashboardUnitRouter(
+		principalViewingFinance("kc-a"),
+		eventRepo,
+		orgRepo,
+	)
+
+	for _, ref := range []string{
+		orgBID.String(),
+		"kc-b",
+		"alias-b",
+		"unknown-organization",
+	} {
+		t.Run(ref, func(t *testing.T) {
+			rec := getSalesDashboard(router, ref)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf(
+					"expected 403, got %d: %s",
+					rec.Code,
+					rec.Body.String(),
+				)
+			}
+
+			if eventRepo.listOrgIDs != nil {
+				t.Fatalf(
+					"unauthorized request must not load events, got %v",
+					eventRepo.listOrgIDs,
+				)
+			}
+		})
 	}
 }

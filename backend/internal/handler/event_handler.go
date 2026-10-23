@@ -515,23 +515,36 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 }
 
 // EVENTHUB-241: Verkaufsdashboard anzeigen
-// @Summary      Get sales dashboard
-// @Description  Returns sales figures for events of all organizations in which the caller holds the event_manager role. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if there are no own events.
-// @Tags         events
-// @Security     BearerAuth
-// @Produce      json
-// @Success      200 {array} model.SalesDashboardEventResponse
-// @Failure      401 {object} model.APIError
-// @Failure      403 {object} model.ErrorResponse
-// @Failure      500 {object} model.ErrorResponse
-// @Router       /events/self/dashboard [get]
+// @Summary Get organization sales dashboard
+// @Description Returns sales figures for events of the selected organization. Requires the finance_viewer role in that organization. The organization can be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if the organization has no events.
+// @Tags organizations
+// @Security BearerAuth
+// @Produce json
+// @Param organizationID path string true "Organization UUID, Keycloak ID or alias"
+// @Success 200 {array} model.SalesDashboardEventResponse
+// @Failure 401 {object} model.ErrorResponse
+// @Failure 403 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /organizations/{organizationID}/dashboard [get]
 func (h *EventHandler) GetSalesDashboardHandler(c *gin.Context) {
-	managedOrgIDs, ok := managedOrganizationIDs(c)
+	principal, ok := middleware.PrincipalFromContext(c)
 	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
 		return
 	}
 
-	dashboard, err := h.eventService.GetSalesDashboard(managedOrgIDs)
+	financeOrgIDs := principal.OrganizationIDsWithRole(
+		middleware.RoleFinanceViewer,
+	)
+	if len(financeOrgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	dashboard, err := h.eventService.GetSalesDashboard(
+		c.Param("organizationID"),
+		financeOrgIDs,
+	)
 	if err != nil {
 		writeEventActionError(c, err)
 		return

@@ -135,7 +135,6 @@ func main() {
 			events.POST("/:id/ratings", ratingHandler.CreateEventRatingHandler)
 			events.POST("/draft", middleware.Audit(audit.EventCreated), eventHandler.SaveEventAsDraftHandler)
 			events.GET("/self", eventHandler.ListOwnEventsHandler)
-			events.GET("/self/dashboard", eventHandler.GetSalesDashboardHandler)
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
@@ -172,6 +171,7 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
+		orgRoles.GET("/:organizationID/dashboard", eventHandler.GetSalesDashboardHandler)
 		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
 		// Organization admins read the audit log of their organization; the handler authorizes
 		// against the resolved organization like the role endpoint above.

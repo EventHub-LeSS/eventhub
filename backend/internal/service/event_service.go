@@ -499,21 +499,59 @@ func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.Publi
 	return details, nil
 }
 
-// GetSalesDashboard returns sales figures for all events of managed organizations.
+// GetSalesDashboard returns sales figures for the selected organization.
+// financeOrgIDs contains the Keycloak IDs or aliases of organizations in
+// which the caller holds the finance_viewer role.
 // Only confirmed bookings count as sold tickets.
 func (s *EventService) GetSalesDashboard(
-	keycloakOrgIDs []string,
+	organizationRef string,
+	financeOrgIDs []string,
 ) ([]model.SalesDashboardEventResponse, error) {
-	if len(keycloakOrgIDs) == 0 {
+	if organizationRef == "" || len(financeOrgIDs) == 0 {
 		return nil, ErrForbidden
 	}
 
-	events, err := s.ListOwnEvents(keycloakOrgIDs, "")
+	// Resolve only organizations for which the caller is authorized.
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases(financeOrgIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	dashboard := make([]model.SalesDashboardEventResponse, 0, len(events))
+	var selectedOrg *model.OrganizationModel
+	for _, org := range orgs {
+		if org == nil {
+			continue
+		}
+
+		if organizationRef == org.OrganizationID.String() ||
+			organizationRef == org.KeycloakOrgID ||
+			organizationRef == org.Alias {
+			// Reject ambiguous references instead of selecting arbitrarily.
+			if selectedOrg != nil &&
+				selectedOrg.OrganizationID != org.OrganizationID {
+				return nil, ErrForbidden
+			}
+			selectedOrg = org
+		}
+	}
+
+	if selectedOrg == nil {
+		return nil, ErrForbidden
+	}
+
+	events, err := s.eventRepo.ListByOrganizers(
+		[]uuid.UUID{selectedOrg.OrganizationID},
+		"",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	dashboard := make(
+		[]model.SalesDashboardEventResponse,
+		0,
+		len(events),
+	)
 
 	for _, event := range events {
 		soldTickets, err := s.eventRepo.GetConfirmedTicketCount(event.EventID)

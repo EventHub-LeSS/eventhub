@@ -1850,38 +1850,6 @@ paths:
       summary: List own events
       tags:
       - events
-  /events/self/dashboard:
-    get:
-      description: Returns sales figures for events of all organizations in which
-        the caller holds the event_manager role. Sold tickets count only confirmed
-        bookings. Available seats are capacity minus confirmed tickets, with a minimum
-        of zero. Returns an empty array if there are no own events.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/model.SalesDashboardEventResponse'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/model.APIError'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/model.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get sales dashboard
-      tags:
-      - events
   /notifications:
     get:
       description: 'Returns only the authenticated user''s notifications, newest first.
@@ -2074,6 +2042,46 @@ paths:
       security:
       - BearerAuth: []
       summary: List organization audit log
+      tags:
+      - organizations
+  /organizations/{organizationID}/dashboard:
+    get:
+      description: Returns sales figures for events of the selected organization.
+        Requires the finance_viewer role in that organization. The organization can
+        be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only
+        confirmed bookings. Available seats are capacity minus confirmed tickets,
+        with a minimum of zero. Returns an empty array if the organization has no
+        events.
+      parameters:
+      - description: Organization UUID, Keycloak ID or alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.SalesDashboardEventResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get organization sales dashboard
       tags:
       - organizations
   /organizations/{organizationID}/members/{username}/roles:

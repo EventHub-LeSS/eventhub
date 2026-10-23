@@ -921,52 +921,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/events/self/dashboard": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns sales figures for events of all organizations in which the caller holds the event_manager role. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if there are no own events.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "events"
-                ],
-                "summary": "Get sales dashboard",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/model.SalesDashboardEventResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.APIError"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/events/{eventId}": {
             "get": {
                 "description": "Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.",
@@ -1877,6 +1831,61 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organizations/{organizationID}/dashboard": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns sales figures for events of the selected organization. Requires the finance_viewer role in that organization. The organization can be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if the organization has no events.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Get organization sales dashboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization UUID, Keycloak ID or alias",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.SalesDashboardEventResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }

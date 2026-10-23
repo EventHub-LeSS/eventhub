@@ -632,7 +632,7 @@ func TestGetSalesDashboard_ReturnsSalesFigures(t *testing.T) {
 	eventA.Title = "Konzert A"
 	eventA.Capacity = 100
 
-	eventB := eventOwnedBy(orgB, model.EventStatusPublished)
+	eventB := eventOwnedBy(orgA, model.EventStatusPublished)
 	eventB.Title = "Konzert B"
 	eventB.Capacity = 50
 
@@ -643,7 +643,10 @@ func TestGetSalesDashboard_ReturnsSalesFigures(t *testing.T) {
 		eventB.EventID: 50,
 	}
 
-	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a", "kc-org-b"})
+	dashboard, err := svc.GetSalesDashboard(
+		"kc-org-a",
+		[]string{"kc-org-a", "kc-org-b"},
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -675,26 +678,71 @@ func TestGetSalesDashboard_ReturnsSalesFigures(t *testing.T) {
 	}
 }
 
-func TestGetSalesDashboard_PassesOnlyManagedOrganizations(t *testing.T) {
-	svc, repo := newTestService(nil)
-
-	_, err := svc.GetSalesDashboard([]string{"alias-a"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestGetSalesDashboard_PassesOnlySelectedOrganization(t *testing.T) {
+	tests := []struct {
+		name            string
+		organizationRef string
+		financeOrgIDs   []string
+	}{
+		{
+			name:            "local UUID",
+			organizationRef: orgA.OrganizationID.String(),
+			financeOrgIDs:   []string{"kc-org-a", "kc-org-b"},
+		},
+		{
+			name:            "Keycloak ID",
+			organizationRef: "kc-org-a",
+			financeOrgIDs:   []string{"kc-org-a", "kc-org-b"},
+		},
+		{
+			name:            "alias",
+			organizationRef: "alias-a",
+			financeOrgIDs:   []string{"kc-org-a", "kc-org-b"},
+		},
+		{
+			name:            "token carries alias",
+			organizationRef: orgA.OrganizationID.String(),
+			financeOrgIDs:   []string{"alias-a", "alias-b"},
+		},
 	}
 
-	if len(repo.listOrgIDs) != 1 || repo.listOrgIDs[0] != orgA.OrganizationID {
-		t.Fatalf("expected only organization A, got %v", repo.listOrgIDs)
-	}
-	if repo.listStatus != "" {
-		t.Fatalf("expected no status filter, got %q", repo.listStatus)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(nil)
+
+			_, err := svc.GetSalesDashboard(
+				tt.organizationRef,
+				tt.financeOrgIDs,
+			)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(repo.listOrgIDs) != 1 ||
+				repo.listOrgIDs[0] != orgA.OrganizationID {
+				t.Fatalf(
+					"expected only organization A, got %v",
+					repo.listOrgIDs,
+				)
+			}
+
+			if repo.listStatus != "" {
+				t.Fatalf(
+					"expected no status filter, got %q",
+					repo.listStatus,
+				)
+			}
+		})
 	}
 }
 
 func TestGetSalesDashboard_ReturnsEmptySlice(t *testing.T) {
 	svc, _ := newTestService(nil)
 
-	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	dashboard, err := svc.GetSalesDashboard(
+		"kc-org-a",
+		[]string{"kc-org-a"},
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -713,7 +761,10 @@ func TestGetSalesDashboard_NoSales(t *testing.T) {
 	svc, repo := newTestService(nil)
 	repo.listed = []*model.EventModel{event}
 
-	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	dashboard, err := svc.GetSalesDashboard(
+		"kc-org-a",
+		[]string{"kc-org-a"},
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -735,7 +786,10 @@ func TestGetSalesDashboard_ClampsAvailableSeatsToZero(t *testing.T) {
 		event.EventID: 12,
 	}
 
-	dashboard, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	dashboard, err := svc.GetSalesDashboard(
+		"kc-org-a",
+		[]string{"kc-org-a"},
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -747,12 +801,63 @@ func TestGetSalesDashboard_ClampsAvailableSeatsToZero(t *testing.T) {
 	}
 }
 
-func TestGetSalesDashboard_RejectsMissingManagedOrganizations(t *testing.T) {
-	svc, _ := newTestService(nil)
+func TestGetSalesDashboard_RejectsUnauthorizedOrganization(t *testing.T) {
+	tests := []struct {
+		name            string
+		organizationRef string
+		financeOrgIDs   []string
+	}{
+		{
+			name:            "no authorized organizations",
+			organizationRef: "kc-org-a",
+			financeOrgIDs:   nil,
+		},
+		{
+			name:            "missing organization reference",
+			organizationRef: "",
+			financeOrgIDs:   []string{"kc-org-a"},
+		},
+		{
+			name:            "foreign organization by Keycloak ID",
+			organizationRef: "kc-org-b",
+			financeOrgIDs:   []string{"kc-org-a"},
+		},
+		{
+			name:            "foreign organization by local UUID",
+			organizationRef: orgB.OrganizationID.String(),
+			financeOrgIDs:   []string{"kc-org-a"},
+		},
+		{
+			name:            "foreign organization by alias",
+			organizationRef: "alias-b",
+			financeOrgIDs:   []string{"kc-org-a"},
+		},
+		{
+			name:            "unknown organization",
+			organizationRef: "unknown-organization",
+			financeOrgIDs:   []string{"kc-org-a"},
+		},
+	}
 
-	_, err := svc.GetSalesDashboard(nil)
-	if !errors.Is(err, ErrForbidden) {
-		t.Fatalf("expected ErrForbidden, got %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, repo := newTestService(nil)
+
+			_, err := svc.GetSalesDashboard(
+				tt.organizationRef,
+				tt.financeOrgIDs,
+			)
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("expected ErrForbidden, got %v", err)
+			}
+
+			if len(repo.listOrgIDs) != 0 {
+				t.Fatalf(
+					"unauthorized request must not load events, got %v",
+					repo.listOrgIDs,
+				)
+			}
+		})
 	}
 }
 
@@ -764,7 +869,10 @@ func TestGetSalesDashboard_PropagatesTicketCountError(t *testing.T) {
 	wantErr := errors.New("ticket count failed")
 	repo.ticketCountErr = wantErr
 
-	_, err := svc.GetSalesDashboard([]string{"kc-org-a"})
+	_, err := svc.GetSalesDashboard(
+		"kc-org-a",
+		[]string{"kc-org-a"},
+	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
