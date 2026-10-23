@@ -1,9 +1,7 @@
 "use client"
 
 import {
-  BarChart3Icon,
   CalendarDaysIcon,
-  ClipboardListIcon,
   CompassIcon,
   FlagIcon,
   HeartIcon,
