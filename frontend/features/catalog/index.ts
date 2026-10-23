@@ -8,6 +8,11 @@ export type {
   EventRatingSummaryData,
   EventRatingSummaryResult,
 } from "@/features/catalog/lib/get-event-rating-summary"
+export { getOrganizerRatingSummary } from "@/features/catalog/lib/get-organizer-rating-summary"
+export type {
+  OrganizerRatingSummaryData,
+  OrganizerRatingSummaryResult,
+} from "@/features/catalog/lib/get-organizer-rating-summary"
 export {
   getEventCategories,
   getPublishedEvents,
