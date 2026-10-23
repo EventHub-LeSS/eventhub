@@ -108,27 +108,68 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 		return
 	}
 
-	orgUUID := uuid.New()
-	err = h.orgRepo.CreateOrganization(&model.OrganizationModel{
-		OrganizationID:     orgUUID,
-		KeycloakOrgID:      keycloakOrgID,
-		Name:               req.InternalName,
-		ContactEmail:       req.ContactEmail,
-		ContactPhoneNumber: req.ContactPhoneNumber,
-		Street:             req.Street,
-		HouseNumber:        req.HouseNumber,
-		PostalCode:         req.PostalCode,
-		City:               req.City,
-		CountryCode:        req.CountryCode,
-	})
+	// Keycloak just created the organization with a new ID. A row from an earlier Keycloak
+	// generation may still exist in the database (realm re-imports re-create organizations
+	// with new IDs); reconcile that row instead of inserting a duplicate that would split
+	// the organization's events and memberships across copies.
+	existing, err := h.orgRepo.GetByAnyRef(keycloakOrgID, req.DisplayName, req.InternalName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 			Type:   "about:blank",
 			Title:  http.StatusText(http.StatusInternalServerError),
 			Status: http.StatusInternalServerError,
-			Detail: "organization created in Keycloak but failed to insert into database: " + err.Error(),
+			Detail: "failed to look up organization in database: " + err.Error(),
 		})
 		return
+	}
+
+	orgUUID := uuid.New()
+	if existing != nil {
+		orgUUID = existing.OrganizationID
+		// The submitted create form is the new truth for the reconciled row: the contact
+		// columns move as well, not only the Keycloak-owned identity columns.
+		existing.KeycloakOrgID = keycloakOrgID
+		existing.Alias = req.DisplayName
+		existing.Name = req.InternalName
+		existing.ContactEmail = req.ContactEmail
+		existing.ContactPhoneNumber = req.ContactPhoneNumber
+		existing.Street = req.Street
+		existing.HouseNumber = req.HouseNumber
+		existing.PostalCode = req.PostalCode
+		existing.City = req.City
+		existing.CountryCode = req.CountryCode
+		if err := h.orgRepo.UpdateOrganization(existing); err != nil {
+			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
+				Type:   "about:blank",
+				Title:  http.StatusText(http.StatusInternalServerError),
+				Status: http.StatusInternalServerError,
+				Detail: "organization created in Keycloak but failed to update the existing database row: " + err.Error(),
+			})
+			return
+		}
+	} else {
+		err = h.orgRepo.CreateOrganization(&model.OrganizationModel{
+			OrganizationID:     orgUUID,
+			KeycloakOrgID:      keycloakOrgID,
+			Alias:              req.DisplayName,
+			Name:               req.InternalName,
+			ContactEmail:       req.ContactEmail,
+			ContactPhoneNumber: req.ContactPhoneNumber,
+			Street:             req.Street,
+			HouseNumber:        req.HouseNumber,
+			PostalCode:         req.PostalCode,
+			City:               req.City,
+			CountryCode:        req.CountryCode,
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
+				Type:   "about:blank",
+				Title:  http.StatusText(http.StatusInternalServerError),
+				Status: http.StatusInternalServerError,
+				Detail: "organization created in Keycloak but failed to insert into database: " + err.Error(),
+			})
+			return
+		}
 	}
 
 	err = h.orgRepo.AddMembership(&model.OrganizationMembershipModel{
