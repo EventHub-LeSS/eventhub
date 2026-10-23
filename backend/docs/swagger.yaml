@@ -55,6 +55,20 @@ definitions:
       username:
         type: string
     type: object
+  handler.RatingVisibilityRequest:
+    properties:
+      hidden:
+        example: true
+        type: boolean
+      reason:
+        example: Beleidigender Inhalt
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - hidden
+    - reason
+    type: object
   handler.SimulatePaymentRequest:
     properties:
       amount:
@@ -681,6 +695,15 @@ definitions:
       text:
         type: string
       updatedAt:
+        type: string
+    type: object
+  model.RatingVisibilityResponse:
+    properties:
+      changed:
+        type: boolean
+      hidden:
+        type: boolean
+      ratingId:
         type: string
     type: object
   model.SimulatedPaymentOutcome:
@@ -1837,6 +1860,61 @@ paths:
       summary: List own events
       tags:
       - events
+  /moderation/ratings/{ratingId}/visibility:
+    put:
+      consumes:
+      - application/json
+      description: Hides (hidden=true) or shows again (hidden=false) a rating. Requires
+        the global role admin or moderator. Hidden ratings no longer count towards
+        rating summaries and recommendations. The reason (1-1000 characters after
+        trimming) is required and is stored with the acting user in the audit log
+        of the organization that owns the rated event (organization_id "platform"
+        if the rating no longer belongs to an organization). Requesting the current
+        visibility returns changed=false and records nothing.
+      parameters:
+      - description: Rating ID
+        in: path
+        name: ratingId
+        required: true
+        type: string
+      - description: Visibility and reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RatingVisibilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.RatingVisibilityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hide or show a rating
+      tags:
+      - moderation
   /notifications:
     get:
       description: 'Returns only the authenticated user''s notifications, newest first.
