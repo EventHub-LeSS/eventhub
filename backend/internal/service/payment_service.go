@@ -447,6 +447,8 @@ func paymentMessage(view *repository.BookingPayment, ticketsValid bool) string {
 		reason = *payment.FailureReason
 	}
 	switch reason {
+	case model.PaymentFailureBookingCancelled:
+		return "Your booking was cancelled. No tickets were booked and nothing was charged."
 	case model.PaymentFailureDeclined:
 		return "The payment was declined. No tickets were booked; please start a new booking."
 	case model.PaymentFailureReservationExpired:
