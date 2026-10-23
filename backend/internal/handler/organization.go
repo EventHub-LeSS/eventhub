@@ -126,7 +126,19 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 	orgUUID := uuid.New()
 	if existing != nil {
 		orgUUID = existing.OrganizationID
-		if err := h.orgRepo.UpdateKeycloakRefs(orgUUID, keycloakOrgID, req.DisplayName, req.InternalName); err != nil {
+		// The submitted create form is the new truth for the reconciled row: the contact
+		// columns move as well, not only the Keycloak-owned identity columns.
+		existing.KeycloakOrgID = keycloakOrgID
+		existing.Alias = req.DisplayName
+		existing.Name = req.InternalName
+		existing.ContactEmail = req.ContactEmail
+		existing.ContactPhoneNumber = req.ContactPhoneNumber
+		existing.Street = req.Street
+		existing.HouseNumber = req.HouseNumber
+		existing.PostalCode = req.PostalCode
+		existing.City = req.City
+		existing.CountryCode = req.CountryCode
+		if err := h.orgRepo.UpdateOrganization(existing); err != nil {
 			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
 				Type:   "about:blank",
 				Title:  http.StatusText(http.StatusInternalServerError),
