@@ -1,6 +1,11 @@
 import { Suspense } from "react"
 
-import { EventFilters, EventList, getEventCategories } from "@/features/catalog"
+import {
+  EventFilters,
+  EventList,
+  getEventCategories,
+  RecommendedEvents,
+} from "@/features/catalog"
 
 interface PageProps {
   searchParams: Promise<{
@@ -14,6 +19,8 @@ interface PageProps {
 export default async function Page({ searchParams }: PageProps) {
   const { title, location, date, categoryId } = await searchParams
   const categories = await getEventCategories()
+  // Recommendations would only push the search results down while filtering.
+  const hasActiveFilter = Boolean(title || location || date || categoryId)
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
@@ -22,6 +29,11 @@ export default async function Page({ searchParams }: PageProps) {
           Entdecke Veranstaltungen in deiner Region
         </h1>
       </div>
+      {!hasActiveFilter && (
+        <Suspense fallback={null}>
+          <RecommendedEvents />
+        </Suspense>
+      )}
       <Suspense fallback={null}>
         <EventFilters categories={categories} />
       </Suspense>
