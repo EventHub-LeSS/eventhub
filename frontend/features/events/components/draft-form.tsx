@@ -18,6 +18,10 @@ import { Button } from "@/features/shared/components/ui/button"
 const fieldClass =
   "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
 
+// The browser paints the open list of a transparent select white, so its
+// options need the theme colors to stay readable in dark mode.
+const selectClass = `${fieldClass} [&>option]:bg-popover [&>option]:text-popover-foreground`
+
 function Field({
   id,
   label,
@@ -166,7 +170,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         <Field id="categoryId" label="Kategorie" error={errors.categoryId}>
           <select
             id="categoryId"
-            className={fieldClass}
+            className={selectClass}
             value={draft.categoryId}
             onChange={(changed) => update("categoryId", changed.target.value)}
             aria-invalid={Boolean(errors.categoryId)}
@@ -187,7 +191,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         >
           <select
             id="locationId"
-            className={fieldClass}
+            className={selectClass}
             value={draft.locationId}
             onChange={(changed) => update("locationId", changed.target.value)}
             aria-invalid={Boolean(errors.locationId)}

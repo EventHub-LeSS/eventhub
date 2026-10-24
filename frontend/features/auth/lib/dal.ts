@@ -6,6 +6,7 @@ import { readActiveOrganization } from "@/features/auth/lib/active-organization"
 import { readSession, type Session } from "@/features/auth/lib/session"
 import {
   isAdminFromAccessToken,
+  organizationRolesFromAccessToken,
   roleFor,
   type SessionUser,
 } from "@/features/auth/lib/user"
@@ -22,13 +23,19 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     return null
   }
 
+  const activeOrganization = await readActiveOrganization(session.organizations)
+
   return {
     name: session.name,
     email: session.email,
     organizations: session.organizations,
-    activeOrganization: await readActiveOrganization(session.organizations),
+    activeOrganization,
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
+    organizationRoles: organizationRolesFromAccessToken(
+      session.accessToken,
+      activeOrganization
+    ),
   }
 }
 

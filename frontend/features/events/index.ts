@@ -1,3 +1,4 @@
+export { DeleteDraftButton } from "@/features/events/components/delete-draft-dialog"
 export { DraftForm } from "@/features/events/components/draft-form"
 export { OrganizerEventDetails } from "@/features/events/components/organizer-event-details"
 export { OrganizerEventList } from "@/features/events/components/organizer-event-list"
