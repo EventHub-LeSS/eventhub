@@ -3,9 +3,11 @@
 import {
   CalendarDaysIcon,
   CompassIcon,
+  FlagIcon,
   HeartIcon,
   LayoutDashboardIcon,
   MenuIcon,
+  ShieldIcon,
   TagsIcon,
   TicketIcon,
   type LucideIcon,
@@ -45,6 +47,7 @@ const visitorLinks: NavLink[] = [
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
+  // Anonymous users must sign in before they get visitor functions, so their nav stays minimal.
   guest: [
     { label: "Entdecken", href: "/", icon: CompassIcon },
     { label: "Kategorien", href: "/categories", icon: TagsIcon },
@@ -56,6 +59,18 @@ const navigationByRole: Record<UserRole, NavLink[]> = {
     { label: "Veranstalter", href: "/organizer", icon: LayoutDashboardIcon },
   ],
 }
+
+// Admins and moderators are platform-wide flags independent of `role` (see SessionUser),
+// so their nav replaces the role-based links entirely instead of being keyed by UserRole.
+const adminLinks: NavLink[] = [
+  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Administration", href: "/admin", icon: ShieldIcon },
+]
+
+const moderatorLinks: NavLink[] = [
+  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Moderation", href: "/moderation", icon: FlagIcon },
+]
 
 /** Returns the most specific matching href, so /organizer/events/new does not also light up /organizer/events. */
 function activeHref(pathname: string, links: NavLink[]) {
@@ -76,7 +91,11 @@ function activeHref(pathname: string, links: NavLink[]) {
 export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
-  const links = navigationByRole[role]
+  const links = user?.isAdmin
+    ? adminLinks
+    : user?.isModerator
+      ? moderatorLinks
+      : navigationByRole[role]
   const active = activeHref(pathname, links)
 
   return (
