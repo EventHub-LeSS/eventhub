@@ -1,0 +1,1 @@
+ALTER TABLE notification_data DROP COLUMN read_at;

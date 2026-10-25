@@ -21,7 +21,7 @@ export function PublishDraftButton({ eventId }: { eventId: string }) {
   return (
     <div className="flex flex-col items-end gap-1">
       <Button size="sm" onClick={handleClick} disabled={isPending}>
-        Publish
+        Veröffentlichen
       </Button>
       {message && <p className="text-xs text-destructive">{message}</p>}
     </div>

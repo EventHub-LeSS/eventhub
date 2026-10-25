@@ -35,13 +35,14 @@ export default async function EditEventDraftPage({
             size="sm"
           >
             <ArrowLeftIcon />
-            Back to event list
+            Zurück zur Veranstaltungsliste
           </Button>
         </div>
         <div>
-          <h1 className="text-lg font-medium">Edit event</h1>
+          <h1 className="text-lg font-medium">Veranstaltung bearbeiten</h1>
           <p className="text-sm text-muted-foreground">
-            You can edit the event by making changes to the form and pressing the 'Save changes' button.
+            Ändere die Angaben im Formular und klicke auf „Änderungen
+            speichern“.
           </p>
         </div>
         <DraftForm catalog={catalog} event={event} />

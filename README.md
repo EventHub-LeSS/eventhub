@@ -89,6 +89,11 @@ go run ./cmd/seed
 Das Seeding ist idempotent: existierende Nutzer/Organisationen/Gruppen/Datensätze
 werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden kann.
 
+Ändert Keycloak die Organisations-IDs (z. B. nach einem Realm-Re-Import), erkennt der Seed
+bestehende Organisationen an Alias oder Name und aktualisiert deren Keycloak-ID, statt
+Duplikate anzulegen. Migration 000011 räumte bestehende Duplikate weg und erzwingt die
+Eindeutigkeit von Name und Alias per Unique-Index.
+
 #### Service-Konto des Backends (EVENTHUB-188)
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
@@ -368,3 +373,36 @@ Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen K
 **Aufbewahrung:** Einträge werden nach 10 Jahren täglich um 03:00 UTC per `pg_cron` (Migration `000007`) gelöscht. Die API-Datenbank braucht daher das Image aus `core/Dockerfile.api-db` und die Einstellungen `shared_preload_libraries=pg_cron`, `cron.database_name=<DB-Name>` (siehe `core/docker-compose.yml`). Ohne pg_cron bricht die Migration mit einer klaren Fehlermeldung ab. Bestehende Volumes bleiben erhalten; den `api-db`-Container mit `docker compose up -d --build api-db` neu erzeugen. Für externe Deployments (z. B. Dockhand) das Image `ghcr.io/<owner>/api-db` mit denselben Parametern verwenden.
 
 **Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.
+
+### Benachrichtigungen (EVENTHUB-240)
+
+Nach Migrationen 000009 und 000010 liefert GET /api/v1/notifications die eigenen
+Benachrichtigungen, neueste zuerst. Die Antwort enthält items, page, limit und total;
+leere Seiten enthalten items: []. page beginnt bei 1, limit ist standardmäßig 50
+und maximal 100. Alle Benachrichtigungsendpunkte
+benötigen ein Bearer-Token und einen synchronisierten API-Nutzer.
+
+POST /api/v1/bookings/{bookingId}/reminder simuliert eine Erinnerung für eine
+eigene bestätigte Buchung einer bevorstehenden veröffentlichten Veranstaltung.
+Sie enthält Anlass, Inhalt, Empfänger, Buchungs-ID und Zeitstempel. Der geplante
+Zeitpunkt scheduledAt liegt 24 Stunden vor Beginn, bei kurzfristigen Buchungen
+bei der Erzeugung. Die Simulation macht sie sofort in der Liste sichtbar
+(simulated: true); es gibt keinen automatischen Versandjob oder E-Mail-Versand.
+
+Die erste Erzeugung liefert 201, wiederholte oder parallele Aufrufe dieselbe
+Erinnerung mit 200. Fremde oder unbekannte Buchungen liefern 404; nicht
+bestätigte Buchungen und nicht mehr verfügbare Veranstaltungen 409.
+Das Frontend kann die Daten als Banner oder Benachrichtigungsliste darstellen.
+
+PATCH /api/v1/notifications/{notificationId}/read setzt readAt für eine eigene
+Benachrichtigung (null bedeutet ungelesen). Wiederholte Aufrufe erhalten den
+ersten Lesezeitpunkt; fremde oder unbekannte IDs liefern 404.
+
+Beim Abruf werden nur Erinnerungen auf der angeforderten Seite mit aktuellen
+Veranstaltungs- und Ortsdaten abgeglichen und bei Änderungen gespeichert.
+Titel, Startzeit, Veranstaltungsort und Adresse sowie Ticketanzahl bleiben
+dadurch aktuell. scheduledAt wird neu berechnet; für kurzfristige Termine
+dient der ursprüngliche Erstellungszeitpunkt als stabile Untergrenze.
+Geänderte Erinnerungen werden wieder ungelesen. Auch eine erneute Simulation
+aktualisiert die bestehende Erinnerung. Es gibt weiterhin keinen Versandjob;
+vor einem späteren echten Versand müsste dieser Abgleich ebenfalls erfolgen.

@@ -55,7 +55,7 @@ func Open(t *testing.T) *gorm.DB {
 			gormDB.Close()
 		}
 	})
-	if err := db.Exec("TRUNCATE bookings, payments, events, organizations, users, categories, locations, audit_logs CASCADE").Error; err != nil {
+	if err := db.Exec("TRUNCATE bookings, payments, events, organizations, users, categories, locations, audit_logs, notification_data CASCADE").Error; err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return db

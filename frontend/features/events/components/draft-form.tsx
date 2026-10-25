@@ -83,7 +83,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Field id="title" label="Title" error={errors.title}>
+      <Field id="title" label="Titel" error={errors.title}>
         <input
           id="title"
           className={fieldClass}
@@ -95,7 +95,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
       <Field
         id="description"
-        label="Description"
+        label="Beschreibung"
         error={errors.description}
         hint="Optional."
       >
@@ -110,7 +110,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="startTime" label="Start" error={errors.startTime}>
+        <Field id="startTime" label="Beginn" error={errors.startTime}>
           <input
             id="startTime"
             type="datetime-local"
@@ -121,7 +121,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           />
         </Field>
 
-        <Field id="endTime" label="End" error={errors.endTime}>
+        <Field id="endTime" label="Ende" error={errors.endTime}>
           <input
             id="endTime"
             type="datetime-local"
@@ -132,7 +132,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           />
         </Field>
 
-        <Field id="capacity" label="Capacity" error={errors.capacity}>
+        <Field id="capacity" label="Kapazität" error={errors.capacity}>
           <input
             id="capacity"
             type="number"
@@ -147,9 +147,9 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
         <Field
           id="price"
-          label="Price"
+          label="Preis"
           error={errors.price}
-          hint="Use 0 for a free event."
+          hint="0 für eine kostenlose Veranstaltung."
         >
           <input
             id="price"
@@ -163,7 +163,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           />
         </Field>
 
-        <Field id="categoryId" label="Category" error={errors.categoryId}>
+        <Field id="categoryId" label="Kategorie" error={errors.categoryId}>
           <select
             id="categoryId"
             className={fieldClass}
@@ -171,7 +171,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
             onChange={(changed) => update("categoryId", changed.target.value)}
             aria-invalid={Boolean(errors.categoryId)}
           >
-            <option value="">Please select</option>
+            <option value="">Bitte auswählen</option>
             {catalog.categories.map((category) => (
               <option key={category.categoryId} value={category.categoryId}>
                 {category.category}
@@ -180,7 +180,11 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           </select>
         </Field>
 
-        <Field id="locationId" label="Location" error={errors.locationId}>
+        <Field
+          id="locationId"
+          label="Veranstaltungsort"
+          error={errors.locationId}
+        >
           <select
             id="locationId"
             className={fieldClass}
@@ -188,7 +192,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
             onChange={(changed) => update("locationId", changed.target.value)}
             aria-invalid={Boolean(errors.locationId)}
           >
-            <option value="">Please select</option>
+            <option value="">Bitte auswählen</option>
             {catalog.locations.map((location) => (
               <option key={location.locationId} value={location.locationId}>
                 {location.name}, {location.city}
@@ -200,8 +204,8 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
       {catalogMissing && (
         <p className="text-sm text-muted-foreground">
-          No categories or locations are available yet, so the draft cannot be
-          saved.
+          Es sind noch keine Kategorien oder Veranstaltungsorte verfügbar, daher
+          kann der Entwurf nicht gespeichert werden.
         </p>
       )}
 
@@ -209,7 +213,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
       <div>
         <Button type="submit" disabled={isPending || catalogMissing}>
-          {event ? "Save changes" : "Save as draft"}
+          {event ? "Änderungen speichern" : "Als Entwurf speichern"}
         </Button>
       </div>
     </form>

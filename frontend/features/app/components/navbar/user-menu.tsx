@@ -48,7 +48,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={<Button variant="ghost" className="h-auto gap-2 px-2 py-1" />}
-        aria-label="Open user menu"
+        aria-label="Benutzermenü öffnen"
       >
         <span className="hidden max-w-40 text-right leading-tight md:block">
           <span className="block truncate text-sm font-medium">
@@ -73,18 +73,18 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuSeparator />
         {!hasOrganizations(user) && (
           <DropdownMenuGroup>
-            <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+            <DropdownMenuLabel>Organisationen</DropdownMenuLabel>
             <DropdownMenuItem render={<Link href="/organizations/join" />}>
               <DoorOpenIcon />
-              Join an organization
+              Einer Organisation beitreten
             </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
         {hasOrganizations(user) && (
           <DropdownMenuGroup>
-            <DropdownMenuLabel>Organization</DropdownMenuLabel>
+            <DropdownMenuLabel>Organisation</DropdownMenuLabel>
             <DropdownMenuItem render={<Link href="/organization" />}>
-              Your Organization
+              Deine Organisation
             </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
@@ -92,24 +92,24 @@ export function UserMenu({ user }: { user: SessionUser }) {
           <DropdownMenuGroup>
             <DropdownMenuItem render={<Link href="/organizations/create" />}>
               <Building2Icon />
-              Create an organization
+              Organisation erstellen
             </DropdownMenuItem>
           </DropdownMenuGroup>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+          <DropdownMenuLabel>Darstellung</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={theme ?? "system"}
             onValueChange={setTheme}
           >
             <DropdownMenuRadioItem value="light">
               <SunIcon />
-              Light
+              Hell
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="dark">
               <MoonIcon />
-              Dark
+              Dunkel
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="system">
               <MonitorIcon />
@@ -121,12 +121,12 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <form method="post" action="/api/auth/logout">
           <DropdownMenuItem
             nativeButton
-            render={<button type="submit" aria-label="Log out" />}
+            render={<button type="submit" aria-label="Abmelden" />}
             variant="destructive"
             className="w-full"
           >
             <LogOutIcon />
-            Log out
+            Abmelden
           </DropdownMenuItem>
         </form>
       </DropdownMenuContent>

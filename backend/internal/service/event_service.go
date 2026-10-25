@@ -410,6 +410,7 @@ func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, key
 func (s *EventService) GetEventStatistics(
 	eventID uuid.UUID,
 	keycloakOrgIDs []string,
+	globalAdmin bool,
 ) (*model.EventStatistics, error) {
 	event, err := s.eventRepo.GetEventByID(eventID)
 	if err != nil {
@@ -418,16 +419,17 @@ func (s *EventService) GetEventStatistics(
 	if event == nil {
 		return nil, ErrEventNotFound
 	}
-	if event.OrganizerID == nil {
-		return nil, ErrForbidden
-	}
-
-	org, err := s.orgRepo.GetByID(*event.OrganizerID)
-	if err != nil {
-		return nil, err
-	}
-	if !managesOrganization(org, keycloakOrgIDs) {
-		return nil, ErrForbidden
+	if !globalAdmin {
+		if event.OrganizerID == nil {
+			return nil, ErrForbidden
+		}
+		org, err := s.orgRepo.GetByID(*event.OrganizerID)
+		if err != nil {
+			return nil, err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return nil, ErrForbidden
+		}
 	}
 
 	soldTickets, err := s.eventRepo.GetConfirmedTicketCount(eventID)
@@ -440,11 +442,18 @@ func (s *EventService) GetEventStatistics(
 		availableSeats = 0
 	}
 
+	var utilization float64
+	if event.Capacity > 0 {
+		ratio := float64(soldTickets) / float64(event.Capacity)
+		utilization = math.Round(math.Min(1, math.Max(0, ratio))*10000) / 100
+	}
+
 	return &model.EventStatistics{
-		EventID:        event.EventID,
-		Capacity:       event.Capacity,
-		SoldTickets:    soldTickets,
-		AvailableSeats: availableSeats,
+		EventID:               event.EventID,
+		Capacity:              event.Capacity,
+		SoldTickets:           soldTickets,
+		AvailableSeats:        availableSeats,
+		UtilizationPercentage: utilization,
 	}, nil
 }
 
@@ -488,4 +497,81 @@ func (s *EventService) GetPublishedEventDetails(eventID uuid.UUID) (*model.Publi
 		}
 	}
 	return details, nil
+}
+
+// GetSalesDashboard returns sales figures for the selected organization.
+// financeOrgIDs contains the Keycloak IDs or aliases of organizations in
+// which the caller holds the finance_viewer role.
+// Only confirmed bookings count as sold tickets.
+func (s *EventService) GetSalesDashboard(
+	organizationRef string,
+	financeOrgIDs []string,
+) ([]model.SalesDashboardEventResponse, error) {
+	if organizationRef == "" || len(financeOrgIDs) == 0 {
+		return nil, ErrForbidden
+	}
+
+	// Resolve only organizations for which the caller is authorized.
+	orgs, err := s.orgRepo.ListByKeycloakOrgIDsOrAliases(financeOrgIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	var selectedOrg *model.OrganizationModel
+	for _, org := range orgs {
+		if org == nil {
+			continue
+		}
+
+		if organizationRef == org.OrganizationID.String() ||
+			organizationRef == org.KeycloakOrgID ||
+			organizationRef == org.Alias {
+			// Reject ambiguous references instead of selecting arbitrarily.
+			if selectedOrg != nil &&
+				selectedOrg.OrganizationID != org.OrganizationID {
+				return nil, ErrForbidden
+			}
+			selectedOrg = org
+		}
+	}
+
+	if selectedOrg == nil {
+		return nil, ErrForbidden
+	}
+
+	events, err := s.eventRepo.ListByOrganizers(
+		[]uuid.UUID{selectedOrg.OrganizationID},
+		"",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	dashboard := make(
+		[]model.SalesDashboardEventResponse,
+		0,
+		len(events),
+	)
+
+	for _, event := range events {
+		soldTickets, err := s.eventRepo.GetConfirmedTicketCount(event.EventID)
+		if err != nil {
+			return nil, err
+		}
+
+		availableSeats := int64(event.Capacity) - soldTickets
+		if availableSeats < 0 {
+			availableSeats = 0
+		}
+
+		dashboard = append(dashboard, model.SalesDashboardEventResponse{
+			EventID:        event.EventID,
+			Title:          event.Title,
+			Capacity:       event.Capacity,
+			SoldTickets:    soldTickets,
+			AvailableSeats: availableSeats,
+		})
+	}
+
+	return dashboard, nil
 }

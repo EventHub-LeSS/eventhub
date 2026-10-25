@@ -43,7 +43,7 @@ interface EventActionsProps {
 }
 
 /**
- * "View details" links to the detail page, "Publish" calls the same action as
+ * "Details anzeigen" links to the detail page, "Publish" calls the same action as
  * the drafts list's standalone button. "Withdraw" asks for confirmation first,
  * because a withdrawn event cannot be published again. "Edit" still only needs
  * an onClick handler once its action exists.
@@ -108,18 +108,21 @@ export function EventActions({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="ghost" size="icon-sm" />}
-          aria-label={`Actions for ${eventTitle}`}
+          aria-label={`Aktionen für ${eventTitle}`}
         >
           <EllipsisIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-max min-w-48 whitespace-nowrap">
+        <DropdownMenuContent
+          align="end"
+          className="w-max min-w-48 whitespace-nowrap"
+        >
           {showViewDetails && (
             <>
               <DropdownMenuItem
                 render={<Link href={`/organizer/events/${eventId}`} />}
               >
                 <EyeIcon />
-                View details
+                Details anzeigen
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
@@ -127,18 +130,20 @@ export function EventActions({
           {status === "draft" && (
             <DropdownMenuItem onClick={handlePublish}>
               <SendIcon />
-              Publish
+              Veröffentlichen
             </DropdownMenuItem>
           )}
           {status === "published" && (
             <DropdownMenuItem onClick={() => handleWithdrawOpenChange(true)}>
               <UndoIcon />
-              Withdraw
+              Zurückziehen
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
             disabled={status === "completed"}
-            className={status === "completed" ? "text-muted-foreground" : undefined}
+            className={
+              status === "completed" ? "text-muted-foreground" : undefined
+            }
             render={
               status !== "completed" ? (
                 <Link href={`/organizer/events/${eventId}/edit`} />
@@ -146,7 +151,9 @@ export function EventActions({
             }
           >
             <PencilIcon />
-            {status === "completed" ? "Cannot edit completed events" : "Edit"}
+            {status === "completed"
+              ? "Abgeschlossen – nicht bearbeitbar"
+              : "Bearbeiten"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -157,11 +164,11 @@ export function EventActions({
       <Dialog open={isWithdrawOpen} onOpenChange={handleWithdrawOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Withdraw event?</DialogTitle>
+            <DialogTitle>Veranstaltung zurückziehen?</DialogTitle>
             <DialogDescription>
-              &quot;{eventTitle}&quot; will no longer be bookable and disappears
-              from the event search. Existing bookings are kept. This cannot be
-              undone.
+              &quot;{eventTitle}&quot; ist dann nicht mehr buchbar und
+              verschwindet aus der Veranstaltungssuche. Bestehende Buchungen
+              bleiben erhalten. Das kann nicht rückgängig gemacht werden.
             </DialogDescription>
           </DialogHeader>
 
@@ -175,14 +182,16 @@ export function EventActions({
               onClick={() => handleWithdrawOpenChange(false)}
               disabled={isWithdrawing}
             >
-              Cancel
+              Abbrechen
             </Button>
             <Button
               variant="destructive"
               onClick={handleWithdraw}
               disabled={isWithdrawing}
             >
-              {isWithdrawing ? "Withdrawing…" : "Withdraw event"}
+              {isWithdrawing
+                ? "Wird zurückgezogen…"
+                : "Veranstaltung zurückziehen"}
             </Button>
           </DialogFooter>
         </DialogContent>
