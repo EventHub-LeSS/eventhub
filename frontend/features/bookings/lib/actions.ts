@@ -15,6 +15,7 @@ import {
   isSimulatedOutcome,
   isUUID,
   MAX_TICKETS_PER_BOOKING,
+  seatsExceededMessage,
 } from "@/features/bookings/lib/validation"
 
 export interface CreateBookingResult {
@@ -62,26 +63,14 @@ async function storedPayment(
 /**
  * EVENTHUB-91 / AK4: seats taken since the page was loaded come back as a
  * technical problem detail ("capacity exceeded: requested 3, available 1");
- * it is reworded in the style of the other booking errors.
+ * the visitor gets the same message the form shows.
  */
 function capacityExceededMessage(detail: string): string | undefined {
   const match = /^capacity exceeded: requested \d+, available (\d+)$/.exec(
     detail
   )
 
-  if (!match) {
-    return undefined
-  }
-
-  const available = Number(match[1])
-
-  if (available === 0) {
-    return "no tickets are available at the moment"
-  }
-
-  const tickets = available === 1 ? "1 ticket is" : `${available} tickets are`
-
-  return `only ${tickets} available, please choose fewer tickets`
+  return match ? seatsExceededMessage(Number(match[1])) : undefined
 }
 
 /**
