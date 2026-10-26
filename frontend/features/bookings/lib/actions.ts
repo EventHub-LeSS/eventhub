@@ -60,6 +60,31 @@ async function storedPayment(
 }
 
 /**
+ * EVENTHUB-91 / AK4: seats taken since the page was loaded come back as a
+ * technical problem detail ("capacity exceeded: requested 3, available 1");
+ * it is reworded in the style of the other booking errors.
+ */
+function capacityExceededMessage(detail: string): string | undefined {
+  const match = /^capacity exceeded: requested \d+, available (\d+)$/.exec(
+    detail
+  )
+
+  if (!match) {
+    return undefined
+  }
+
+  const available = Number(match[1])
+
+  if (available === 0) {
+    return "no tickets are available at the moment"
+  }
+
+  const tickets = available === 1 ? "1 ticket is" : `${available} tickets are`
+
+  return `only ${tickets} available, please choose fewer tickets`
+}
+
+/**
  * Reserves tickets and sends the user to the payment view. The form already
  * validates the input, but a server action is a public endpoint, so the same
  * rules are enforced here again.
@@ -90,7 +115,9 @@ export async function createBookingAction(
     booking = await createBooking(accessToken, eventId, numberOfTickets)
   } catch (error) {
     if (error instanceof BookingApiError) {
-      return { message: error.message }
+      return {
+        message: capacityExceededMessage(error.message) ?? error.message,
+      }
     }
 
     throw error

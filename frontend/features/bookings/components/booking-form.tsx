@@ -75,6 +75,13 @@ export function BookingForm({
   const count = parseTicketCount(ticketCount)
   const countError = ticketCountError(ticketCount, availableSeats)
 
+  // EVENTHUB-91 / AK3: the stepper stops at the remaining seats, not only at
+  // the per-booking limit.
+  const maxTickets =
+    availableSeats === null
+      ? MAX_TICKETS_PER_BOOKING
+      : Math.min(MAX_TICKETS_PER_BOOKING, availableSeats)
+
   // AK1: the amount to pay, calculated from ticket count and price, shown
   // before anything is reserved. The payment view then shows the amount the
   // backend actually stored.
@@ -225,13 +232,9 @@ export function BookingForm({
                   type="button"
                   aria-label="Ein Ticket mehr"
                   className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                  disabled={
-                    isPending || (count ?? 1) >= MAX_TICKETS_PER_BOOKING
-                  }
+                  disabled={isPending || (count ?? 1) >= maxTickets}
                   onClick={() =>
-                    updateCount(
-                      Math.min(MAX_TICKETS_PER_BOOKING, (count ?? 1) + 1)
-                    )
+                    updateCount(Math.min(maxTickets, (count ?? 1) + 1))
                   }
                 >
                   <PlusIcon className="size-4" />
