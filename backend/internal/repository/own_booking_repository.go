@@ -29,6 +29,9 @@ type OwnBookingRepository interface {
 	// upcoming events first by start time, then those of past events, the latest first. An event
 	// is upcoming until it has ended by the database clock.
 	ListByUserByEventStart(userID uuid.UUID) ([]*OwnBooking, error)
+	// GetByUser returns nil when the booking does not exist or belongs to another user, so both look
+	// the same to the caller.
+	GetByUser(bookingID, userID uuid.UUID) (*OwnBooking, error)
 }
 
 type ownBookingRepository struct {
@@ -89,6 +92,14 @@ func (r *ownBookingRepository) ListByUserByEventStart(userID uuid.UUID) ([]*OwnB
 	    CASE WHEN e.end_time >= clock.database_now THEN e.start_time END ASC NULLS LAST,
 	    CASE WHEN e.end_time < clock.database_now THEN e.start_time END DESC NULLS LAST,
 	    b.booking_id ASC`, userID)
+}
+
+func (r *ownBookingRepository) GetByUser(bookingID, userID uuid.UUID) (*OwnBooking, error) {
+	bookings, err := r.list(ownBookingQuery+` AND b.booking_id = ?`, userID, bookingID)
+	if err != nil || len(bookings) == 0 {
+		return nil, err
+	}
+	return bookings[0], nil
 }
 
 func (r *ownBookingRepository) list(query string, args ...any) ([]*OwnBooking, error) {

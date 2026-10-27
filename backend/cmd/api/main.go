@@ -167,6 +167,7 @@ func main() {
 		{
 			me.GET("/tickets", ownBookingHandler.ListOwnTicketsHandler)
 			me.GET("/bookings", ownBookingHandler.ListOwnBookingsHandler)
+			me.GET("/bookings/:bookingId", ownBookingHandler.GetOwnBookingHandler)
 		}
 	}
 	orgs := v1.Group("/organizations")

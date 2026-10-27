@@ -54,6 +54,20 @@ func (s *OwnBookingService) ListOwnBookings(userID uuid.UUID, status model.Booki
 	return history, nil
 }
 
+// GetOwnBooking returns one booking of the user in any status. Unknown bookings and bookings of
+// other users are both reported as ErrBookingNotFound, so their IDs reveal nothing.
+func (s *OwnBookingService) GetOwnBooking(bookingID, userID uuid.UUID) (*model.OwnBookingResponse, error) {
+	booking, err := s.bookings.GetByUser(bookingID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if booking == nil {
+		return nil, ErrBookingNotFound
+	}
+	resp := ownBookingResponse(booking)
+	return &resp, nil
+}
+
 // ownBookingResponse builds the view of an own booking. Validity and message come from the same
 // functions as the payment result, and expiry is judged by the database clock of the read.
 func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
