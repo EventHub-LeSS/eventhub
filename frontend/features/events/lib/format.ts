@@ -86,3 +86,42 @@ export function formatEventCapacity(capacity: number): string {
 export function formatEventRevenue(amount: number): string {
   return Number.isFinite(amount) ? eventPriceFormat.format(amount) : EMPTY_VALUE
 }
+
+/**
+ * Returns the percentage of capacity that is booked (0–100), or null when the
+ * number of available seats is unknown.
+ */
+export function computeOccupancyPercent(
+  availableSeats: number | null,
+  capacity: number
+): number | null {
+  if (availableSeats === null || capacity === 0) {
+    return null
+  }
+  const booked = capacity - availableSeats
+  const percent = (booked / capacity) * 100
+  // Clamp to 0–100 in case of data inconsistencies.
+  return Math.max(0, Math.min(100, Math.round(percent)))
+}
+
+/**
+ * Formats the number of available seats, e.g. "23 von 100 Plätze frei".
+ */
+export function formatAvailableSeats(
+  availableSeats: number | null,
+  capacity: number
+): string {
+  if (availableSeats === null) {
+    return EMPTY_VALUE
+  }
+  const unit = availableSeats === 1 ? "Platz" : "Plätze"
+  return `${eventCountFormat.format(availableSeats)} ${unit} frei`
+}
+
+/**
+ * Formats the number of sold tickets, e.g. "77 von 100 Tickets verkauft".
+ */
+export function formatSoldTickets(sold: number, capacity: number): string {
+  const unit = sold === 1 ? "Ticket" : "Tickets"
+  return `${eventCountFormat.format(sold)} ${unit} von ${eventCountFormat.format(capacity)} verkauft`
+}
