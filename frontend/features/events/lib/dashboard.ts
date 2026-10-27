@@ -28,6 +28,8 @@ export interface OrganizerDashboardEvent
   statsUnavailable: boolean
   /** price × confirmed tickets, in EUR. 0 while `statsUnavailable`. */
   revenue: number
+  /** Always a number after enrichment (from computeEventStatistics or fallback to capacity). */
+  availableSeats: number
 }
 
 /** Filters of the organizer dashboard, taken from the page's search params. */
