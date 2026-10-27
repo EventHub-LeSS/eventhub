@@ -1637,6 +1637,183 @@ const docTemplate = `{
                 }
             }
         },
+        "/me/bookings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert alle Buchungen des Aufrufers in jedem Status, die neueste zuerst, mit Event, Ort, Ticketanzahl, Buchungs- und Zahlungsstatus, failureReason und ticketsValid. bookingStatus ist der gespeicherte Status, nur eine nach der Datenbankuhr abgelaufene Reservierung wird als expired angezeigt. GET /bookings/{bookingId}/payment zeigt dagegen den gespeicherten Status reserved, bei offener Zahlung bis zum Cleanup der Zahlungen nach höchstens etwa einer Minute; ohne Zahlung liefert es 404. status filtert auf den angezeigten Status, expired findet also gespeicherte und abgeleitete abgelaufene Buchungen. Ein leeres Array, wenn es keine Buchungen gibt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Meine Buchungshistorie",
+                "parameters": [
+                    {
+                        "enum": [
+                            "reserved",
+                            "confirmed",
+                            "cancelled",
+                            "failed",
+                            "expired"
+                        ],
+                        "type": "string",
+                        "description": "Nur Buchungen mit diesem angezeigten Status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OwnBookingResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Ungültiger status",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/bookings/{bookingId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert eine Buchung des Aufrufers in jedem Status mit Event, Ort, Ticketanzahl, Buchungsstatus, Zahlungsstatus, Betrag, failureReason und ticketsValid. Ungültige, stornierte oder abgelaufene Buchungen sowie Tickets abgesagter Events sind mit ticketsValid false markiert. ticketsValid, paymentStatus, failureReason und message entsprechen GET /bookings/{bookingId}/payment, weil beide dieselbe Regel und dieselben Texte nutzen. bookingStatus zeigt eine nach der Datenbankuhr abgelaufene Reservierung als expired, GET /bookings/{bookingId}/payment den gespeicherten Status, bei offener Zahlung bis zum Cleanup nach höchstens etwa einer Minute. Unbekannte Buchungen und Buchungen anderer Nutzer liefern beide 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Ticketdetails einer eigenen Buchung",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking ID",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OwnBookingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Ungültige Booking ID",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Buchung unbekannt oder von einem anderen Nutzer",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/tickets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Meine Tickets",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OwnBookingResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/notifications": {
             "get": {
                 "security": [
@@ -2950,6 +3127,101 @@ const docTemplate = `{
                 },
                 "ratedEventCount": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.OwnBookingEvent": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "description": "Null when the location of the event was deleted.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.PublishedEventLocation"
+                        }
+                    ]
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OwnBookingResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Stored amount of the payment; null without payment.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "bookedAt": {
+                    "description": "Time the booking was made.",
+                    "type": "string"
+                },
+                "bookingId": {
+                    "description": "ID for GET /me/bookings/{bookingId} and the booking routes.",
+                    "type": "string"
+                },
+                "bookingStatus": {
+                    "description": "Stored booking status, except that a reservation whose expiresAt has passed by the database\nclock is shown as expired. GET /bookings/{bookingId}/payment shows the stored status.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.BookingStatus"
+                        }
+                    ]
+                },
+                "event": {
+                    "description": "Null when the event no longer exists.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OwnBookingEvent"
+                        }
+                    ]
+                },
+                "expiresAt": {
+                    "description": "Deadline of a live reservation; omitted otherwise.",
+                    "type": "string"
+                },
+                "failureReason": {
+                    "$ref": "#/definitions/model.PaymentFailureReason"
+                },
+                "message": {
+                    "description": "Human readable result of the payment process, the same text as GET /bookings/{bookingId}/payment;\nomitted while no payment process has been started.",
+                    "type": "string",
+                    "example": "Payment successful. Your booking is confirmed."
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "paymentStatus": {
+                    "description": "Null while no payment process has been started.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.PaymentStatus"
+                        }
+                    ]
+                },
+                "refundAmount": {
+                    "description": "Refunded amount of the payment; null without payment.",
+                    "type": "string",
+                    "example": "0"
+                },
+                "ticketsValid": {
+                    "description": "True only when the payment is paid, the booking is confirmed and the event is published or\ncompleted, like ticketsValid of GET /bookings/{bookingId}/payment.",
+                    "type": "boolean"
                 }
             }
         },

@@ -83,6 +83,7 @@ func main() {
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
+	ownBookingService := service.NewOwnBookingService(repository.NewOwnBookingRepository(db))
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
@@ -98,6 +99,7 @@ func main() {
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
+	ownBookingHandler := handler.NewOwnBookingHandler(ownBookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
 
@@ -159,6 +161,14 @@ func main() {
 		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
 		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)
 		protected.POST("/bookings/:bookingId/payment/simulate", paymentHandler.SimulatePaymentHandler)
+
+		// EVENTHUB-236: Meine Tickets und Buchungshistorie, always the bookings of the token user
+		me := protected.Group("/me")
+		{
+			me.GET("/tickets", ownBookingHandler.ListOwnTicketsHandler)
+			me.GET("/bookings", ownBookingHandler.ListOwnBookingsHandler)
+			me.GET("/bookings/:bookingId", ownBookingHandler.GetOwnBookingHandler)
+		}
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
