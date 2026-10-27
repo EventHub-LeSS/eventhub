@@ -109,7 +109,7 @@ export function computeOccupancyPercent(
  */
 export function formatAvailableSeats(
   availableSeats: number | null,
-  capacity: number
+  _capacity: number
 ): string {
   if (availableSeats === null) {
     return EMPTY_VALUE

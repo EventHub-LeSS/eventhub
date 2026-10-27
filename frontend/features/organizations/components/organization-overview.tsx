@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
 import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
@@ -53,12 +53,6 @@ export function OrganizationOverview({
   const [activeTab, setActiveTab] = useState("overview")
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<Organization | null>(null)
-
-  useEffect(() => {
-    if (organizationQuery.data) {
-      setDraft(organizationQuery.data)
-    }
-  }, [organizationQuery.data])
 
   function handleTabChange(value: unknown) {
     setActiveTab(value as string)
