@@ -15,8 +15,7 @@ export function OccupancyBar({ sold, capacity, percent }: OccupancyBarProps) {
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={ratio}
-        aria-label={`Occupancy: ${ratio.toFixed(1)}% of ${capacity} seats`}
+        aria-label={`Auslastung: ${ratio.toFixed(1)}% von ${capacity} Plätzen`}
         className="relative overflow-hidden rounded-full bg-muted h-3 w-full"
       >
         <div
@@ -25,9 +24,9 @@ export function OccupancyBar({ sold, capacity, percent }: OccupancyBarProps) {
         />
       </div>
       <span className="text-xs text-muted-foreground tabular-nums">
-        {sold.toLocaleString()} sold ·{" "}
-        {Math.max(0, capacity - sold).toLocaleString()} free of{" "}
-        {capacity.toLocaleString()} seats ({ratio.toFixed(1)}%)
+        {sold.toLocaleString()} verkauft ·{" "}
+        {Math.max(0, capacity - sold).toLocaleString()} frei von{" "}
+        {capacity.toLocaleString()} Plätze ({ratio.toFixed(1)}%)
       </span>
     </div>
   )

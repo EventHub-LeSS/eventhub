@@ -35,13 +35,13 @@ export function SalesDashboard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales</CardTitle>
+        <CardTitle>Verkäufe</CardTitle>
         <CardDescription>
-          Confirmed tickets sold and free places per event
+          Bestätigt verkaufte Tickets und freie Plätze pro Veranstaltung
         </CardDescription>
         <CardAction>
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Total revenue</p>
+            <p className="text-xs text-muted-foreground">Gesamtumsatz</p>
             <p className="font-medium tabular-nums">
               {formatEventRevenue(totalRevenue)}
             </p>
@@ -52,11 +52,11 @@ export function SalesDashboard({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Event</TableHead>
+              <TableHead>Veranstaltung</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Sold</TableHead>
-              <TableHead className="text-right">Free</TableHead>
-              <TableHead className="text-right">Revenue</TableHead>
+              <TableHead className="text-right">Verkauft</TableHead>
+              <TableHead className="text-right">Frei</TableHead>
+              <TableHead className="text-right">Umsatz</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -78,7 +78,7 @@ export function SalesDashboard({
                     colSpan={3}
                     className="text-center text-xs text-muted-foreground"
                   >
-                    Ticket figures unavailable
+                    Ticketzahlen nicht verfügbar
                   </TableCell>
                 ) : (
                   <>

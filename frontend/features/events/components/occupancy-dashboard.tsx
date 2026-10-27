@@ -20,9 +20,9 @@ export function OccupancyDashboard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Occupancy</CardTitle>
+        <CardTitle>Auslastung</CardTitle>
         <CardDescription>
-          Confirmed bookings as a share of capacity per event
+          Bestätigte Buchungen als Anteil der Kapazität pro Veranstaltung
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -42,7 +42,7 @@ export function OccupancyDashboard({
             </p>
             {event.statsUnavailable ? (
               <p className="text-xs text-muted-foreground">
-                Ticket figures unavailable for this event.
+                Ticketzahlen für diese Veranstaltung nicht verfügbar.
               </p>
             ) : (
               <OccupancyBar

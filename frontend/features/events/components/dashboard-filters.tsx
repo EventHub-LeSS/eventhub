@@ -20,11 +20,11 @@ const ALL = "all"
 /** Mirrors the backend's event_status enum. A Record, not a list, so a status
  *  the enum does not know can never reach the select. */
 const STATUS_ITEMS: Record<string, string> = {
-  [ALL]: "All statuses",
-  draft: "Draft",
-  published: "Published",
-  completed: "Completed",
-  cancelled: "Cancelled",
+  [ALL]: "Alle Status",
+  draft: "Entwurf",
+  published: "Veröffentlicht",
+  completed: "Abgeschlossen",
+  cancelled: "Abgebrochen",
 }
 
 interface DashboardFiltersProps {
@@ -52,7 +52,7 @@ export function DashboardFilters({
 
   const hasActiveFilter = title !== "" || status !== ALL || categoryId !== ALL
 
-  const categoryItems: Record<string, string> = { [ALL]: "All categories" }
+  const categoryItems: Record<string, string> = { [ALL]: "Alle Kategorien" }
   for (const category of categories) {
     categoryItems[category.categoryId] = category.category
   }
@@ -116,11 +116,11 @@ export function DashboardFilters({
           htmlFor="dashboard-filter-title"
           className="text-xs font-medium text-muted-foreground"
         >
-          Title
+          Titel
         </label>
         <Input
           id="dashboard-filter-title"
-          placeholder="Search by title…"
+          placeholder="Nach Titel suchen…"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />
@@ -138,7 +138,7 @@ export function DashboardFilters({
           onValueChange={handleStatusChange}
         >
           <SelectTrigger id="dashboard-filter-status" className="w-full">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder="Alle Status" />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
             {Object.entries(STATUS_ITEMS).map(([value, label]) => (
@@ -154,7 +154,7 @@ export function DashboardFilters({
           htmlFor="dashboard-filter-category"
           className="text-xs font-medium text-muted-foreground"
         >
-          Category
+          Kategorie
         </label>
         <Select
           items={categoryItems}
@@ -162,10 +162,10 @@ export function DashboardFilters({
           onValueChange={handleCategoryChange}
         >
           <SelectTrigger id="dashboard-filter-category" className="w-full">
-            <SelectValue placeholder="All categories" />
+            <SelectValue placeholder="Alle Kategorien" />
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value={ALL}>All categories</SelectItem>
+            <SelectItem value={ALL}>Alle Kategorien</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.categoryId} value={category.categoryId}>
                 {category.category}
@@ -175,11 +175,11 @@ export function DashboardFilters({
         </Select>
       </div>
       <div className="flex gap-2">
-        <Button type="submit">Filter</Button>
+        <Button type="submit">Filtern</Button>
         {hasActiveFilter && (
           <Button type="button" variant="outline" onClick={handleReset}>
             <XIcon />
-            Reset
+            Zurücksetzen
           </Button>
         )}
       </div>

@@ -58,7 +58,7 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
 
       {dashboard.status === "unavailable" && (
         <p className="text-sm text-destructive">
-          The dashboard could not be loaded right now. Please try again later.
+          Das Dashboard konnte gerade nicht geladen werden. Bitte versuche es später erneut.
         </p>
       )}
 
@@ -74,16 +74,16 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
           <CardContent className="flex flex-col items-center gap-3">
             <TicketsIcon className="size-8 text-muted-foreground" />
             <CardTitle className="text-base font-medium">
-              You have no events yet
+              Du hast noch keine Veranstaltungen
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Create an event to start tracking occupancy and sales.
+              Erstelle eine Veranstaltung, um Auslastung und Verkäufe zu verfolgen.
             </p>
             <Button
               render={<Link href="/organizer/events/new" />}
               nativeButton={false}
             >
-              Create event
+              Veranstaltung erstellen
             </Button>
           </CardContent>
         </Card>
@@ -93,7 +93,7 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
         dashboard.totalEvents > 0 &&
         dashboard.events.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No events match the current filters.
+            Keine Veranstaltungen entsprechen den aktuellen Filtern.
           </p>
         )}
 
