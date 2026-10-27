@@ -130,7 +130,10 @@ export function EventActions({
         >
           <EllipsisIcon />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent
+          align="end"
+          className="w-max min-w-48 whitespace-nowrap"
+        >
           {showViewDetails && (
             <>
               <DropdownMenuItem
@@ -155,9 +158,21 @@ export function EventActions({
             </DropdownMenuItem>
           )}
           {canManage && (
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={status === "completed"}
+              className={
+                status === "completed" ? "text-muted-foreground" : undefined
+              }
+              render={
+                status !== "completed" ? (
+                  <Link href={`/organizer/events/${eventId}/edit`} />
+                ) : undefined
+              }
+            >
               <PencilIcon />
-              Bearbeiten
+              {status === "completed"
+                ? "Abgeschlossen – nicht bearbeitbar"
+                : "Bearbeiten"}
             </DropdownMenuItem>
           )}
           {canDelete && (

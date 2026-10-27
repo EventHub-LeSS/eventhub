@@ -89,6 +89,11 @@ go run ./cmd/seed
 Das Seeding ist idempotent: existierende Nutzer/Organisationen/Gruppen/Datensätze
 werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden kann.
 
+Ändert Keycloak die Organisations-IDs (z. B. nach einem Realm-Re-Import), erkennt der Seed
+bestehende Organisationen an Alias oder Name und aktualisiert deren Keycloak-ID, statt
+Duplikate anzulegen. Migration 000011 räumte bestehende Duplikate weg und erzwingt die
+Eindeutigkeit von Name und Alias per Unique-Index.
+
 #### Service-Konto des Backends (EVENTHUB-188)
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API

@@ -28,7 +28,7 @@ func seedEvent(t *testing.T, db *gorm.DB, capacity int, status model.EventStatus
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{categoryID, "cat-" + categoryID.String()}},
 		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{locationID, "loc-" + locationID.String(), "Bonn", "53111", "Weg"}},
-		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{orgID, "kc-org-" + orgID.String(), "Org"}},
+		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{orgID, "kc-org-" + orgID.String(), "Org " + orgID.String()}},
 		{"INSERT INTO users (user_id, keycloak_user_id, first_name, last_name, email) VALUES (?, ?, ?, ?, ?)", []any{userID, "kc-" + userID.String(), "Max", "Muster", userID.String() + "@test.de"}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', ?, ?, 0, ?, ?, ?)`,
