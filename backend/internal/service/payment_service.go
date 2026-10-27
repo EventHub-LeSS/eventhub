@@ -392,11 +392,18 @@ func eventHonorsTickets(eventStatus *model.EventStatus) bool {
 	return eventStatus != nil && (*eventStatus == model.EventStatusPublished || *eventStatus == model.EventStatusCompleted)
 }
 
+// hasValidTickets is the one rule for whether a booking holds valid tickets: its payment is paid,
+// the booking is confirmed and the event takes place or took place. The payment result and the
+// ticket views of the visitor (EVENTHUB-236) both use it, so they never contradict each other.
+func hasValidTickets(view *repository.BookingPayment) bool {
+	return view.Payment != nil && view.Payment.Status == model.PaymentStatusPaid &&
+		view.Booking.Status == model.BookingStatusConfirmed &&
+		eventHonorsTickets(view.EventStatus)
+}
+
 func paymentResponse(view *repository.BookingPayment) *model.PaymentResponse {
 	booking, payment := view.Booking, view.Payment
-	ticketsValid := payment.Status == model.PaymentStatusPaid &&
-		booking.Status == model.BookingStatusConfirmed &&
-		eventHonorsTickets(view.EventStatus)
+	ticketsValid := hasValidTickets(view)
 	resp := &model.PaymentResponse{
 		PaymentID:       payment.PaymentID,
 		BookingID:       booking.BookingID,
