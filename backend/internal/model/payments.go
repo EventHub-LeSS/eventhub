@@ -22,6 +22,8 @@ type PaymentFailureReason string
 const (
 	// PaymentFailureDeclined means the (simulated) payment provider declined the payment.
 	PaymentFailureDeclined PaymentFailureReason = "declined"
+	// PaymentFailureBookingCancelled means the owner cancelled before payment completed.
+	PaymentFailureBookingCancelled PaymentFailureReason = "booking_cancelled"
 	// PaymentFailureReservationExpired means the reservation ran out before the payment was completed.
 	PaymentFailureReservationExpired PaymentFailureReason = "reservation_expired"
 	// PaymentFailureEventUnavailable means the event was withdrawn or deleted before the payment was completed.

@@ -62,19 +62,59 @@ func CreateBookingHandler(bookingService *service.BookingService, userRepo repos
 	}
 }
 
+// CancelBooking godoc
+// @Summary      Cancel a booking
+// @Description  Cancels the caller's reserved or confirmed booking and releases its tickets. Repeated cancellation succeeds without another refund. Pending payments fail; paid payments receive a full simulated refund of the stored payment amount in the same transaction.
+// @Tags         bookings
+// @Produce      json
+// @Param        bookingId path string true "Booking ID"
+// @Success      200 {object} model.BookingModel
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.ErrorResponse
+// @Failure      403 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Security     BearerAuth
+// @Router       /bookings/{bookingId}/cancel [post]
+func CancelBooking(bookingService *service.BookingService, userRepo repository.UserRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := middleware.PrincipalFromContext(c)
+		if !ok {
+			writeProblem(c, http.StatusUnauthorized, "authentication is required")
+			return
+		}
+		bookingID, err := uuid.Parse(c.Param("bookingId"))
+		if err != nil {
+			writeProblem(c, http.StatusBadRequest, "invalid booking id")
+			return
+		}
+		user, ok := resolveAPIUser(c, userRepo, principal)
+		if !ok {
+			return
+		}
+		booking, err := bookingService.CancelBooking(c.Request.Context(), bookingID, user.UserID)
+		if err != nil {
+			writeBookingError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, booking)
+	}
+}
+
 func writeBookingError(c *gin.Context, err error) {
 	var capacityErr *service.CapacityExceededError
 	switch {
 	case errors.Is(err, service.ErrInvalidTicketCount):
 		writeProblem(c, http.StatusBadRequest, err.Error())
-	case errors.Is(err, service.ErrEventNotFound):
+	case errors.Is(err, service.ErrEventNotFound), errors.Is(err, service.ErrBookingNotFound):
 		writeProblem(c, http.StatusNotFound, err.Error())
-	case errors.Is(err, service.ErrEventNotPublished):
+	case errors.Is(err, service.ErrEventNotPublished), errors.Is(err, service.ErrBookingNotCancellable):
 		writeProblem(c, http.StatusConflict, err.Error())
 	case errors.As(err, &capacityErr):
 		writeProblem(c, http.StatusConflict, err.Error())
 	default:
-		log.Printf("unexpected booking error: %V", err)
+		log.Printf("unexpected booking error: %v", err)
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }

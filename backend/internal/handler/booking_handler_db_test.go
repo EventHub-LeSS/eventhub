@@ -7,6 +7,7 @@ import (
 	"backend/internal/service"
 	"backend/internal/testdb"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -43,7 +45,157 @@ func newBookingRouter(db *gorm.DB, principal *middleware.Principal) http.Handler
 
 	r := gin.New()
 	r.POST("/api/v1/bookings", setPrincipal, CreateBookingHandler(bookingService, repository.NewUserRepository(db)))
+	r.POST("/api/v1/bookings/:bookingId/cancel", setPrincipal, CancelBooking(bookingService, repository.NewUserRepository(db)))
 	return r
+}
+
+func TestCancelBooking(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	userID := seedBookingUser(t, db, bookingKeycloakUserID)
+	seedBookingUser(t, db, "other-user")
+	booking := &model.BookingModel{
+		BookingID: uuid.New(), UserID: &userID, EventID: &event.eventID,
+		NumberOfTickets: 2, Status: model.BookingStatusConfirmed,
+	}
+	if err := db.Create(booking).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		principal *middleware.Principal
+		id        string
+		want      int
+	}{
+		{"unauthenticated", nil, booking.BookingID.String(), http.StatusUnauthorized},
+		{"invalid id", &middleware.Principal{Subject: bookingKeycloakUserID}, "invalid", http.StatusBadRequest},
+		{"unsynced user", &middleware.Principal{Subject: "unknown"}, booking.BookingID.String(), http.StatusForbidden},
+		{"other owner", &middleware.Principal{Subject: "other-user"}, booking.BookingID.String(), http.StatusNotFound},
+		{"missing booking", &middleware.Principal{Subject: bookingKeycloakUserID}, uuid.NewString(), http.StatusNotFound},
+		{"cancel", &middleware.Principal{Subject: bookingKeycloakUserID}, booking.BookingID.String(), http.StatusOK},
+		{"repeat", &middleware.Principal{Subject: bookingKeycloakUserID}, booking.BookingID.String(), http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			newBookingRouter(db, tc.principal).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/bookings/"+tc.id+"/cancel", nil))
+			if rec.Code != tc.want {
+				t.Fatalf("expected %d, got %d: %s", tc.want, rec.Code, rec.Body.String())
+			}
+			stored, err := repository.NewBookingRepository(db).GetBookingByID(booking.BookingID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := model.BookingStatusConfirmed
+			if tc.want == http.StatusOK {
+				want = model.BookingStatusCancelled
+			}
+			if stored.Status != want {
+				t.Fatalf("status = %s, want %s", stored.Status, want)
+			}
+		})
+	}
+}
+
+func TestCancelBooking_Refunds(t *testing.T) {
+	for _, paid := range []bool{true, false} {
+		name := "pending payment is not refunded"
+		if paid {
+			name = "paid payment is fully refunded"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := testdb.Open(t)
+			event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+			owner := seedBookingUser(t, db, bookingKeycloakUserID)
+			seedBookingUser(t, db, "other-user")
+			if err := db.Exec("UPDATE events SET price = ? WHERE event_id = ?", "12.49", event.eventID).Error; err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			bookings := service.NewBookingService(repository.NewBookingRepository(db), 0)
+			payments := service.NewPaymentService(repository.NewTransactor(db), repository.NewBookingRepository(db), repository.NewPaymentRepository(db))
+			booking, err := bookings.ReserveTickets(ctx, event.eventID, owner, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			started, _, err := payments.StartPayment(ctx, booking.BookingID, owner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			amount := decimal.RequireFromString("24.98")
+			if !started.Amount.Equal(amount) {
+				t.Fatalf("payment amount = %s, want %s", started.Amount, amount)
+			}
+			if paid {
+				if _, err := payments.SimulatePayment(ctx, booking.BookingID, owner, model.SimulatedPaymentSuccess, amount); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Refund the original charge even if the event price changes afterwards.
+			if err := db.Exec("UPDATE events SET price = ? WHERE event_id = ?", "99.99", event.eventID).Error; err != nil {
+				t.Fatal(err)
+			}
+			path := "/api/v1/bookings/" + booking.BookingID.String() + "/cancel"
+			otherRouter := newBookingRouter(db, &middleware.Principal{Subject: "other-user"})
+			rec := doPaymentRequest(t, otherRouter, http.MethodPost, path, nil)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("other owner: expected 404, got %d: %s", rec.Code, rec.Body.String())
+			}
+			paymentRepo := repository.NewPaymentRepository(db)
+			before, err := paymentRepo.GetPayment(started.PaymentID)
+			if err != nil || before == nil {
+				t.Fatalf("read payment: %v", err)
+			}
+			wantBefore := model.PaymentStatusPending
+			if paid {
+				wantBefore = model.PaymentStatusPaid
+			}
+			if before.Status != wantBefore || !before.RefundAmount.IsZero() {
+				t.Fatalf("unauthorized cancellation changed payment: %+v", before)
+			}
+			router := newBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+			var firstPayment *model.PaymentModel
+			for attempt := 0; attempt < 2; attempt++ {
+				rec := doPaymentRequest(t, router, http.MethodPost, path, nil)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("attempt %d: expected 200, got %d: %s", attempt, rec.Code, rec.Body.String())
+				}
+				var cancelled model.BookingModel
+				if err := json.Unmarshal(rec.Body.Bytes(), &cancelled); err != nil {
+					t.Fatal(err)
+				}
+				if cancelled.BookingID != booking.BookingID || cancelled.Status != model.BookingStatusCancelled {
+					t.Fatalf("unexpected cancellation response: %+v", cancelled)
+				}
+				stored, err := paymentRepo.GetPayment(started.PaymentID)
+				if err != nil || stored == nil {
+					t.Fatalf("read payment: %v", err)
+				}
+				if paid {
+					if stored.Status != model.PaymentStatusRefunded || !stored.RefundAmount.Equal(amount) || stored.FailureReason != nil {
+						t.Fatalf("expected full refund of %s, got %+v", amount, stored)
+					}
+				} else if stored.Status != model.PaymentStatusFailed || !stored.RefundAmount.IsZero() || stored.FailureReason == nil || *stored.FailureReason != model.PaymentFailureBookingCancelled {
+					t.Fatalf("pending payment should fail without a refund: %+v", stored)
+				}
+				if !stored.Amount.Equal(amount) {
+					t.Fatalf("original payment amount changed: %s", stored.Amount)
+				}
+				if firstPayment != nil && !stored.UpdatedAt.Equal(firstPayment.UpdatedAt) {
+					t.Fatal("repeated cancellation updated the payment again")
+				}
+				firstPayment = stored
+			}
+			paymentRouter := newPaymentRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+			rec = doPaymentRequest(t, paymentRouter, http.MethodGet, paymentPath(booking.BookingID), nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("get payment: %d: %s", rec.Code, rec.Body.String())
+			}
+			result := decodePayment(t, rec)
+			if result.Status != firstPayment.Status || result.BookingStatus != model.BookingStatusCancelled || result.TicketsValid {
+				t.Fatalf("unexpected payment response after cancellation: %+v", result)
+			}
+		})
+	}
 }
 
 func postBooking(t *testing.T, router http.Handler, body map[string]any) *httptest.ResponseRecorder {

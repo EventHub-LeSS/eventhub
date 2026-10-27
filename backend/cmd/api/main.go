@@ -154,6 +154,7 @@ func main() {
 
 		// bookings
 		protected.POST("/bookings", bookingHandler)
+		protected.POST("/bookings/:bookingId/cancel", handler.CancelBooking(bookingService, userRepo))
 		// EVENTHUB-235: simulated payment process of a booking, no real payment provider
 		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
 		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)

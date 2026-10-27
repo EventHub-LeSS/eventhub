@@ -527,11 +527,13 @@ definitions:
   model.PaymentFailureReason:
     enum:
     - declined
+    - booking_cancelled
     - reservation_expired
     - event_unavailable
     type: string
     x-enum-varnames:
     - PaymentFailureDeclined
+    - PaymentFailureBookingCancelled
     - PaymentFailureReservationExpired
     - PaymentFailureEventUnavailable
   model.PaymentResponse:
@@ -973,6 +975,54 @@ paths:
       security:
       - BearerAuth: []
       summary: Buchung anlegen
+      tags:
+      - bookings
+  /bookings/{bookingId}/cancel:
+    post:
+      description: Cancels the caller's reserved or confirmed booking and releases
+        its tickets. Repeated cancellation succeeds without another refund. Pending
+        payments fail; paid payments receive a full simulated refund of the stored
+        payment amount in the same transaction.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cancel a booking
       tags:
       - bookings
   /bookings/{bookingId}/payment:
