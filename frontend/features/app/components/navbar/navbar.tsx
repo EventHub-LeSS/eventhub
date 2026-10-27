@@ -2,6 +2,7 @@
 
 import {
   CalendarDaysIcon,
+  ClipboardListIcon,
   CompassIcon,
   FlagIcon,
   HeartIcon,
@@ -41,6 +42,7 @@ interface NavbarProps {
 
 const visitorLinks: NavLink[] = [
   { label: "Entdecken", href: "/", icon: CompassIcon },
+  { label: "Buchungen", href: "/bookings", icon: ClipboardListIcon },
   { label: "Meine Tickets", href: "/tickets", icon: TicketIcon },
   { label: "Favoriten", href: "/favorites", icon: HeartIcon },
   { label: "Kalender", href: "/calendar", icon: CalendarDaysIcon },

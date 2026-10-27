@@ -5,9 +5,9 @@ export default async function BookingsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-6">
-      <h1 className="font-medium">Bookings</h1>
+      <h1 className="font-medium">Buchungen</h1>
       <p className="text-sm text-muted-foreground">
-        Signed in as {user.email}. Your bookings will show up here.
+        Angemeldet als {user.email}. Deine Buchungen erscheinen hier.
       </p>
     </div>
   )
