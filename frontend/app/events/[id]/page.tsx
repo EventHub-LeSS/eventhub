@@ -1,63 +1,63 @@
-import { ArrowLeftIcon, StarIcon } from "lucide-react"
-import Link from "next/link"
-import { notFound } from "next/navigation"
+import { ArrowLeftIcon, StarIcon } from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
-import { getCurrentUser } from "@/features/auth"
-import { BookingForm, formatAmount } from "@/features/bookings"
+import { getCurrentUser } from "@/features/auth";
+import { BookingForm, formatAmount } from "@/features/bookings";
 import {
   getEventRatingSummary,
+  getOrganizerRatingSummary,
   getPublishedEventDetails,
-} from "@/features/catalog"
-import { Button } from "@/features/shared/components/ui/button"
+} from "@/features/catalog";
+import { Button } from "@/features/shared/components/ui/button";
 
 interface PageProps {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }
 
 const dateFormat = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "full",
   timeStyle: "short",
   timeZone: "Europe/Berlin",
-})
+});
 
 const ratingFormat = new Intl.NumberFormat("de-DE", {
   maximumFractionDigits: 1,
-})
+});
 
 /** Full-width rows of the event details list: bold key, muted value. */
 function DetailRow({
   label,
   children,
 }: {
-  label: string
-  children: React.ReactNode
+  label: string;
+  children: React.ReactNode;
 }) {
   return (
     <p className="text-sm">
       <span className="font-semibold">{label}:</span>{" "}
       <span className="text-muted-foreground">{children}</span>
     </p>
-  )
+  );
 }
 
 /**
  * Public detail page of a published event (EVENTHUB-211/212) and the entry
  * point of the booking flow (EVENTHUB-235): the amount to pay is calculated
  * from the ticket count and the price here, before anything is reserved.
- * The footer shows the event's public rating summary (EVENTHUB-238).
+ * The organizer is shown with its average rating (EVENTHUB-239), the footer
+ * shows the event's public rating summary (EVENTHUB-238).
  */
 export default async function EventDetailPage({ params }: PageProps) {
-  const { id } = await params
+  const { id } = await params;
   const [result, user, rating] = await Promise.all([
     getPublishedEventDetails(id),
     getCurrentUser(),
     getEventRatingSummary(id),
-  ])
+  ]);
 
-  // Unpublished, draft or unknown events, and events missing category or
-  // location, all answer 404; URLs must not reach them.
   if (result.status === "not-found") {
-    notFound()
+    notFound();
   }
 
   if (result.status === "unavailable") {
@@ -77,32 +77,37 @@ export default async function EventDetailPage({ params }: PageProps) {
           es später erneut.
         </p>
       </div>
-    )
+    );
   }
 
-  const { event } = result
-  const { location, category } = event
+  const { event } = result;
+  const { location, category } = event;
+  const organizerRating = await getOrganizerRatingSummary(event.organizerId);
+  const organizerAverage =
+    organizerRating.status === "ok"
+      ? organizerRating.summary.averageRating
+      : null;
   const street = [location.street, location.houseNumber]
     .filter(Boolean)
-    .join(" ")
+    .join(" ");
   const address = [
     [location.name, street].filter(Boolean).join(", "),
     `${location.postalCode} ${location.city}`,
-  ].join(", ")
+  ].join(", ");
 
   // The rating summary is non-critical: without it only the reminder note
   // is shown, the rest of the page works regardless.
-  const ratingSummary = rating.status === "ok" ? rating.summary : null
-  const averageRating = ratingSummary?.averageRating ?? null
-  const ratingCount = ratingSummary?.ratingCount ?? 0
+  const ratingSummary = rating.status === "ok" ? rating.summary : null;
+  const averageRating = ratingSummary?.averageRating ?? null;
+  const ratingCount = ratingSummary?.ratingCount ?? 0;
   const hasRating =
-    ratingSummary !== null && averageRating !== null && ratingCount > 0
-  const filledStars = hasRating ? Math.round(averageRating) : 0
+    ratingSummary !== null && averageRating !== null && ratingCount > 0;
+  const filledStars = hasRating ? Math.round(averageRating) : 0;
   const ratingLabel = hasRating
     ? `${ratingFormat.format(averageRating)} von 5 · ${ratingCount} ${
         ratingCount === 1 ? "Bewertung" : "Bewertungen"
       }`
-    : "Noch keine Bewertungen"
+    : "Noch keine Bewertungen";
 
   return (
     <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
@@ -146,6 +151,22 @@ export default async function EventDetailPage({ params }: PageProps) {
           </div>
 
           <div className="flex flex-col gap-2">
+            <DetailRow label="Veranstalter">
+              {event.organizerAlias}
+              {organizerAverage !== null && (
+                <span
+                  className="ml-2 inline-flex items-center gap-1 align-middle font-medium text-foreground"
+                  title="Durchschnittliche Bewertung des Veranstalters"
+                >
+                  <StarIcon
+                    className="size-4 fill-amber-500 text-amber-500"
+                    aria-hidden="true"
+                  />
+                  <span className="sr-only">Bewertung:</span>
+                  {ratingFormat.format(organizerAverage)}
+                </span>
+              )}
+            </DetailRow>
             <DetailRow label="Zeitpunkt">
               {dateFormat.format(new Date(event.startTime))} –{" "}
               {dateFormat.format(new Date(event.endTime))}
@@ -207,5 +228,5 @@ export default async function EventDetailPage({ params }: PageProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }
