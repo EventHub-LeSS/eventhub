@@ -14,13 +14,16 @@ import {
 } from "@/features/events/lib/draft"
 import type { Event, EventCatalog } from "@/features/events/lib/types"
 import { Button } from "@/features/shared/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/features/shared/components/ui/select"
 
 const fieldClass =
   "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
-
-// The browser paints the open list of a transparent select white, so its
-// options need the theme colors to stay readable in dark mode.
-const selectClass = `${fieldClass} [&>option]:bg-popover [&>option]:text-popover-foreground`
 
 function Field({
   id,
@@ -84,6 +87,20 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
 
   const catalogMissing =
     catalog.categories.length === 0 || catalog.locations.length === 0
+
+  // The labels the selects show for their current value, like in the event filters.
+  const categoryItems = Object.fromEntries(
+    catalog.categories.map((category) => [
+      category.categoryId,
+      category.category,
+    ])
+  )
+  const locationItems = Object.fromEntries(
+    catalog.locations.map((location) => [
+      location.locationId,
+      `${location.name}, ${location.city}`,
+    ])
+  )
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -168,20 +185,29 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         </Field>
 
         <Field id="categoryId" label="Kategorie" error={errors.categoryId}>
-          <select
-            id="categoryId"
-            className={selectClass}
-            value={draft.categoryId}
-            onChange={(changed) => update("categoryId", changed.target.value)}
-            aria-invalid={Boolean(errors.categoryId)}
+          <Select
+            items={categoryItems}
+            value={draft.categoryId || null}
+            onValueChange={(value) => update("categoryId", value ?? "")}
           >
-            <option value="">Bitte auswählen</option>
-            {catalog.categories.map((category) => (
-              <option key={category.categoryId} value={category.categoryId}>
-                {category.category}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="categoryId"
+              className="w-full data-[size=default]:h-9"
+              aria-invalid={Boolean(errors.categoryId)}
+            >
+              <SelectValue placeholder="Bitte auswählen" />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {catalog.categories.map((category) => (
+                <SelectItem
+                  key={category.categoryId}
+                  value={category.categoryId}
+                >
+                  {category.category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
 
         <Field
@@ -189,20 +215,29 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           label="Veranstaltungsort"
           error={errors.locationId}
         >
-          <select
-            id="locationId"
-            className={selectClass}
-            value={draft.locationId}
-            onChange={(changed) => update("locationId", changed.target.value)}
-            aria-invalid={Boolean(errors.locationId)}
+          <Select
+            items={locationItems}
+            value={draft.locationId || null}
+            onValueChange={(value) => update("locationId", value ?? "")}
           >
-            <option value="">Bitte auswählen</option>
-            {catalog.locations.map((location) => (
-              <option key={location.locationId} value={location.locationId}>
-                {location.name}, {location.city}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="locationId"
+              className="w-full data-[size=default]:h-9"
+              aria-invalid={Boolean(errors.locationId)}
+            >
+              <SelectValue placeholder="Bitte auswählen" />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {catalog.locations.map((location) => (
+                <SelectItem
+                  key={location.locationId}
+                  value={location.locationId}
+                >
+                  {locationItems[location.locationId]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       </div>
 
