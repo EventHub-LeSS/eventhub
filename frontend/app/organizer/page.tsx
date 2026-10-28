@@ -15,11 +15,11 @@ import {
   CardContent,
   CardTitle,
 } from "@/features/shared/components/ui/card"
-import { getSession } from "@/features/auth/lib/dal"
+import { getSession } from "@/features/auth"
 import {
   getOrganizationByAlias,
   getOrganizationMembersWithRights,
-} from "@/features/organizations/lib/keycloak-admin"
+} from "@/features/organizations"
 
 interface PageProps {
   searchParams: Promise<{ status?: string; category?: string; q?: string }>
