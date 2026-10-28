@@ -2,7 +2,7 @@
 
 import { XIcon } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import type { OrganizerDashboardFilters } from "@/features/events/lib/dashboard"
 import { Button } from "@/features/shared/components/ui/button"
@@ -81,9 +81,25 @@ export function DashboardFilters({
     const search = params.toString()
     router.push(search ? `${pathname}?${search}` : pathname)
   }
+  
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  function scheduleTitleFilter(nextTitle: string) {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(
+      () => applyFilters({ title: nextTitle, status, categoryId }),
+      300
+    )
+  }
+
+  function handleTitleChange(value: string) {
+    setTitle(value)
+    scheduleTitleFilter(value)
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    clearTimeout(debounceRef.current)
     applyFilters({ title, status, categoryId })
   }
 
@@ -100,6 +116,7 @@ export function DashboardFilters({
   }
 
   function handleReset() {
+    clearTimeout(debounceRef.current)
     setTitle("")
     setStatus(ALL)
     setCategoryId(ALL)
@@ -122,7 +139,7 @@ export function DashboardFilters({
           id="dashboard-filter-title"
           placeholder="Nach Titel suchen…"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => handleTitleChange(event.target.value)}
         />
       </div>
       <div className="flex min-w-[160px] flex-1 flex-col gap-1.5">
