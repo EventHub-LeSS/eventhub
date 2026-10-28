@@ -123,7 +123,7 @@ func main() {
 		}
 
 		protected := v1.Group("")
-		protected.Use(authenticator.Middleware())
+		protected.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService))
 		protected.GET("/users/me", handler.CurrentUser)
 		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
 		protected.PATCH("/notifications/:notificationId/read", notificationHandler.MarkNotificationReadHandler)
