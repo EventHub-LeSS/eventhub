@@ -46,8 +46,8 @@ func ownBookingWith(booking model.BookingStatus, expiresAt *time.Time, payment *
 		Now:         now,
 	}}
 	if event != nil {
-		own.Event = &model.EventModel{EventID: eventID, Title: "Konzert", StartTime: now.Add(24 * time.Hour), EndTime: now.Add(26 * time.Hour), Status: *event}
-		own.Location = &model.LocationModel{LocationID: uuid.New(), Name: "Halle", City: "Bonn", PostalCode: "53111", Street: "Weg"}
+		location := "Halle, Weg 1, 53111 Bonn"
+		own.Event = &model.EventModel{EventID: eventID, Title: "Konzert", StartTime: now.Add(24 * time.Hour), EndTime: now.Add(26 * time.Hour), Status: *event, Location: &location}
 	} else {
 		own.Booking.EventID = nil
 	}
@@ -155,10 +155,10 @@ func TestOwnBookingResponse_NoPaymentNoEvent_ReturnsNullFields(t *testing.T) {
 	}
 
 	own := ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &published, now)
-	own.Location = nil
+	own.Event.Location = nil
 	withoutLocation := ownBookingResponse(own)
 	if withoutLocation.Event == nil || withoutLocation.Event.Location != nil || !withoutLocation.TicketsValid {
-		t.Errorf("a deleted location must show location null and keep the ticket valid, got %+v", withoutLocation.Event)
+		t.Errorf("a missing location must show location null and keep the ticket valid, got %+v", withoutLocation.Event)
 	}
 }
 

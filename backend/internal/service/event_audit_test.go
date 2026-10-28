@@ -65,7 +65,7 @@ func TestUpdateEvent_UnchangedValuesWriteNoEntry(t *testing.T) {
 	svc, _, auditRepo := newTestServiceWithAudit(event)
 	req := model.UpdateEventRequest{
 		Title: event.Title, Description: event.Description, StartTime: event.StartTime, EndTime: event.EndTime,
-		Capacity: event.Capacity, Price: event.Price, CategoryID: *event.CategoryID, LocationID: *event.LocationID,
+		Capacity: event.Capacity, Price: event.Price, CategoryID: *event.CategoryID, Location: *event.Location,
 	}
 
 	if _, err := svc.UpdateEvent(auditCtx(audit.EventUpdated), event.EventID, []string{"kc-org-b"}, req); err != nil {

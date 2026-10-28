@@ -149,7 +149,7 @@ var (
 )
 
 func eventOwnedBy(org *model.OrganizationModel, status model.EventStatus) *model.EventModel {
-	category, location := uuid.New(), uuid.New()
+	category, location := uuid.New(), "Stadthalle, Markt 1, 53111 Bonn"
 
 	var organizer *uuid.UUID
 	if org != nil {
@@ -167,7 +167,7 @@ func eventOwnedBy(org *model.OrganizationModel, status model.EventStatus) *model
 		Price:       decimal.NewFromInt(20),
 		CategoryID:  &category,
 		OrganizerID: organizer,
-		LocationID:  &location,
+		Location:    &location,
 	}
 }
 
@@ -179,7 +179,7 @@ func updateRequest() model.UpdateEventRequest {
 		Capacity:   250,
 		Price:      decimal.NewFromInt(35),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   "Neue Halle, Hauptstraße 5, 50667 Köln",
 	}
 }
 
@@ -434,8 +434,8 @@ func TestPublishEvent_RequiresCompleteness(t *testing.T) {
 		"zero capacity":    func(e *model.EventModel) { e.Capacity = 0 },
 		"missing category": func(e *model.EventModel) { e.CategoryID = nil },
 		"zero category id": func(e *model.EventModel) { id := uuid.Nil; e.CategoryID = &id },
-		"missing location": func(e *model.EventModel) { e.LocationID = nil },
-		"zero location id": func(e *model.EventModel) { id := uuid.Nil; e.LocationID = &id },
+		"missing location": func(e *model.EventModel) { e.Location = nil },
+		"blank location":   func(e *model.EventModel) { blank := " \t "; e.Location = &blank },
 	}
 
 	for name, mutate := range mutations {
@@ -529,7 +529,7 @@ func draftRequest(organizationID string) model.CreateDraftRequest {
 		Capacity:       100,
 		Price:          decimal.NewFromInt(15),
 		CategoryID:     uuid.New(),
-		LocationID:     uuid.New(),
+		Location:       "  Sommerwiese, Parkweg 3, 53111 Bonn\n",
 	}
 }
 
@@ -569,7 +569,7 @@ func TestCreateDraft_SavesDraftForManagedOrganization(t *testing.T) {
 				t.Errorf("organizer = %v, want %v", created.OrganizerID, tt.wantOrg.OrganizationID)
 			}
 			if created.Title != req.Title || created.Capacity != req.Capacity || !created.Price.Equal(req.Price) ||
-				*created.CategoryID != req.CategoryID || *created.LocationID != req.LocationID {
+				*created.CategoryID != req.CategoryID || *created.Location != "Sommerwiese, Parkweg 3, 53111 Bonn" {
 				t.Errorf("request fields not applied: %#v", created)
 			}
 		})

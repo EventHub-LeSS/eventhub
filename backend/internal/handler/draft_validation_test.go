@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ func validDraftRequest() model.CreateDraftRequest {
 		Capacity:   100,
 		Price:      decimal.NewFromInt(15),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   "Stadthalle, Markt 1, 53111 Bonn",
 	}
 }
 
@@ -43,7 +44,10 @@ func TestCreateDraftRequestValidation(t *testing.T) {
 		{name: "negativer preis", mutate: func(r *model.CreateDraftRequest) { r.Price = decimal.NewFromInt(-1) }, wantErr: true},
 		{name: "preis zu hoch", mutate: func(r *model.CreateDraftRequest) { r.Price = decimal.NewFromInt(10001) }, wantErr: true},
 		{name: "kategorie fehlt", mutate: func(r *model.CreateDraftRequest) { r.CategoryID = uuid.Nil }, wantErr: true},
-		{name: "ort fehlt", mutate: func(r *model.CreateDraftRequest) { r.LocationID = uuid.Nil }, wantErr: true},
+		{name: "ort fehlt", mutate: func(r *model.CreateDraftRequest) { r.Location = "" }, wantErr: true},
+		{name: "ort nur leerzeichen", mutate: func(r *model.CreateDraftRequest) { r.Location = " \t\n " }, wantErr: true},
+		{name: "ort mit 200 zeichen", mutate: func(r *model.CreateDraftRequest) { r.Location = strings.Repeat("ä", 200) }},
+		{name: "ort zu lang", mutate: func(r *model.CreateDraftRequest) { r.Location = strings.Repeat("ä", 201) }, wantErr: true},
 	}
 
 	for _, tt := range tests {

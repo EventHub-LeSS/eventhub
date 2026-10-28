@@ -22,7 +22,7 @@ type capacityFixture struct {
 	events     *EventService
 	orgID      string
 	categoryID uuid.UUID
-	locationID uuid.UUID
+	location   string
 }
 
 func newCapacityFixture(t *testing.T, capacity int) capacityFixture {
@@ -31,15 +31,15 @@ func newCapacityFixture(t *testing.T, capacity int) capacityFixture {
 	var row struct {
 		KeycloakOrgID string
 		CategoryID    uuid.UUID
-		LocationID    uuid.UUID
+		Location      string
 	}
-	err := f.db.Raw(`SELECT o.keycloak_org_id, e.category_id, e.location_id
+	err := f.db.Raw(`SELECT o.keycloak_org_id, e.category_id, e.location
 	                 FROM events e JOIN organizations o ON o.organization_id = e.organizer_id
 	                 WHERE e.event_id = ?`, f.eventID).Scan(&row).Error
 	if err != nil {
 		t.Fatalf("load event: %v", err)
 	}
-	f.orgID, f.categoryID, f.locationID = row.KeycloakOrgID, row.CategoryID, row.LocationID
+	f.orgID, f.categoryID, f.location = row.KeycloakOrgID, row.CategoryID, row.Location
 	f.events = NewEventService(repository.NewEventRepository(f.db), repository.NewOrganizationRepository(f.db), repository.NewTransactor(f.db))
 	return f
 }
@@ -53,7 +53,7 @@ func (f capacityFixture) setCapacity(capacity int) error {
 		Capacity:   capacity,
 		Price:      decimal.NewFromInt(20),
 		CategoryID: f.categoryID,
-		LocationID: f.locationID,
+		Location:   f.location,
 	})
 	return err
 }

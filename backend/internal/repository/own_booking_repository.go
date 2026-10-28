@@ -10,14 +10,12 @@ import (
 )
 
 // EVENTHUB-236: Meine Tickets und Buchungshistorie
-// OwnBooking is a booking of a user with its payment, event and location. Like GetBookingPayment it
+// OwnBooking is a booking of a user with its payment and event. Like GetBookingPayment it
 // is read in one statement, so the booking, payment and event state come from one snapshot.
 type OwnBooking struct {
 	BookingPayment
 	// Event is nil when the event of the booking no longer exists.
 	Event *model.EventModel
-	// Location is nil when the event has no location or the event no longer exists.
-	Location *model.LocationModel
 }
 
 // OwnBookingRepository reads the bookings of one user for the ticket list, the booking history and
@@ -42,25 +40,23 @@ func NewOwnBookingRepository(db *gorm.DB) OwnBookingRepository {
 	return &ownBookingRepository{db: db}
 }
 
-// ownBookingQuery selects the bookings of a user with payment, event and location. The clock CTE
+// ownBookingQuery selects the bookings of a user with payment and event. The clock CTE
 // reads clock_timestamp() once, so every row of a list is judged by the same database time.
 const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
 	SELECT b.*,
 	    p.amount AS payment_amount, p.status AS payment_status, p.failure_reason AS payment_failure_reason,
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
-	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
-	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
+	    e.location AS event_location,
 	    clock.database_now
 	FROM bookings b
 	CROSS JOIN clock
 	LEFT JOIN payments p ON p.payment_id = b.payment_id
 	LEFT JOIN events e ON e.event_id = b.event_id
-	LEFT JOIN locations l ON l.location_id = e.location_id
 	WHERE b.user_id = ?`
 
-// ownBookingRow is one row of ownBookingQuery; the payment, event and location columns are NULL
-// when the booking has none.
+// ownBookingRow is one row of ownBookingQuery; the payment and event columns are NULL when the
+// booking has none.
 type ownBookingRow struct {
 	model.BookingModel
 	PaymentAmount        decimal.NullDecimal         `gorm:"column:payment_amount"`
@@ -73,12 +69,7 @@ type ownBookingRow struct {
 	EventTitle           *string                     `gorm:"column:event_title"`
 	EventStartTime       *time.Time                  `gorm:"column:event_start_time"`
 	EventEndTime         *time.Time                  `gorm:"column:event_end_time"`
-	LocationID           *uuid.UUID                  `gorm:"column:location_id"`
-	LocationName         *string                     `gorm:"column:location_name"`
-	LocationCity         *string                     `gorm:"column:location_city"`
-	LocationPostalCode   *string                     `gorm:"column:location_postal_code"`
-	LocationStreet       *string                     `gorm:"column:location_street"`
-	LocationHouseNumber  *string                     `gorm:"column:location_house_number"`
+	EventLocation        *string                     `gorm:"column:event_location"`
 	DatabaseNow          time.Time                   `gorm:"column:database_now"`
 }
 
@@ -130,22 +121,12 @@ func (row *ownBookingRow) ownBooking() *OwnBooking {
 	}
 	if booking.EventID != nil && row.EventStatus != nil {
 		own.Event = &model.EventModel{
-			EventID:    *booking.EventID,
-			Title:      derefString(row.EventTitle),
-			StartTime:  derefTime(row.EventStartTime),
-			EndTime:    derefTime(row.EventEndTime),
-			Status:     *row.EventStatus,
-			LocationID: row.LocationID,
-		}
-	}
-	if row.LocationID != nil {
-		own.Location = &model.LocationModel{
-			LocationID:  *row.LocationID,
-			Name:        derefString(row.LocationName),
-			City:        derefString(row.LocationCity),
-			PostalCode:  derefString(row.LocationPostalCode),
-			Street:      derefString(row.LocationStreet),
-			HouseNumber: row.LocationHouseNumber,
+			EventID:   *booking.EventID,
+			Title:     derefString(row.EventTitle),
+			StartTime: derefTime(row.EventStartTime),
+			EndTime:   derefTime(row.EventEndTime),
+			Status:    *row.EventStatus,
+			Location:  row.EventLocation,
 		}
 	}
 	return own

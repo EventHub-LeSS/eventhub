@@ -45,6 +45,6 @@ type OwnBookingEvent struct {
 	StartTime time.Time   `json:"startTime"`
 	EndTime   time.Time   `json:"endTime"`
 	Status    EventStatus `json:"status"`
-	// Null when the location of the event was deleted.
-	Location *PublishedEventLocation `json:"location"`
+	// Venue and address as free text; null when the event has no location.
+	Location *string `json:"location" example:"Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"`
 }

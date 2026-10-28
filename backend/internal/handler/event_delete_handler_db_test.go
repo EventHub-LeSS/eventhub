@@ -106,7 +106,6 @@ func TestDeleteEventHandler_OwnDraft_RemovesOnlyTheEvent(t *testing.T) {
 		id    uuid.UUID
 	}{
 		{"SELECT count(*) FROM categories WHERE category_id = ?", seeded.categoryID},
-		{"SELECT count(*) FROM locations WHERE location_id = ?", seeded.locationID},
 		{"SELECT count(*) FROM organizations WHERE organization_id = ?", seeded.ownerOrgID},
 	}
 	for _, m := range masterData {

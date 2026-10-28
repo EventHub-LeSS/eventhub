@@ -748,7 +748,7 @@ const docTemplate = `{
         },
         "/events": {
             "get": {
-                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
+                "description": "Public list of published events with their category, location and organizer alias. The location is free text entered by the organizer, e.g. venue and address. Optional location searches the location text; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -759,7 +759,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
+                        "description": "Case-insensitive substring of the location text; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
                         "name": "location",
                         "in": "query"
                     },
@@ -856,7 +856,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unknown categoryId or locationId",
+                        "description": "Unknown categoryId",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -1821,7 +1821,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent.",
+                "description": "Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event data, including its location, before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent.",
                 "produces": [
                     "application/json"
                 ],
@@ -2768,7 +2768,7 @@ const docTemplate = `{
                 "capacity",
                 "categoryId",
                 "endTime",
-                "locationId",
+                "location",
                 "startTime",
                 "title"
             ],
@@ -2788,8 +2788,11 @@ const docTemplate = `{
                 "endTime": {
                     "type": "string"
                 },
-                "locationId": {
-                    "type": "string"
+                "location": {
+                    "description": "Venue and address as free text; surrounding whitespace is removed.",
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"
                 },
                 "organizationId": {
                     "description": "Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.\nMay be omitted when the caller manages events in exactly one organization.",
@@ -2971,7 +2974,7 @@ const docTemplate = `{
                 "eventId": {
                     "type": "string"
                 },
-                "locationId": {
+                "location": {
                     "type": "string"
                 },
                 "organizerId": {
@@ -3140,12 +3143,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
-                    "description": "Null when the location of the event was deleted.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/model.PublishedEventLocation"
-                        }
-                    ]
+                    "description": "Venue and address as free text; null when the event has no location.",
+                    "type": "string",
+                    "example": "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"
                 },
                 "startTime": {
                     "type": "string"
@@ -3355,7 +3355,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
-                    "$ref": "#/definitions/model.PublishedEventLocation"
+                    "description": "Venue and address as free text.",
+                    "type": "string",
+                    "example": "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"
                 },
                 "occupancyPercent": {
                     "type": "number"
@@ -3386,29 +3388,6 @@ const docTemplate = `{
                 }
             }
         },
-        "model.PublishedEventLocation": {
-            "type": "object",
-            "properties": {
-                "city": {
-                    "type": "string"
-                },
-                "houseNumber": {
-                    "type": "string"
-                },
-                "locationId": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "postalCode": {
-                    "type": "string"
-                },
-                "street": {
-                    "type": "string"
-                }
-            }
-        },
         "model.PublishedEventResponse": {
             "type": "object",
             "properties": {
@@ -3422,7 +3401,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
-                    "$ref": "#/definitions/model.PublishedEventLocation"
+                    "description": "Venue and address as free text.",
+                    "type": "string",
+                    "example": "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"
                 },
                 "organizerAlias": {
                     "description": "Alias of the organization that owns the event, as tokens and GET /users/me carry it.",
@@ -3521,7 +3502,7 @@ const docTemplate = `{
                 "capacity",
                 "categoryId",
                 "endTime",
-                "locationId",
+                "location",
                 "startTime",
                 "title"
             ],
@@ -3540,8 +3521,11 @@ const docTemplate = `{
                 "endTime": {
                     "type": "string"
                 },
-                "locationId": {
-                    "type": "string"
+                "location": {
+                    "description": "Venue and address as free text; surrounding whitespace is removed.",
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"
                 },
                 "price": {
                     "type": "number",

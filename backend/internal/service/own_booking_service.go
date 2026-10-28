@@ -97,16 +97,7 @@ func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
 			StartTime: event.StartTime,
 			EndTime:   event.EndTime,
 			Status:    event.Status,
-		}
-		if location := own.Location; location != nil {
-			resp.Event.Location = &model.PublishedEventLocation{
-				LocationID:  location.LocationID,
-				Name:        location.Name,
-				City:        location.City,
-				PostalCode:  location.PostalCode,
-				Street:      location.Street,
-				HouseNumber: location.HouseNumber,
-			}
+			Location:  event.Location,
 		}
 	}
 	return resp

@@ -153,11 +153,7 @@ func TestSimulatedReminderRefreshDatabase(t *testing.T) {
 	if stable.Items[0].ReadAt == nil || !stable.Items[0].ScheduledAt.Equal(*original.ScheduledAt) {
 		t.Fatal("unchanged reminder changed")
 	}
-	nextLocation := seedEventForOrg(t, db, "notification-refresh", model.EventStatusPublished)
-	if err := db.Exec("UPDATE locations SET name='Neue Halle',city='Berlin',street='Neue Straße',house_number='17' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec("UPDATE events SET title='Neuer Titel',start_time=start_time+interval '2 days',end_time=end_time+interval '2 days',location_id=? WHERE event_id=?", nextLocation.locationID, event.eventID).Error; err != nil {
+	if err := db.Exec("UPDATE events SET title='Neuer Titel',start_time=start_time+interval '2 days',end_time=end_time+interval '2 days',location='Neue Halle, Neue Straße 17, 10115 Berlin' WHERE event_id=?", event.eventID).Error; err != nil {
 		t.Fatal(err)
 	}
 	updated := notificationPage(t, router, "").Items[0]
@@ -186,9 +182,9 @@ func TestSimulatedReminderRefreshDatabase(t *testing.T) {
 	if stored.Content != foreign.Content {
 		t.Fatal("refresh touched another user's reminder")
 	}
-	// Editing the same location row must refresh too, without changing locationId.
+	// Editing only the location must refresh too.
 	markNotificationRead(t, router, original.NotificationID, http.StatusOK)
-	if err := db.Exec("UPDATE locations SET name='Umbenannte Halle' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
+	if err := db.Exec("UPDATE events SET location='Umbenannte Halle, Neue Straße 17, 10115 Berlin' WHERE event_id=?", event.eventID).Error; err != nil {
 		t.Fatal(err)
 	}
 	moved := notificationPage(t, router, "").Items[0]
@@ -216,6 +212,13 @@ func TestSimulatedReminderRefreshDatabase(t *testing.T) {
 	again := notificationPage(t, router, "").Items[0]
 	if !short.ScheduledAt.Equal(original.CreatedAt) || !again.ScheduledAt.Equal(*short.ScheduledAt) {
 		t.Fatal("short-notice schedule drifted")
+	}
+	// An event without a location keeps the last reminder text instead of failing the list.
+	if err := db.Exec("UPDATE events SET location=NULL WHERE event_id=?", event.eventID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if kept := notificationPage(t, router, "").Items[0]; kept.Content != again.Content {
+		t.Fatalf("reminder without location=%+v", kept)
 	}
 }
 

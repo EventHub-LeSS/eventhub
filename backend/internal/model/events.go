@@ -36,7 +36,7 @@ type EventModel struct {
 	Price       decimal.Decimal `json:"price" gorm:"column:price;type:numeric(12,2)"`
 	CategoryID  *uuid.UUID      `json:"categoryId" gorm:"column:category_id;type:uuid"`
 	OrganizerID *uuid.UUID      `json:"organizerId" gorm:"column:organizer_id;type:uuid"`
-	LocationID  *uuid.UUID      `json:"locationId" gorm:"column:location_id;type:uuid"`
+	Location    *string         `json:"location" gorm:"column:location"`
 	CreatedAt   time.Time       `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time       `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
@@ -52,7 +52,8 @@ type UpdateEventRequest struct {
 	Capacity    int             `json:"capacity" binding:"required,min=1"`
 	Price       decimal.Decimal `json:"price" binding:"gte=0"`
 	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+	// Venue and address as free text; surrounding whitespace is removed.
+	Location string `json:"location" binding:"required,notblank,max=200" example:"Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"`
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
@@ -82,5 +83,6 @@ type CreateDraftRequest struct {
 	Capacity       int             `json:"capacity" binding:"required,min=1,max=100000"`
 	Price          decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
 	CategoryID     uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID     uuid.UUID       `json:"locationId" binding:"required"`
+	// Venue and address as free text; surrounding whitespace is removed.
+	Location string `json:"location" binding:"required,notblank,max=200" example:"Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"`
 }

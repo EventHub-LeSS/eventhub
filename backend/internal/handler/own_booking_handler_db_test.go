@@ -20,7 +20,8 @@ import (
 
 // EVENTHUB-236: the own booking endpoints against a real database. Bookings are made, paid,
 // declined and cancelled through the API like a visitor does; only states the API cannot reach
-// (an expired reservation, a deleted event or location, events in the past) are set up with SQL.
+// (an expired reservation, a deleted event, an event without location, events in the past) are set
+// up with SQL.
 
 func newOwnBookingRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	gin.SetMode(gin.TestMode)
@@ -179,10 +180,8 @@ func TestListOwnTickets_PaidViaAPI_AppearsWithEventLocationAndPayment(t *testing
 		ev.StartTime.IsZero() || !ev.EndTime.After(ev.StartTime) {
 		t.Fatalf("unexpected event: %+v", ev)
 	}
-	loc := ev.Location
-	if loc == nil || loc.LocationID != event.locationID || loc.Name != "loc-"+event.locationID.String() ||
-		loc.City != "Bonn" || loc.PostalCode != "53111" || loc.Street != "Weg" {
-		t.Errorf("unexpected location: %+v", loc)
+	if loc := ev.Location; loc == nil || *loc != event.location {
+		t.Errorf("unexpected location: %v", loc)
 	}
 
 	// A5: the list entry opens the details of the same booking.
@@ -568,10 +567,10 @@ func TestListOwnTickets_UpcomingFirstThenPast_OrderedByStart(t *testing.T) {
 	}
 }
 
-// F7: a deleted location shows as null and keeps the ticket valid; a deleted event shows as null
-// and leaves no valid ticket, but the booking stays in the history. The API deletes neither, so
-// SQL stands in for it.
-func TestGetOwnBooking_DeletedLocationOrEvent_ShowsNull(t *testing.T) {
+// F7: a missing location shows as null and keeps the ticket valid; a deleted event shows as null
+// and leaves no valid ticket, but the booking stays in the history. The API neither removes the
+// location of an event nor deletes events with bookings, so SQL stands in for it.
+func TestGetOwnBooking_NoLocationOrDeletedEvent_ShowsNull(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
@@ -579,8 +578,8 @@ func TestGetOwnBooking_DeletedLocationOrEvent_ShowsNull(t *testing.T) {
 	bookingID := reserveViaAPI(t, router, event.eventID, 1)
 	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
 
-	if err := db.Exec("DELETE FROM locations WHERE location_id = ?", event.locationID).Error; err != nil {
-		t.Fatalf("delete location: %v", err)
+	if err := db.Exec("UPDATE events SET location = NULL WHERE event_id = ?", event.eventID).Error; err != nil {
+		t.Fatalf("remove location: %v", err)
 	}
 	detail := getOwnBookingDetail(t, router, bookingID)
 	if detail.Event == nil || detail.Event.Location != nil || !detail.TicketsValid {
