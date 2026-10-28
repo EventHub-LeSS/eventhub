@@ -88,7 +88,7 @@ func main() {
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
-	moderationService := service.NewModerationService(tx)
+	moderationService := service.NewModerationService(tx, repository.NewModerationRepository(db))
 
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
@@ -160,6 +160,7 @@ func main() {
 		moderation := v1.Group("/moderation")
 		moderation.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin, middleware.RoleModerator))
 		{
+			moderation.GET("/ratings", moderationHandler.ListRatingsHandler)
 			moderation.PUT("/ratings/:ratingId/visibility", middleware.Audit(audit.RatingVisibilityChanged), moderationHandler.SetRatingVisibilityHandler)
 		}
 

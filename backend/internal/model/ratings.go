@@ -35,6 +35,34 @@ type RatingVisibilityResponse struct {
 	Changed  bool      `json:"changed"`
 }
 
+// ModeratedRating is a rating as moderators see it; the event and organization fields are null if
+// the rating no longer belongs to an event or organization.
+type ModeratedRating struct {
+	RatingID         uuid.UUID  `json:"ratingId" gorm:"column:rating_id"`
+	Score            int        `json:"score" gorm:"column:score"`
+	Text             string     `json:"text" gorm:"column:text"`
+	Hidden           bool       `json:"hidden" gorm:"column:hidden"`
+	EventID          *uuid.UUID `json:"eventId" gorm:"column:event_id" extensions:"x-nullable"`
+	EventTitle       *string    `json:"eventTitle" gorm:"column:event_title" extensions:"x-nullable"`
+	OrganizationID   *uuid.UUID `json:"organizationId" gorm:"column:organization_id" extensions:"x-nullable"`
+	OrganizationName *string    `json:"organizationName" gorm:"column:organization_name" extensions:"x-nullable"`
+	CreatedAt        time.Time  `json:"createdAt" gorm:"column:created_at"`
+	UpdatedAt        time.Time  `json:"updatedAt" gorm:"column:updated_at"`
+}
+
+// ModeratedRatingFilter narrows the moderation list; nil fields do not filter.
+type ModeratedRatingFilter struct {
+	Hidden  *bool
+	EventID *uuid.UUID
+}
+
+type ModeratedRatingPage struct {
+	Items []ModeratedRating `json:"items"`
+	Page  int               `json:"page"`
+	Limit int               `json:"limit"`
+	Total int64             `json:"total"`
+}
+
 // EVENTHUB-238: Bewertungsdurchschnitt für Veranstaltungen.
 type EventRatingSummary struct {
 	EventID       uuid.UUID `json:"eventId"`

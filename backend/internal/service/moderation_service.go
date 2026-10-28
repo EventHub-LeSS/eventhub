@@ -16,11 +16,20 @@ var ErrRatingNotFound = errors.New("rating not found")
 // ModerationService lets platform moderators hide problematic user content. Every change is
 // recorded in the audit log in the same transaction, together with the reason.
 type ModerationService struct {
-	tx repository.Transactor
+	tx      repository.Transactor
+	ratings repository.ModerationRepository
 }
 
-func NewModerationService(tx repository.Transactor) *ModerationService {
-	return &ModerationService{tx: tx}
+func NewModerationService(tx repository.Transactor, ratings repository.ModerationRepository) *ModerationService {
+	return &ModerationService{tx: tx, ratings: ratings}
+}
+
+func (s *ModerationService) ListRatings(filter model.ModeratedRatingFilter, page, limit int) (*model.ModeratedRatingPage, error) {
+	items, total, err := s.ratings.ListRatings(filter, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ModeratedRatingPage{Items: items, Page: page, Limit: limit, Total: total}, nil
 }
 
 // SetRatingVisibility hides or shows a rating. Hidden ratings no longer count towards rating
