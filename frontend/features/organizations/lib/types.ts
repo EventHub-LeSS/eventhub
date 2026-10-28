@@ -46,3 +46,32 @@ export interface OrganizationMember {
   joinedAt: string | null;
   rights: OrganizationRight[];
 }
+
+export type AuditAction =
+  | "event.created"
+  | "event.updated"
+  | "event.published"
+  | "event.cancelled"
+  | "event.deleted"
+  | "organization.member_roles_changed";
+
+export type AuditPhase = "completed" | "started" | "succeeded" | "incomplete";
+
+export interface AuditLogEntry {
+  id: string;
+  operationId: string;
+  occurredAt: string;
+  actorSubject: string;
+  actorUsername: string;
+  organizationId: string;
+  action: AuditAction;
+  resourceType: "event" | "organization_member";
+  resourceId: string;
+  phase: AuditPhase;
+  changes: Record<string, unknown>;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  nextCursor: string | null;
+}

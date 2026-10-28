@@ -15,6 +15,7 @@ export type {
 export {
   useInviteMember,
   useOrganization,
+  useOrganizationAuditLog,
   useOrganizationMembers,
   useRemoveMember,
   useUpdateMemberRoles,
@@ -36,6 +37,10 @@ export {
   organizationRights,
 } from "@/features/organizations/lib/types";
 export type {
+  AuditAction,
+  AuditLogEntry,
+  AuditLogPage,
+  AuditPhase,
   Organization,
   OrganizationMember,
   OrganizationRight,

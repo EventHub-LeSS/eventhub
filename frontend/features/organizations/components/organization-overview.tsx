@@ -11,11 +11,11 @@ import { OrganizationStats } from "@/features/organizations/components/organizat
 import { SalesChart } from "@/features/organizations/components/sales-chart"
 import {
   useOrganization,
+  useOrganizationAuditLog,
   useOrganizationMembers,
 } from "@/features/organizations/lib/api"
 import {
   mockActivity,
-  mockAuditLog,
   mockEvents,
   mockSales,
 } from "@/features/organizations/lib/mock-data"
@@ -23,6 +23,7 @@ import type {
   Organization,
   OrganizationRight,
 } from "@/features/organizations/lib/types"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
@@ -188,14 +189,7 @@ export function OrganizationOverview({
 
         {canViewAuditLog && (
           <TabsContent value="audit-log">
-            <Card>
-              <CardHeader>
-                <CardTitle>Audit-Log</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AuditLogTable entries={mockAuditLog} />
-              </CardContent>
-            </Card>
+            <AuditLogCard alias={alias} />
           </TabsContent>
         )}
 
@@ -241,6 +235,43 @@ export function OrganizationOverview({
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function AuditLogCard({ alias }: { alias: string }) {
+  const auditLogQuery = useOrganizationAuditLog(alias)
+  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Audit-Log</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {auditLogQuery.isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Audit-Log wird geladen...
+          </p>
+        ) : auditLogQuery.isError && entries.length === 0 ? (
+          <p className="py-6 text-center text-sm text-destructive">
+            {auditLogQuery.error.message ||
+              "Das Audit-Log konnte nicht geladen werden."}
+          </p>
+        ) : (
+          <AuditLogTable entries={entries} />
+        )}
+        {auditLogQuery.hasNextPage && (
+          <Button
+            variant="outline"
+            className="self-center"
+            disabled={auditLogQuery.isFetchingNextPage}
+            onClick={() => auditLogQuery.fetchNextPage()}
+          >
+            {auditLogQuery.isFetchingNextPage ? "Wird geladen..." : "Mehr laden"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
