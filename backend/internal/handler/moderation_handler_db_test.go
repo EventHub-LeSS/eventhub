@@ -7,15 +7,18 @@ import (
 	"backend/internal/repository"
 	"backend/internal/service"
 	"backend/internal/testdb"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 func databaseModerationRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
-	return moderationRouter(service.NewModerationService(repository.NewTransactor(db)), principal)
+	return moderationRouter(service.NewModerationService(repository.NewTransactor(db), repository.NewModerationRepository(db)), principal)
 }
 
 func ratingIDOfBooking(t *testing.T, db *gorm.DB, bookingID uuid.UUID) uuid.UUID {
@@ -129,5 +132,95 @@ func TestModerateRatingVisibilityDatabaseEdgeCases(t *testing.T) {
 	}
 	if entries := ratingAuditEntries(t, db, detached); len(entries) != 1 {
 		t.Fatalf("visitor request recorded: %+v", entries)
+	}
+}
+
+func seedModeratedRating(t *testing.T, db *gorm.DB, eventID *uuid.UUID, score int, text string, visible bool, age time.Duration) uuid.UUID {
+	t.Helper()
+	bookingID, ratingID := uuid.New(), uuid.New()
+	if err := db.Exec("INSERT INTO bookings (booking_id, event_id, status, number_of_tickets, expires_at) VALUES (?, ?, 'confirmed', 1, NOW() + interval '1 hour')",
+		bookingID, eventID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO ratings (rating_id, booking_id, score, text, is_visible, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		ratingID, bookingID, score, text, visible, time.Now().Add(-age)).Error; err != nil {
+		t.Fatal(err)
+	}
+	return ratingID
+}
+
+func readModeratedRatings(t *testing.T, router http.Handler, query string) (model.ModeratedRatingPage, string) {
+	t.Helper()
+	rec := listModeratedRatings(router, query)
+	var page model.ModeratedRatingPage
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &page) != nil {
+		t.Fatalf("list %q: %d %s", query, rec.Code, rec.Body.String())
+	}
+	return page, rec.Body.String()
+}
+
+func TestListRatingsForModerationDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	router := databaseModerationRouter(db, globalPrincipal(middleware.RoleModerator))
+	if page, body := readModeratedRatings(t, router, ""); page.Total != 0 || !strings.Contains(body, `"items":[]`) {
+		t.Fatalf("empty list: %s", body)
+	}
+
+	first := seedEventForOrg(t, db, "list-a", model.EventStatusPublished)
+	second := seedEventForOrg(t, db, "list-b", model.EventStatusPublished)
+	oldest := seedModeratedRating(t, db, &first.eventID, 5, "Super", true, 4*time.Hour)
+	hidden := seedModeratedRating(t, db, &first.eventID, 1, "Betrug!", false, 3*time.Hour)
+	other := seedModeratedRating(t, db, &second.eventID, 3, "ok", true, 2*time.Hour)
+	detached := seedModeratedRating(t, db, nil, 2, "verwaist", true, time.Hour)
+
+	all, _ := readModeratedRatings(t, router, "")
+	if all.Total != 4 || len(all.Items) != 4 {
+		t.Fatalf("all ratings: %+v", all)
+	}
+	got := all.Items[2]
+	if got.RatingID != hidden || got.Score != 1 || got.Text != "Betrug!" || !got.Hidden ||
+		got.EventID == nil || *got.EventID != first.eventID || got.EventTitle == nil || *got.EventTitle != "Altes Konzert" ||
+		got.OrganizationID == nil || *got.OrganizationID != first.ownerOrgID || got.OrganizationName == nil || *got.OrganizationName != "Org list-a" {
+		t.Fatalf("hidden rating: %+v", got)
+	}
+	if got := all.Items[0]; got.RatingID != detached || got.EventID != nil || got.EventTitle != nil || got.OrganizationID != nil || got.OrganizationName != nil {
+		t.Fatalf("detached rating: %+v", got)
+	}
+
+	for _, tc := range []struct {
+		query string
+		want  []uuid.UUID
+		total int64
+	}{
+		{"", []uuid.UUID{detached, other, hidden, oldest}, 4},
+		{"?hidden=true", []uuid.UUID{hidden}, 1},
+		{"?hidden=false", []uuid.UUID{detached, other, oldest}, 3},
+		{"?eventId=" + first.eventID.String(), []uuid.UUID{hidden, oldest}, 2},
+		{"?hidden=false&eventId=" + first.eventID.String(), []uuid.UUID{oldest}, 1},
+		{"?eventId=" + uuid.NewString(), nil, 0},
+		{"?limit=2&page=2", []uuid.UUID{hidden, oldest}, 4},
+		{"?limit=2&page=3", nil, 4},
+	} {
+		page, _ := readModeratedRatings(t, router, tc.query)
+		ids := make([]uuid.UUID, 0, len(page.Items))
+		for _, item := range page.Items {
+			ids = append(ids, item.RatingID)
+		}
+		if page.Total != tc.total || len(ids) != len(tc.want) {
+			t.Errorf("query %q: total=%d ids=%v, want total=%d ids=%v", tc.query, page.Total, ids, tc.total, tc.want)
+			continue
+		}
+		for i := range ids {
+			if ids[i] != tc.want[i] {
+				t.Errorf("query %q: ids=%v, want %v", tc.query, ids, tc.want)
+				break
+			}
+		}
+	}
+
+	// Releasing withdraws the hiding: the rating leaves the hidden list.
+	decodeRatingVisibility(t, putRatingVisibility(router, hidden.String(), `{"hidden":false,"reason":"Kein Verstoß"}`))
+	if page, _ := readModeratedRatings(t, router, "?hidden=true"); page.Total != 0 {
+		t.Fatalf("released rating still hidden: %+v", page)
 	}
 }

@@ -1807,6 +1807,86 @@
                 }
             }
         },
+        "/moderation/ratings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a page of all ratings including their text, newest first, with event and organization. Requires the global role admin or moderator. Unlike the public summaries, hidden ratings and ratings of any booking status are included; hidden filters by visibility, eventId by rated event. eventId, eventTitle, organizationId and organizationName are null if the rating no longer belongs to an event or organization. Hidden ratings are released with PUT /moderation/ratings/{ratingId}/visibility and hidden=false.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "List ratings for moderation",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Only hidden (true) or only visible (false) ratings",
+                        "name": "hidden",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only ratings of this event",
+                        "name": "eventId",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-indexed)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ModeratedRatingPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/moderation/ratings/{ratingId}/visibility": {
             "put": {
                 "security": [
@@ -1814,7 +1894,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Hides (hidden=true) or shows again (hidden=false) a rating. Requires the global role admin or moderator. Hidden ratings no longer count towards rating summaries and recommendations. The reason (1-1000 characters after trimming) is required and is stored with the acting user in the audit log of the organization that owns the rated event (organization_id \"platform\" if the rating no longer belongs to an organization). Requesting the current visibility returns changed=false and records nothing.",
+                "description": "Hides (hidden=true) a rating or releases it again (hidden=false), which withdraws an earlier hiding. Requires the global role admin or moderator. Hidden ratings no longer count towards rating summaries and recommendations. The reason (1-1000 characters after trimming) is required and is stored with the acting user in the audit log of the organization that owns the rated event (organization_id \"platform\" if the rating no longer belongs to an organization). Requesting the current visibility returns changed=false and records nothing.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1824,7 +1904,7 @@
                 "tags": [
                     "moderation"
                 ],
-                "summary": "Hide or show a rating",
+                "summary": "Hide or release a rating",
                 "parameters": [
                     {
                         "type": "string",
@@ -3129,6 +3209,65 @@
                 },
                 "time": {
                     "type": "string"
+                }
+            }
+        },
+        "model.ModeratedRating": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "eventTitle": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "hidden": {
+                    "type": "boolean"
+                },
+                "organizationId": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "organizationName": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "ratingId": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.ModeratedRatingPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ModeratedRating"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
