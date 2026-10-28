@@ -39,7 +39,7 @@ export function EventCard({ event }: EventCardProps) {
         <CardContent className="flex flex-col gap-1 pt-2 pb-4">
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <CalendarIcon className="size-3.5 shrink-0" />
-            {formatEventDate(event.startTime)}
+            {formatEventDate(event.startTime, event.endTime)}
           </span>
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <MapPinIcon className="size-3.5 shrink-0" />
