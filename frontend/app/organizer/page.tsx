@@ -15,15 +15,46 @@ import {
   CardContent,
   CardTitle,
 } from "@/features/shared/components/ui/card"
+import { getSession } from "@/features/auth/lib/dal"
+import {
+  getOrganizationByAlias,
+  getOrganizationMembersWithRights,
+} from "@/features/organizations/lib/keycloak-admin"
 
 interface PageProps {
   searchParams: Promise<{ status?: string; category?: string; q?: string }>
 }
 
+async function getUserFinancialRights(
+  accessToken: string,
+  organizationAlias: string,
+  userEmail: string,
+): Promise<{ canViewFinance: boolean }> {
+  try {
+    const org = await getOrganizationByAlias(accessToken, organizationAlias)
+    const members = await getOrganizationMembersWithRights(accessToken, org.id)
+    const member = members.find((m) => m.email.toLowerCase() === userEmail.toLowerCase())
+    const rights = member?.rights ?? []
+    return {
+      canViewFinance: rights.includes("finance_viewer") || rights.includes("org_admin"),
+    }
+  } catch {
+    return { canViewFinance: false }
+  }
+}
 export default async function OrganizerPage({ searchParams }: PageProps) {
   const user = await requireOrganizer()
+  const session = await getSession()
   const filters = parseDashboardFilters(await searchParams)
   const dashboard = await getOrganizerDashboardData(filters)
+
+  const { canViewFinance } = user.activeOrganization && session?.accessToken
+    ? await getUserFinancialRights(
+        session.accessToken,
+        user.activeOrganization,
+        user.email,
+      )
+    : { canViewFinance: false }
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -98,9 +129,9 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
         )}
 
       {dashboard.status === "ok" && dashboard.events.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className={canViewFinance ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
           <OccupancyDashboard events={dashboard.events} />
-          <SalesDashboard events={dashboard.events} />
+          {canViewFinance && <SalesDashboard events={dashboard.events} />}
         </div>
       )}
     </div>
