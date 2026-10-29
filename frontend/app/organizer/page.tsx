@@ -25,13 +25,16 @@ export default async function OrganizerPage() {
           <TicketsIcon />
           Meine Veranstaltungen
         </Button>
-        <Button
-          render={<Link href="/organizer/events/new" />}
-          nativeButton={false}
-        >
-          <CirclePlusIcon />
-          Veranstaltung erstellen
-        </Button>
+        {/* Creating events needs the event_manager role, the API refuses others. */}
+        {user.organizationRoles.includes("event_manager") && (
+          <Button
+            render={<Link href="/organizer/events/new" />}
+            nativeButton={false}
+          >
+            <CirclePlusIcon />
+            Veranstaltung erstellen
+          </Button>
+        )}
       </div>
     </div>
   )
