@@ -16,10 +16,6 @@ export interface ActivityPoint {
   held: number
 }
 
-export interface SalesPoint {
-  month: string
-  revenue: number
-}
 
 export const mockEvents: OrganizationEvent[] = [
   {
@@ -78,14 +74,6 @@ export const mockActivity: ActivityPoint[] = [
   { month: "Sep", created: 5, held: 3 },
 ]
 
-export const mockSales: SalesPoint[] = [
-  { month: "Apr", revenue: 480 },
-  { month: "May", revenue: 920 },
-  { month: "Jun", revenue: 610 },
-  { month: "Jul", revenue: 1540 },
-  { month: "Aug", revenue: 1180 },
-  { month: "Sep", revenue: 2340 },
-]
 
 export type AuditCategory = "member" | "event" | "settings" | "finance"
 
