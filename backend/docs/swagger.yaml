@@ -55,6 +55,20 @@ definitions:
       username:
         type: string
     type: object
+  handler.RatingVisibilityRequest:
+    properties:
+      hidden:
+        example: true
+        type: boolean
+      reason:
+        example: Beleidigender Inhalt
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - hidden
+    - reason
+    type: object
   handler.SimulatePaymentRequest:
     properties:
       amount:
@@ -466,6 +480,46 @@ definitions:
       time:
         type: string
     type: object
+  model.ModeratedRating:
+    properties:
+      createdAt:
+        type: string
+      eventId:
+        type: string
+        x-nullable: true
+      eventTitle:
+        type: string
+        x-nullable: true
+      hidden:
+        type: boolean
+      organizationId:
+        type: string
+        x-nullable: true
+      organizationName:
+        type: string
+        x-nullable: true
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  model.ModeratedRatingPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.ModeratedRating'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   model.NotificationData:
     properties:
       bookingId:
@@ -524,14 +578,83 @@ definitions:
       ratedEventCount:
         type: integer
     type: object
+  model.OwnBookingEvent:
+    properties:
+      endTime:
+        type: string
+      eventId:
+        type: string
+      location:
+        allOf:
+        - $ref: '#/definitions/model.PublishedEventLocation'
+        description: Null when the location of the event was deleted.
+      startTime:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+      title:
+        type: string
+    type: object
+  model.OwnBookingResponse:
+    properties:
+      amount:
+        description: Stored amount of the payment; null without payment.
+        example: "40"
+        type: string
+      bookedAt:
+        description: Time the booking was made.
+        type: string
+      bookingId:
+        description: ID for GET /me/bookings/{bookingId} and the booking routes.
+        type: string
+      bookingStatus:
+        allOf:
+        - $ref: '#/definitions/model.BookingStatus'
+        description: |-
+          Stored booking status, except that a reservation whose expiresAt has passed by the database
+          clock is shown as expired. GET /bookings/{bookingId}/payment shows the stored status.
+      event:
+        allOf:
+        - $ref: '#/definitions/model.OwnBookingEvent'
+        description: Null when the event no longer exists.
+      expiresAt:
+        description: Deadline of a live reservation; omitted otherwise.
+        type: string
+      failureReason:
+        $ref: '#/definitions/model.PaymentFailureReason'
+      message:
+        description: |-
+          Human readable result of the payment process, the same text as GET /bookings/{bookingId}/payment;
+          omitted while no payment process has been started.
+        example: Payment successful. Your booking is confirmed.
+        type: string
+      numberOfTickets:
+        example: 2
+        type: integer
+      paymentStatus:
+        allOf:
+        - $ref: '#/definitions/model.PaymentStatus'
+        description: Null while no payment process has been started.
+      refundAmount:
+        description: Refunded amount of the payment; null without payment.
+        example: "0"
+        type: string
+      ticketsValid:
+        description: |-
+          True only when the payment is paid, the booking is confirmed and the event is published or
+          completed, like ticketsValid of GET /bookings/{bookingId}/payment.
+        type: boolean
+    type: object
   model.PaymentFailureReason:
     enum:
     - declined
+    - booking_cancelled
     - reservation_expired
     - event_unavailable
     type: string
     x-enum-varnames:
     - PaymentFailureDeclined
+    - PaymentFailureBookingCancelled
     - PaymentFailureReservationExpired
     - PaymentFailureEventUnavailable
   model.PaymentResponse:
@@ -623,6 +746,10 @@ definitions:
         description: Alias of the organization that owns the event, as tokens and
           GET /users/me carry it.
         type: string
+      organizerId:
+        description: Database UUID of the organization that owns the event, as GET
+          /organizations/{organizationID}/rating-summary expects it.
+        type: string
       price:
         example: "20.00"
         type: string
@@ -664,6 +791,10 @@ definitions:
         description: Alias of the organization that owns the event, as tokens and
           GET /users/me carry it.
         type: string
+      organizerId:
+        description: Database UUID of the organization that owns the event, as GET
+          /organizations/{organizationID}/rating-summary expects it.
+        type: string
       price:
         example: "20.00"
         type: string
@@ -689,6 +820,15 @@ definitions:
       text:
         type: string
       updatedAt:
+        type: string
+    type: object
+  model.RatingVisibilityResponse:
+    properties:
+      changed:
+        type: boolean
+      hidden:
+        type: boolean
+      ratingId:
         type: string
     type: object
   model.SalesDashboardEventResponse:
@@ -965,6 +1105,54 @@ paths:
       security:
       - BearerAuth: []
       summary: Buchung anlegen
+      tags:
+      - bookings
+  /bookings/{bookingId}/cancel:
+    post:
+      description: Cancels the caller's reserved or confirmed booking and releases
+        its tickets. Repeated cancellation succeeds without another refund. Pending
+        payments fail; paid payments receive a full simulated refund of the stored
+        payment amount in the same transaction.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.BookingModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Cancel a booking
       tags:
       - bookings
   /bookings/{bookingId}/payment:
@@ -1858,6 +2046,258 @@ paths:
       summary: List own events
       tags:
       - events
+  /me/bookings:
+    get:
+      description: Liefert alle Buchungen des Aufrufers in jedem Status, die neueste
+        zuerst, mit Event, Ort, Ticketanzahl, Buchungs- und Zahlungsstatus, failureReason
+        und ticketsValid. bookingStatus ist der gespeicherte Status, nur eine nach
+        der Datenbankuhr abgelaufene Reservierung wird als expired angezeigt. GET
+        /bookings/{bookingId}/payment zeigt dagegen den gespeicherten Status reserved,
+        bei offener Zahlung bis zum Cleanup der Zahlungen nach höchstens etwa einer
+        Minute; ohne Zahlung liefert es 404. status filtert auf den angezeigten Status,
+        expired findet also gespeicherte und abgeleitete abgelaufene Buchungen. Ein
+        leeres Array, wenn es keine Buchungen gibt.
+      parameters:
+      - description: Nur Buchungen mit diesem angezeigten Status
+        enum:
+        - reserved
+        - confirmed
+        - cancelled
+        - failed
+        - expired
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.OwnBookingResponse'
+            type: array
+        "400":
+          description: Ungültiger status
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Nutzer nicht in der API-Datenbank synchronisiert
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Meine Buchungshistorie
+      tags:
+      - bookings
+  /me/bookings/{bookingId}:
+    get:
+      description: Liefert eine Buchung des Aufrufers in jedem Status mit Event, Ort,
+        Ticketanzahl, Buchungsstatus, Zahlungsstatus, Betrag, failureReason und ticketsValid.
+        Ungültige, stornierte oder abgelaufene Buchungen sowie Tickets abgesagter
+        Events sind mit ticketsValid false markiert. ticketsValid, paymentStatus,
+        failureReason und message entsprechen GET /bookings/{bookingId}/payment, weil
+        beide dieselbe Regel und dieselben Texte nutzen. bookingStatus zeigt eine
+        nach der Datenbankuhr abgelaufene Reservierung als expired, GET /bookings/{bookingId}/payment
+        den gespeicherten Status, bei offener Zahlung bis zum Cleanup nach höchstens
+        etwa einer Minute. Unbekannte Buchungen und Buchungen anderer Nutzer liefern
+        beide 404.
+      parameters:
+      - description: Booking ID
+        in: path
+        name: bookingId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OwnBookingResponse'
+        "400":
+          description: Ungültige Booking ID
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Nutzer nicht in der API-Datenbank synchronisiert
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Buchung unbekannt oder von einem anderen Nutzer
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ticketdetails einer eigenen Buchung
+      tags:
+      - bookings
+  /me/tickets:
+    get:
+      description: 'Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit
+        ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder
+        abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend,
+        danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis
+        es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für
+        GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails
+        und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an.
+        Ein leeres Array, wenn es keine gültigen Tickets gibt.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.OwnBookingResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Nutzer nicht in der API-Datenbank synchronisiert
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Meine Tickets
+      tags:
+      - bookings
+  /moderation/ratings:
+    get:
+      description: Returns a page of all ratings including their text, newest first,
+        with event and organization. Requires the global role admin or moderator.
+        Unlike the public summaries, hidden ratings and ratings of any booking status
+        are included; hidden filters by visibility, eventId by rated event. eventId,
+        eventTitle, organizationId and organizationName are null if the rating no
+        longer belongs to an event or organization. Hidden ratings are released with
+        PUT /moderation/ratings/{ratingId}/visibility and hidden=false.
+      parameters:
+      - description: Only hidden (true) or only visible (false) ratings
+        in: query
+        name: hidden
+        type: boolean
+      - description: Only ratings of this event
+        in: query
+        name: eventId
+        type: string
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ModeratedRatingPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List ratings for moderation
+      tags:
+      - moderation
+  /moderation/ratings/{ratingId}/visibility:
+    put:
+      consumes:
+      - application/json
+      description: Hides (hidden=true) a rating or releases it again (hidden=false),
+        which withdraws an earlier hiding. Requires the global role admin or moderator.
+        Hidden ratings no longer count towards rating summaries and recommendations.
+        The reason (1-1000 characters after trimming) is required and is stored with
+        the acting user in the audit log of the organization that owns the rated event
+        (organization_id "platform" if the rating no longer belongs to an organization).
+        Requesting the current visibility returns changed=false and records nothing.
+      parameters:
+      - description: Rating ID
+        in: path
+        name: ratingId
+        required: true
+        type: string
+      - description: Visibility and reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RatingVisibilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.RatingVisibilityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hide or release a rating
+      tags:
+      - moderation
   /notifications:
     get:
       description: 'Returns only the authenticated user''s notifications, newest first.

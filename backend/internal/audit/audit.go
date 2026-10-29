@@ -23,13 +23,19 @@ const (
 	EventCancelled                Action = "event.cancelled"
 	EventDeleted                  Action = "event.deleted"
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
+	RatingVisibilityChanged       Action = "rating.visibility_changed"
 )
 
 // Resource types of audited objects.
 const (
 	ResourceEvent              = "event"
 	ResourceOrganizationMember = "organization_member"
+	ResourceRating             = "rating"
 )
+
+// ScopePlatform is the organization_id of entries that cannot be attributed to an organization,
+// e.g. the moderation of a rating whose event no longer belongs to one.
+const ScopePlatform = "platform"
 
 // Phases describe how far an operation got. Local changes are recorded once as PhaseCompleted,
 // together with the change. Operations in external systems cannot be rolled back with the local

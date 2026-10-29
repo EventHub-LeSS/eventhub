@@ -15,6 +15,7 @@ import {
   isSimulatedOutcome,
   isUUID,
   MAX_TICKETS_PER_BOOKING,
+  seatsExceededMessage,
 } from "@/features/bookings/lib/validation"
 
 export interface CreateBookingResult {
@@ -60,6 +61,19 @@ async function storedPayment(
 }
 
 /**
+ * EVENTHUB-91 / AK4: seats taken since the page was loaded come back as a
+ * technical problem detail ("capacity exceeded: requested 3, available 1");
+ * the visitor gets the same message the form shows.
+ */
+function capacityExceededMessage(detail: string): string | undefined {
+  const match = /^capacity exceeded: requested \d+, available (\d+)$/.exec(
+    detail
+  )
+
+  return match ? seatsExceededMessage(Number(match[1])) : undefined
+}
+
+/**
  * Reserves tickets and sends the user to the payment view. The form already
  * validates the input, but a server action is a public endpoint, so the same
  * rules are enforced here again.
@@ -90,7 +104,9 @@ export async function createBookingAction(
     booking = await createBooking(accessToken, eventId, numberOfTickets)
   } catch (error) {
     if (error instanceof BookingApiError) {
-      return { message: error.message }
+      return {
+        message: capacityExceededMessage(error.message) ?? error.message,
+      }
     }
 
     throw error

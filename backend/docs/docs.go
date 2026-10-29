@@ -316,6 +316,76 @@ const docTemplate = `{
                 }
             }
         },
+        "/bookings/{bookingId}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels the caller's reserved or confirmed booking and releases its tickets. Repeated cancellation succeeds without another refund. Pending payments fail; paid payments receive a full simulated refund of the stored payment amount in the same transaction.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Cancel a booking",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking ID",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.BookingModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/bookings/{bookingId}/payment": {
             "get": {
                 "security": [
@@ -1567,6 +1637,339 @@ const docTemplate = `{
                 }
             }
         },
+        "/me/bookings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert alle Buchungen des Aufrufers in jedem Status, die neueste zuerst, mit Event, Ort, Ticketanzahl, Buchungs- und Zahlungsstatus, failureReason und ticketsValid. bookingStatus ist der gespeicherte Status, nur eine nach der Datenbankuhr abgelaufene Reservierung wird als expired angezeigt. GET /bookings/{bookingId}/payment zeigt dagegen den gespeicherten Status reserved, bei offener Zahlung bis zum Cleanup der Zahlungen nach höchstens etwa einer Minute; ohne Zahlung liefert es 404. status filtert auf den angezeigten Status, expired findet also gespeicherte und abgeleitete abgelaufene Buchungen. Ein leeres Array, wenn es keine Buchungen gibt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Meine Buchungshistorie",
+                "parameters": [
+                    {
+                        "enum": [
+                            "reserved",
+                            "confirmed",
+                            "cancelled",
+                            "failed",
+                            "expired"
+                        ],
+                        "type": "string",
+                        "description": "Nur Buchungen mit diesem angezeigten Status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OwnBookingResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Ungültiger status",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/bookings/{bookingId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert eine Buchung des Aufrufers in jedem Status mit Event, Ort, Ticketanzahl, Buchungsstatus, Zahlungsstatus, Betrag, failureReason und ticketsValid. Ungültige, stornierte oder abgelaufene Buchungen sowie Tickets abgesagter Events sind mit ticketsValid false markiert. ticketsValid, paymentStatus, failureReason und message entsprechen GET /bookings/{bookingId}/payment, weil beide dieselbe Regel und dieselben Texte nutzen. bookingStatus zeigt eine nach der Datenbankuhr abgelaufene Reservierung als expired, GET /bookings/{bookingId}/payment den gespeicherten Status, bei offener Zahlung bis zum Cleanup nach höchstens etwa einer Minute. Unbekannte Buchungen und Buchungen anderer Nutzer liefern beide 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Ticketdetails einer eigenen Buchung",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Booking ID",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OwnBookingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Ungültige Booking ID",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Buchung unbekannt oder von einem anderen Nutzer",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/me/tickets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bookings"
+                ],
+                "summary": "Meine Tickets",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OwnBookingResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/ratings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a page of all ratings including their text, newest first, with event and organization. Requires the global role admin or moderator. Unlike the public summaries, hidden ratings and ratings of any booking status are included; hidden filters by visibility, eventId by rated event. eventId, eventTitle, organizationId and organizationName are null if the rating no longer belongs to an event or organization. Hidden ratings are released with PUT /moderation/ratings/{ratingId}/visibility and hidden=false.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "List ratings for moderation",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Only hidden (true) or only visible (false) ratings",
+                        "name": "hidden",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only ratings of this event",
+                        "name": "eventId",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-indexed)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ModeratedRatingPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/ratings/{ratingId}/visibility": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hides (hidden=true) a rating or releases it again (hidden=false), which withdraws an earlier hiding. Requires the global role admin or moderator. Hidden ratings no longer count towards rating summaries and recommendations. The reason (1-1000 characters after trimming) is required and is stored with the acting user in the audit log of the organization that owns the rated event (organization_id \"platform\" if the rating no longer belongs to an organization). Requesting the current visibility returns changed=false and records nothing.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "Hide or release a rating",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Rating ID",
+                        "name": "ratingId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Visibility and reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.RatingVisibilityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.RatingVisibilityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/notifications": {
             "get": {
                 "security": [
@@ -2203,6 +2606,25 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.RatingVisibilityRequest": {
+            "type": "object",
+            "required": [
+                "hidden",
+                "reason"
+            ],
+            "properties": {
+                "hidden": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "example": "Beleidigender Inhalt"
+                }
+            }
+        },
         "handler.SimulatePaymentRequest": {
             "type": "object",
             "required": [
@@ -2797,6 +3219,65 @@ const docTemplate = `{
                 }
             }
         },
+        "model.ModeratedRating": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "eventTitle": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "hidden": {
+                    "type": "boolean"
+                },
+                "organizationId": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "organizationName": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "ratingId": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.ModeratedRatingPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ModeratedRating"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.NotificationData": {
             "type": "object",
             "properties": {
@@ -2883,15 +3364,112 @@ const docTemplate = `{
                 }
             }
         },
+        "model.OwnBookingEvent": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "location": {
+                    "description": "Null when the location of the event was deleted.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.PublishedEventLocation"
+                        }
+                    ]
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OwnBookingResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Stored amount of the payment; null without payment.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "bookedAt": {
+                    "description": "Time the booking was made.",
+                    "type": "string"
+                },
+                "bookingId": {
+                    "description": "ID for GET /me/bookings/{bookingId} and the booking routes.",
+                    "type": "string"
+                },
+                "bookingStatus": {
+                    "description": "Stored booking status, except that a reservation whose expiresAt has passed by the database\nclock is shown as expired. GET /bookings/{bookingId}/payment shows the stored status.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.BookingStatus"
+                        }
+                    ]
+                },
+                "event": {
+                    "description": "Null when the event no longer exists.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OwnBookingEvent"
+                        }
+                    ]
+                },
+                "expiresAt": {
+                    "description": "Deadline of a live reservation; omitted otherwise.",
+                    "type": "string"
+                },
+                "failureReason": {
+                    "$ref": "#/definitions/model.PaymentFailureReason"
+                },
+                "message": {
+                    "description": "Human readable result of the payment process, the same text as GET /bookings/{bookingId}/payment;\nomitted while no payment process has been started.",
+                    "type": "string",
+                    "example": "Payment successful. Your booking is confirmed."
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "paymentStatus": {
+                    "description": "Null while no payment process has been started.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.PaymentStatus"
+                        }
+                    ]
+                },
+                "refundAmount": {
+                    "description": "Refunded amount of the payment; null without payment.",
+                    "type": "string",
+                    "example": "0"
+                },
+                "ticketsValid": {
+                    "description": "True only when the payment is paid, the booking is confirmed and the event is published or\ncompleted, like ticketsValid of GET /bookings/{bookingId}/payment.",
+                    "type": "boolean"
+                }
+            }
+        },
         "model.PaymentFailureReason": {
             "type": "string",
             "enum": [
                 "declined",
+                "booking_cancelled",
                 "reservation_expired",
                 "event_unavailable"
             ],
             "x-enum-varnames": [
                 "PaymentFailureDeclined",
+                "PaymentFailureBookingCancelled",
                 "PaymentFailureReservationExpired",
                 "PaymentFailureEventUnavailable"
             ]
@@ -3020,6 +3598,10 @@ const docTemplate = `{
                     "description": "Alias of the organization that owns the event, as tokens and GET /users/me carry it.",
                     "type": "string"
                 },
+                "organizerId": {
+                    "description": "Database UUID of the organization that owns the event, as GET /organizations/{organizationID}/rating-summary expects it.",
+                    "type": "string"
+                },
                 "price": {
                     "type": "string",
                     "example": "20.00"
@@ -3080,6 +3662,10 @@ const docTemplate = `{
                     "description": "Alias of the organization that owns the event, as tokens and GET /users/me carry it.",
                     "type": "string"
                 },
+                "organizerId": {
+                    "description": "Database UUID of the organization that owns the event, as GET /organizations/{organizationID}/rating-summary expects it.",
+                    "type": "string"
+                },
                 "price": {
                     "type": "string",
                     "example": "20.00"
@@ -3117,6 +3703,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.RatingVisibilityResponse": {
+            "type": "object",
+            "properties": {
+                "changed": {
+                    "type": "boolean"
+                },
+                "hidden": {
+                    "type": "boolean"
+                },
+                "ratingId": {
                     "type": "string"
                 }
             }
