@@ -1,6 +1,7 @@
 import "server-only"
 import type {
   Booking,
+  OwnBooking,
   Payment,
   SimulatedPaymentOutcome,
 } from "@/features/bookings/lib/types"
@@ -115,4 +116,24 @@ export async function getPayment(
   bookingId: string
 ): Promise<Payment> {
   return apiFetch<Payment>(`/bookings/${bookingId}/payment`, { accessToken })
+}
+
+export async function getOwnTickets(
+  accessToken: string
+): Promise<OwnBooking[]> {
+  return apiFetch<OwnBooking[]>("/me/tickets", { accessToken })
+}
+
+export async function createEventRating(
+  accessToken: string,
+  eventId: string,
+  score: number,
+  text: string
+): Promise<void> {
+  await apiFetch<unknown>(`/events/${eventId}/ratings`, {
+    accessToken,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ score, text }),
+  })
 }
