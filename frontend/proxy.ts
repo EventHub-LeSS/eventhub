@@ -128,5 +128,6 @@ export const config = {
     "/organization/:path*",
     "/organizations/:path*",
     "/api/organizations/:path*",
+    "/api/notifications/:path*",
   ],
 }

@@ -89,6 +89,11 @@ go run ./cmd/seed
 Das Seeding ist idempotent: existierende Nutzer/Organisationen/Gruppen/Datensätze
 werden übersprungen, sodass der Befehl bedenkenlos mehrfach ausgeführt werden kann.
 
+Ändert Keycloak die Organisations-IDs (z. B. nach einem Realm-Re-Import), erkennt der Seed
+bestehende Organisationen an Alias oder Name und aktualisiert deren Keycloak-ID, statt
+Duplikate anzulegen. Migration 000011 räumte bestehende Duplikate weg und erzwingt die
+Eindeutigkeit von Name und Alias per Unique-Index.
+
 #### Service-Konto des Backends (EVENTHUB-188)
 
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
@@ -234,6 +239,75 @@ Validierung mit `400` ab, bevor sie umgerechnet werden; das gilt auch für `pric
 abgelaufene Reservierung, zurückgezogenes Event, Cleanup offener Zahlungen, fremde
 Buchungen, parallele Starts und Abschlüsse ohne Deadlock oder Überbuchung). Zusätzlich manuell mit
 dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
+
+### Meine Tickets und Buchungshistorie (EVENTHUB-236)
+
+Drei Endpunkte zeigen angemeldeten Besuchern ihre eigenen Buchungen. Alle lesen dieselben Tabellen
+(`bookings`, `payments`, `events`, `locations`) in einer einzigen Abfrage; es gibt keine eigene
+Ticket-Tabelle und keine kopierten Status. Ein Ticket ist eine Buchung mit ihrer Ticketanzahl.
+
+| Endpunkt | Inhalt |
+| --- | --- |
+| `GET /api/v1/me/tickets` | Gültige Tickets (`ticketsValid: true`). Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. |
+| `GET /api/v1/me/bookings?status=…` | Buchungshistorie: alle eigenen Buchungen in jedem Status, die neueste zuerst. `status` (optional) filtert auf den angezeigten Status `reserved`, `confirmed`, `cancelled`, `failed` oder `expired`. |
+| `GET /api/v1/me/bookings/{bookingId}` | Details einer eigenen Buchung in jedem Status. |
+
+Alle drei liefern dieselbe Form (`model.OwnBookingResponse`): `bookingId`, `numberOfTickets`,
+`bookingStatus`, `paymentStatus`, `failureReason`, `amount`, `refundAmount`, `ticketsValid`,
+`message`, `bookedAt`, `expiresAt` und `event` mit Titel, Start, Ende, Status und `location` (Name und
+Adresse). Ohne Zahlungsvorgang sind die Zahlungsfelder `null` und `message` fehlt; ein gelöschter Ort
+ergibt `location: null`, ein gelöschtes Event `event: null`.
+
+**Gültigkeitsregel:** `ticketsValid` ist nur `true`, wenn die Zahlung `paid`, die Buchung `confirmed`
+und das Event `published` oder `completed` ist. Es ist dieselbe Funktion wie bei
+`GET /api/v1/bookings/{bookingId}/payment` (`hasValidTickets` in
+`backend/internal/service/payment_service.go`), und `message` ist derselbe Text wie dort. Stornierte,
+fehlgeschlagene und abgelaufene Buchungen sowie Tickets zurückgezogener oder gelöschter Events sind
+ungültig: Sie fehlen in der Ticketliste und erscheinen in Historie und Details mit
+`ticketsValid: false`.
+
+**Angezeigter Status:** `bookingStatus` ist der gespeicherte Status. Nur eine Reservierung, deren
+`expiresAt` nach der Datenbankuhr verstrichen ist, wird als `expired` angezeigt, auch wenn sie noch als
+`reserved` gespeichert ist; `?status=expired` findet beide Fälle. `GET /bookings/{bookingId}/payment`
+zeigt dagegen den gespeicherten Status `reserved`: mit offener Zahlung höchstens bis zum Cleanup der
+Zahlungen nach etwa einer Minute, ohne Zahlung liefert es ohnehin `404`. `ticketsValid`,
+`paymentStatus`, `failureReason` und `message` stimmen in beiden Endpunkten immer überein.
+
+**Berechtigung:** Jeder angemeldete Nutzer mit Eintrag in der API-Datenbank. Der Nutzer stammt immer
+aus dem Token, nie aus Pfad, Query oder Body; jede Abfrage filtert im Repository auf
+`bookings.user_id`.
+
+**Antworten:**
+
+| Status | Bedeutung                                                                            |
+| ------ | ------------------------------------------------------------------------------------ |
+| `200`  | Liste (`[]`, wenn es keine gibt) bzw. die Buchung                                     |
+| `400`  | `status` ist kein Buchungsstatus, oder `{bookingId}` ist keine UUID                   |
+| `401`  | nicht angemeldet                                                                      |
+| `403`  | Nutzer nicht in der API-Datenbank synchronisiert, wie bei `POST /bookings`            |
+| `404`  | Buchung unbekannt **oder** gehört einem anderen Nutzer                                |
+| `500`  | Datenbankfehler; Details nur im Server-Log                                            |
+
+Fremde Buchungen ergeben bewusst `404` statt `403`, damit sich ihre IDs nicht von unbekannten
+unterscheiden lassen.
+
+**Code:** `OwnBookingHandler` (`backend/internal/handler/own_booking_handler.go`) →
+`OwnBookingService` (`backend/internal/service/own_booking_service.go`) → `OwnBookingRepository`
+(`backend/internal/repository/own_booking_repository.go`). Die Abfrage folgt `GetBookingPayment`:
+`bookings` mit `LEFT JOIN` auf `payments`, `events` und `locations` in einem Statement, die
+Datenbankuhr (`clock_timestamp()`) einmal pro Abfrage, sodass alle Zeilen einer Liste nach derselben
+Zeit beurteilt werden. Die Ticketliste filtert erst nach dem Lesen mit der Gültigkeitsregel, damit es
+die Regel nur einmal gibt.
+
+**Getestet:** Automatisch über `TestHasValidTickets_*`, `TestOwnBookingResponse_*`,
+`TestListOwnTickets_*`, `TestListOwnBookings_*` und `TestGetOwnBooking_*` in
+`backend/internal/service` sowie `TestListOwnTickets_*`, `TestListOwnBookings_*`,
+`TestGetOwnBooking_*`, `TestOwnBookings_*` und `TestOwnBookingHandlers_*` in
+`backend/internal/handler` (reservieren, bezahlen und Ticket sehen über die API, abgelehnte Zahlung,
+Stornierung mit Erstattung, zurückgezogenes Event, fremde Buchungen, Gegenprobe mit
+`GET /bookings/{bookingId}/payment`, gleiche Darstellung in allen drei Sichten, abgelaufene
+Reservierung und Statusfilter, Reihenfolge, gelöschter Ort und gelöschtes Event, leere Listen,
+Statuscodes).
 
 ### Veranstaltungen einer Organisation (EVENTHUB-79)
 

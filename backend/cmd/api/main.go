@@ -62,7 +62,7 @@ func main() {
 	// Initialize Keycloak Service
 	keycloakCfg := service.KeycloakClientConfig{
 		Host:             os.Getenv("KEYCLOAK_HOST"),
-		AdminRealm:       os.Getenv("KEYCLOAK_ADMIN_REALM"),
+		AdminRealm:       os.Getenv("KEYCLOAK_REALM"),
 		UserRealm:        firstNonEmpty(os.Getenv("KEYCLOAK_USER_REALM"), os.Getenv("KEYCLOAK_REALM")),
 		ClientID:         os.Getenv("KEYCLOAK_CLIENT_ID"),
 		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
@@ -83,10 +83,12 @@ func main() {
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
 	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
 	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
+	ownBookingService := service.NewOwnBookingService(repository.NewOwnBookingRepository(db))
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
+	moderationService := service.NewModerationService(tx, repository.NewModerationRepository(db))
 
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
@@ -98,8 +100,10 @@ func main() {
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
 	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
+	ownBookingHandler := handler.NewOwnBookingHandler(ownBookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
+	moderationHandler := handler.NewModerationHandler(moderationService)
 
 	r := gin.Default()
 	r.GET("/", handler.Healthcheck)
@@ -121,7 +125,7 @@ func main() {
 		}
 
 		protected := v1.Group("")
-		protected.Use(authenticator.Middleware())
+		protected.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService))
 		protected.GET("/users/me", handler.CurrentUser)
 		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
 		protected.PATCH("/notifications/:notificationId/read", notificationHandler.MarkNotificationReadHandler)
@@ -152,12 +156,29 @@ func main() {
 			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
 		}
 
+		// Platform moderation of user content by global admins and moderators.
+		moderation := v1.Group("/moderation")
+		moderation.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin, middleware.RoleModerator))
+		{
+			moderation.GET("/ratings", moderationHandler.ListRatingsHandler)
+			moderation.PUT("/ratings/:ratingId/visibility", middleware.Audit(audit.RatingVisibilityChanged), moderationHandler.SetRatingVisibilityHandler)
+		}
+
 		// bookings
 		protected.POST("/bookings", bookingHandler)
+		protected.POST("/bookings/:bookingId/cancel", handler.CancelBooking(bookingService, userRepo))
 		// EVENTHUB-235: simulated payment process of a booking, no real payment provider
 		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
 		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)
 		protected.POST("/bookings/:bookingId/payment/simulate", paymentHandler.SimulatePaymentHandler)
+
+		// EVENTHUB-236: Meine Tickets und Buchungshistorie, always the bookings of the token user
+		me := protected.Group("/me")
+		{
+			me.GET("/tickets", ownBookingHandler.ListOwnTicketsHandler)
+			me.GET("/bookings", ownBookingHandler.ListOwnBookingsHandler)
+			me.GET("/bookings/:bookingId", ownBookingHandler.GetOwnBookingHandler)
+		}
 	}
 	orgs := v1.Group("/organizations")
 	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
@@ -171,6 +192,7 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
+		orgRoles.GET("/:organizationID/dashboard", eventHandler.GetSalesDashboardHandler)
 		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
 		// Organization admins read the audit log of their organization; the handler authorizes
 		// against the resolved organization like the role endpoint above.

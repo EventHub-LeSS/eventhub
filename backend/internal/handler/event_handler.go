@@ -446,7 +446,7 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category and location. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category or location are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse
@@ -491,7 +491,7 @@ func (h *EventHandler) ListPublishedEventsHandler(c *gin.Context) {
 
 // GetPublishedEventDetailsHandler handles EVENTHUB-211 and EVENTHUB-212.
 // @Summary Get published event details
-// @Description Public event details with description, category, location, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category or location return 404.
+// @Description Public event details with description, category, location, organizer alias, price, capacity, availableSeats and bookable. Available seats account for confirmed tickets and unexpired reservations. soldTickets counts confirmed tickets; occupancyPercent is their share of capacity, rounded to two decimals and capped at 100. availability is available, almost_sold_out (at least 90% confirmed and still bookable), sold_out (confirmed tickets exhaust capacity), or temporarily_unavailable (live reservations block booking). Sold-out published events remain visible with bookable=false. Booking via POST /bookings requires authentication and checks availability again. Unpublished events and events missing category, location or organizer return 404.
 // @Tags events
 // @Produce json
 // @Param eventId path string true "Event UUID"
@@ -512,6 +512,45 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, details)
+}
+
+// EVENTHUB-241: Verkaufsdashboard anzeigen
+// @Summary Get organization sales dashboard
+// @Description Returns sales figures for events of the selected organization. Requires the finance_viewer role in that organization. The organization can be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if the organization has no events.
+// @Tags organizations
+// @Security BearerAuth
+// @Produce json
+// @Param organizationID path string true "Organization UUID, Keycloak ID or alias"
+// @Success 200 {array} model.SalesDashboardEventResponse
+// @Failure 401 {object} model.ErrorResponse
+// @Failure 403 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /organizations/{organizationID}/dashboard [get]
+func (h *EventHandler) GetSalesDashboardHandler(c *gin.Context) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+
+	financeOrgIDs := principal.OrganizationIDsWithRole(
+		middleware.RoleFinanceViewer,
+	)
+	if len(financeOrgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	dashboard, err := h.eventService.GetSalesDashboard(
+		c.Param("organizationID"),
+		financeOrgIDs,
+	)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dashboard)
 }
 
 // EVENTHUB-242: Auslastung je Veranstaltung anzeigen

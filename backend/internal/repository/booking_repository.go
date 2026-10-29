@@ -12,6 +12,10 @@ import (
 
 type BookingTx interface {
 	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
+	LockBooking(bookingID uuid.UUID) (*model.BookingModel, error)
+	UpdateBooking(booking *model.BookingModel) error
+	GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error)
+	UpdatePayment(payment *model.PaymentModel) error
 	CountOccupiedTickets(eventID uuid.UUID) (int64, error)
 	CreateBooking(booking *model.BookingModel) error
 }
@@ -80,6 +84,22 @@ func (r *bookingRepository) InTransaction(ctx context.Context, fn func(tx Bookin
 
 type bookingTx struct {
 	db *gorm.DB
+}
+
+func (t *bookingTx) LockBooking(bookingID uuid.UUID) (*model.BookingModel, error) {
+	return NewBookingRepository(t.db).LockBooking(bookingID)
+}
+
+func (t *bookingTx) UpdateBooking(booking *model.BookingModel) error {
+	return NewBookingRepository(t.db).UpdateBooking(booking)
+}
+
+func (t *bookingTx) GetPayment(paymentID uuid.UUID) (*model.PaymentModel, error) {
+	return NewPaymentRepository(t.db).GetPayment(paymentID)
+}
+
+func (t *bookingTx) UpdatePayment(payment *model.PaymentModel) error {
+	return NewPaymentRepository(t.db).UpdatePayment(payment)
 }
 
 func (t *bookingTx) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {

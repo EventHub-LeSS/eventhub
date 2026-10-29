@@ -49,7 +49,7 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{s.categoryID, "cat-" + s.categoryID.String()}},
 		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "loc-" + s.locationID.String(), "Bonn", "53111", "Weg"}},
-		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID}},
+		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, alias) VALUES (?, ?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID, "alias-" + keycloakOrgID}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', 100, ?, 20, ?, ?, ?)`,
 			[]any{s.eventID, "Altes Konzert", string(status), s.categoryID, s.ownerOrgID, s.locationID}},
@@ -95,6 +95,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.POST("/api/v1/events/draft", setPrincipal, middleware.Audit(audit.EventCreated), h.SaveEventAsDraftHandler)
 	r.GET("/api/v1/events/:eventId", h.GetPublishedEventDetailsHandler)
 	r.GET("/api/v1/events/self", setPrincipal, h.ListOwnEventsHandler)
+	r.GET("/api/v1/organizations/:organizationID/dashboard", setPrincipal, h.GetSalesDashboardHandler)
 	r.GET("/api/v1/events/org/:id", setPrincipal, h.ListOrganizationEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
