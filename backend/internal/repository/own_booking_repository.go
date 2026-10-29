@@ -83,9 +83,9 @@ type ownBookingRow struct {
 	LocationCity         *string                     `gorm:"column:location_city"`
 	LocationPostalCode   *string                     `gorm:"column:location_postal_code"`
 	LocationStreet       *string                     `gorm:"column:location_street"`
-	LocationHouseNumber  *string                    `gorm:"column:location_house_number"`
-	RatingScore          *int                       `gorm:"column:rating_score"`
-	DatabaseNow          time.Time                  `gorm:"column:database_now"`
+	LocationHouseNumber  *string                     `gorm:"column:location_house_number"`
+	RatingScore          *int                        `gorm:"column:rating_score"`
+	DatabaseNow          time.Time                   `gorm:"column:database_now"`
 }
 
 func (r *ownBookingRepository) ListByUserNewestFirst(userID uuid.UUID) ([]*OwnBooking, error) {
