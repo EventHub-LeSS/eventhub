@@ -62,7 +62,7 @@ func main() {
 	// Initialize Keycloak Service
 	keycloakCfg := service.KeycloakClientConfig{
 		Host:             os.Getenv("KEYCLOAK_HOST"),
-		AdminRealm:       os.Getenv("KEYCLOAK_ADMIN_REALM"),
+		AdminRealm:       os.Getenv("KEYCLOAK_REALM"),
 		UserRealm:        firstNonEmpty(os.Getenv("KEYCLOAK_USER_REALM"), os.Getenv("KEYCLOAK_REALM")),
 		ClientID:         os.Getenv("KEYCLOAK_CLIENT_ID"),
 		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
