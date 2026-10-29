@@ -25,7 +25,7 @@ func NewOwnBookingHandler(ownBookingService *service.OwnBookingService, userRepo
 
 // ListOwnTicketsHandler godoc
 // @Summary      Meine Tickets
-// @Description  Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.
+// @Description  Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.
 // @Tags         bookings
 // @Produce      json
 // @Success      200 {array}  model.OwnBookingResponse
