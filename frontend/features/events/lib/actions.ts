@@ -7,6 +7,7 @@ import { getSession, requireOrganizer } from "@/features/auth"
 import type { SessionUser } from "@/features/auth"
 import {
   createDraft,
+  deleteEvent,
   EventApiError,
   publishEvent,
   updateEvent,
@@ -108,6 +109,35 @@ export async function publishDraftAction(
   try {
     await publishEvent(accessToken, eventId)
   } catch (error) {
+    return failed(error)
+  }
+
+  revalidatePath(DRAFTS_PATH)
+
+  return {}
+}
+
+/** The API's technical reasons for refusing a deletion, in plain words. */
+const deleteRefusals: Record<number, string> = {
+  400: "Nur Entwürfe können gelöscht werden. Diese Veranstaltung ist kein Entwurf mehr.",
+  403: "Du darfst keine Veranstaltungen dieser Organisation löschen.",
+  404: "Diesen Entwurf gibt es nicht mehr.",
+  409: "Für diese Veranstaltung gibt es bereits Buchungen, deshalb kann sie nicht gelöscht werden.",
+}
+
+/** EVENTHUB-256: delete a draft for good. */
+export async function deleteDraftAction(
+  eventId: string
+): Promise<DraftActionResult> {
+  const { accessToken } = await authorize()
+
+  try {
+    await deleteEvent(accessToken, eventId)
+  } catch (error) {
+    if (error instanceof EventApiError && deleteRefusals[error.status]) {
+      return { message: deleteRefusals[error.status] }
+    }
+
     return failed(error)
   }
 

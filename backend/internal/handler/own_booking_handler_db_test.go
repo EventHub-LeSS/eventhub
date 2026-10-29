@@ -618,3 +618,41 @@ func TestListOwnTickets_NoOwnBookings_ReturnsEmptyArray(t *testing.T) {
 		}
 	}
 }
+
+// ratingScore of the ticket list and the details follows the rating of the caller: null until the
+// event is rated through the rating API, then the given score. The event is moved into the past,
+// because only ended events can be rated; validity does not depend on the event time.
+func TestListOwnTickets_RatingScore_FollowsOwnRating(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	seedBookingUser(t, db, bookingKeycloakUserID)
+	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+
+	bookingID := reserveViaAPI(t, router, event.eventID, 1)
+	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	if err := db.Exec("UPDATE events SET start_time = NOW() - interval '2 day', end_time = NOW() - interval '1 day' WHERE event_id = ?",
+		event.eventID).Error; err != nil {
+		t.Fatalf("end event: %v", err)
+	}
+
+	before := findOwnBooking(getOwnBookingList(t, router, "/api/v1/me/tickets"), bookingID)
+	if before == nil || before.RatingScore != nil {
+		t.Errorf("expected ratingScore null before rating, got %s", ownBookingJSON(t, *before))
+	}
+	if detail := getOwnBookingDetail(t, router, bookingID); detail.RatingScore != nil {
+		t.Errorf("details must report ratingScore null before rating, got %s", ownBookingJSON(t, detail))
+	}
+
+	rate := newRatingSubmissionRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+	if rec := postEventRating(t, rate, event.eventID, `{"score":4}`); rec.Code != http.StatusCreated {
+		t.Fatalf("rate: %d %s", rec.Code, rec.Body.String())
+	}
+
+	after := findOwnBooking(getOwnBookingList(t, router, "/api/v1/me/tickets"), bookingID)
+	if after == nil || after.RatingScore == nil || *after.RatingScore != 4 {
+		t.Errorf("expected ratingScore 4 after rating, got %s", ownBookingJSON(t, *after))
+	}
+	if detail := getOwnBookingDetail(t, router, bookingID); detail.RatingScore == nil || *detail.RatingScore != 4 {
+		t.Errorf("details must report ratingScore 4 after rating, got %s", ownBookingJSON(t, detail))
+	}
+}

@@ -27,6 +27,9 @@ type OwnBookingResponse struct {
 	// True only when the payment is paid, the booking is confirmed and the event is published or
 	// completed, like ticketsValid of GET /bookings/{bookingId}/payment.
 	TicketsValid bool `json:"ticketsValid"`
+	// Score the caller gave the event of this booking; null while it is not rated yet. The rating
+	// counts per user and event, not per booking.
+	RatingScore *int `json:"ratingScore"`
 	// Human readable result of the payment process, the same text as GET /bookings/{bookingId}/payment;
 	// omitted while no payment process has been started.
 	Message string `json:"message,omitempty" example:"Payment successful. Your booking is confirmed."`

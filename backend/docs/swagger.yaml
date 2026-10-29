@@ -55,6 +55,20 @@ definitions:
       username:
         type: string
     type: object
+  handler.RatingVisibilityRequest:
+    properties:
+      hidden:
+        example: true
+        type: boolean
+      reason:
+        example: Beleidigender Inhalt
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - hidden
+    - reason
+    type: object
   handler.SimulatePaymentRequest:
     properties:
       amount:
@@ -469,6 +483,46 @@ definitions:
       time:
         type: string
     type: object
+  model.ModeratedRating:
+    properties:
+      createdAt:
+        type: string
+      eventId:
+        type: string
+        x-nullable: true
+      eventTitle:
+        type: string
+        x-nullable: true
+      hidden:
+        type: boolean
+      organizationId:
+        type: string
+        x-nullable: true
+      organizationName:
+        type: string
+        x-nullable: true
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  model.ModeratedRatingPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.ModeratedRating'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   model.NotificationData:
     properties:
       bookingId:
@@ -584,6 +638,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/model.PaymentStatus'
         description: Null while no payment process has been started.
+      ratingScore:
+        description: |-
+          Score the caller gave the event of this booking; null while it is not rated yet. The rating
+          counts per user and event, not per booking.
+        type: integer
       refundAmount:
         description: Refunded amount of the payment; null without payment.
         example: "0"
@@ -758,6 +817,15 @@ definitions:
       text:
         type: string
       updatedAt:
+        type: string
+    type: object
+  model.RatingVisibilityResponse:
+    properties:
+      changed:
+        type: boolean
+      hidden:
+        type: boolean
+      ratingId:
         type: string
     type: object
   model.SalesDashboardEventResponse:
@@ -2088,9 +2156,11 @@ paths:
         abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend,
         danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis
         es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für
-        GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails
-        und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an.
-        Ein leeres Array, wenn es keine gültigen Tickets gibt.'
+        GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer
+        das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung
+        zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und
+        GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein
+        leeres Array, wenn es keine gültigen Tickets gibt.'
       produces:
       - application/json
       responses:
@@ -2117,6 +2187,120 @@ paths:
       summary: Meine Tickets
       tags:
       - bookings
+  /moderation/ratings:
+    get:
+      description: Returns a page of all ratings including their text, newest first,
+        with event and organization. Requires the global role admin or moderator.
+        Unlike the public summaries, hidden ratings and ratings of any booking status
+        are included; hidden filters by visibility, eventId by rated event. eventId,
+        eventTitle, organizationId and organizationName are null if the rating no
+        longer belongs to an event or organization. Hidden ratings are released with
+        PUT /moderation/ratings/{ratingId}/visibility and hidden=false.
+      parameters:
+      - description: Only hidden (true) or only visible (false) ratings
+        in: query
+        name: hidden
+        type: boolean
+      - description: Only ratings of this event
+        in: query
+        name: eventId
+        type: string
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ModeratedRatingPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List ratings for moderation
+      tags:
+      - moderation
+  /moderation/ratings/{ratingId}/visibility:
+    put:
+      consumes:
+      - application/json
+      description: Hides (hidden=true) a rating or releases it again (hidden=false),
+        which withdraws an earlier hiding. Requires the global role admin or moderator.
+        Hidden ratings no longer count towards rating summaries and recommendations.
+        The reason (1-1000 characters after trimming) is required and is stored with
+        the acting user in the audit log of the organization that owns the rated event
+        (organization_id "platform" if the rating no longer belongs to an organization).
+        Requesting the current visibility returns changed=false and records nothing.
+      parameters:
+      - description: Rating ID
+        in: path
+        name: ratingId
+        required: true
+        type: string
+      - description: Visibility and reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RatingVisibilityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.RatingVisibilityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Hide or release a rating
+      tags:
+      - moderation
   /notifications:
     get:
       description: 'Returns only the authenticated user''s notifications, newest first.

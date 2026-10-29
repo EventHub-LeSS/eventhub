@@ -14,6 +14,9 @@ import (
 // is read in one statement, so the booking, payment and event state come from one snapshot.
 type OwnBooking struct {
 	BookingPayment
+	// RatingScore is the score the user gave the event of this booking; nil while it is not rated
+	// yet. The rating counts per user and event, not per booking.
+	RatingScore *int
 	// Event is nil when the event of the booking no longer exists.
 	Event *model.EventModel
 }
@@ -48,6 +51,8 @@ const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
 	    e.location AS event_location,
+	    (SELECT r.score FROM ratings r JOIN bookings rb ON rb.booking_id = r.booking_id
+	     WHERE rb.user_id = b.user_id AND rb.event_id = b.event_id LIMIT 1) AS rating_score,
 	    clock.database_now
 	FROM bookings b
 	CROSS JOIN clock
@@ -70,6 +75,7 @@ type ownBookingRow struct {
 	EventStartTime       *time.Time                  `gorm:"column:event_start_time"`
 	EventEndTime         *time.Time                  `gorm:"column:event_end_time"`
 	EventLocation        *string                     `gorm:"column:event_location"`
+	RatingScore          *int                        `gorm:"column:rating_score"`
 	DatabaseNow          time.Time                   `gorm:"column:database_now"`
 }
 
@@ -107,7 +113,7 @@ func (r *ownBookingRepository) list(query string, args ...any) ([]*OwnBooking, e
 
 func (row *ownBookingRow) ownBooking() *OwnBooking {
 	booking := row.BookingModel
-	own := &OwnBooking{BookingPayment: BookingPayment{Booking: &booking, EventStatus: row.EventStatus, Now: row.DatabaseNow}}
+	own := &OwnBooking{BookingPayment: BookingPayment{Booking: &booking, EventStatus: row.EventStatus, Now: row.DatabaseNow}, RatingScore: row.RatingScore}
 	if booking.PaymentID != nil && row.PaymentStatus != nil {
 		own.Payment = &model.PaymentModel{
 			PaymentID:     *booking.PaymentID,

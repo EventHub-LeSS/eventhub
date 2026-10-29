@@ -429,6 +429,29 @@ func (k *KeycloakService) backendClientID(ctx context.Context, accessToken strin
 	return "", fmt.Errorf("client %q not found", k.cfg.ClientID)
 }
 
+// UserProfile loads a user of the user realm with the service account; it returns nil if the user
+// does not exist.
+func (k *KeycloakService) UserProfile(ctx context.Context, keycloakUserID string) (profile *model.UserModel, err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	user, err := k.client.GetUserByID(ctx, accessToken, k.cfg.UserRealm, keycloakUserID)
+	if isKeycloakStatus(err, http.StatusNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("fetch keycloak user %s: %w", keycloakUserID, err)
+	}
+	return &model.UserModel{
+		KeycloakUserID: keycloakUserID,
+		FirstName:      gocloak.PString(user.FirstName),
+		LastName:       gocloak.PString(user.LastName),
+		Email:          gocloak.PString(user.Email),
+	}, nil
+}
+
 func (k *KeycloakService) GetUserGlobalRoles(ctx context.Context, keycloakUserID string) (result []string, err error) {
 	accessToken, err := k.adminToken(ctx)
 	if err != nil {

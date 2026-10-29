@@ -78,6 +78,7 @@ func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
 		NumberOfTickets: booking.NumberOfTickets,
 		BookingStatus:   shownBookingStatus(booking, own.Now),
 		TicketsValid:    ticketsValid,
+		RatingScore:     own.RatingScore,
 		BookedAt:        booking.CreatedAt,
 	}
 	if resp.BookingStatus == model.BookingStatusReserved {
