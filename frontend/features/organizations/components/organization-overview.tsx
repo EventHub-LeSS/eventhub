@@ -8,7 +8,6 @@ import { EventsTable } from "@/features/organizations/components/events-table"
 import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import { OrganizationStats } from "@/features/organizations/components/organization-stats"
-import { SalesChart } from "@/features/organizations/components/sales-chart"
 import {
   useOrganization,
   useOrganizationMembers,
@@ -17,7 +16,6 @@ import {
   mockActivity,
   mockAuditLog,
   mockEvents,
-  mockSales,
 } from "@/features/organizations/lib/mock-data"
 import type {
   Organization,
@@ -101,7 +99,6 @@ export function OrganizationOverview({
     isAdmin || myRights.includes(right)
   const canViewMembers = hasRight("org_admin")
   const canViewEvents = hasRight("event_manager")
-  const canViewSales = hasRight("finance_viewer")
   const canViewAuditLog = hasRight("org_admin")
 
   if (membersQuery.isError) {
@@ -137,7 +134,6 @@ export function OrganizationOverview({
           {canViewEvents && (
             <TabsTrigger value="events">Veranstaltungen ({mockEvents.length})</TabsTrigger>
           )}
-          {canViewSales && <TabsTrigger value="sales">Verkäufe</TabsTrigger>}
           <TabsTrigger value="settings">Einstellungen</TabsTrigger>
           {canViewAuditLog && (
             <TabsTrigger value="audit-log">Audit-Log</TabsTrigger>
@@ -174,11 +170,6 @@ export function OrganizationOverview({
           </TabsContent>
         )}
 
-        {canViewSales && (
-          <TabsContent value="sales" className="flex flex-col gap-4">
-            <SalesChart data={mockSales} />
-          </TabsContent>
-        )}
 
         {canViewAuditLog && (
           <TabsContent value="audit-log">
