@@ -8,40 +8,67 @@ import {
   parseDashboardFilters,
   SalesDashboard,
 } from "@/features/events"
-import { requireOrganizer } from "@/features/auth"
+import { getSession, requireOrganizer } from "@/features/auth"
 import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
   CardTitle,
 } from "@/features/shared/components/ui/card"
-import { getSession } from "@/features/auth"
-import {
-  getOrganizationByAlias,
-  getOrganizationMembersWithRights,
-} from "@/features/organizations"
+import { envConfig } from "@/features/shared/lib/env"
 
 interface PageProps {
   searchParams: Promise<{ status?: string; category?: string; q?: string }>
 }
 
+/** Mirrors the backend's `CurrentUserResponse` (GET /users/me). */
+interface CurrentUserResponse {
+  organizations: {
+    id: string
+    alias: string
+    roles: string[]
+  }[]
+  /** The token's active organization, if any. */
+  organization?: {
+    id: string
+    alias: string
+    roles: string[]
+  }
+}
+
 async function getUserFinancialRights(
   accessToken: string,
   organizationAlias: string,
-  userEmail: string,
 ): Promise<{ canViewFinance: boolean }> {
   try {
-    const org = await getOrganizationByAlias(accessToken, organizationAlias)
-    const members = await getOrganizationMembersWithRights(accessToken, org.id)
-    const member = members.find((m) => m.email.toLowerCase() === userEmail.toLowerCase())
-    const rights = member?.rights ?? []
+    const response = await fetch(`${envConfig.apiBaseUrl}/users/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      return { canViewFinance: false }
+    }
+
+    const me = (await response.json()) as CurrentUserResponse
+    // Matching by alias (not only the token's active organization) covers the
+    // case where the cookie's org differs from the token's active organization,
+    // e.g. right after switching via the EventHub logo.
+    const orgs = me.organization
+      ? [...me.organizations, me.organization]
+      : me.organizations
+    const org = orgs.find((candidate) => candidate.alias === organizationAlias)
+    const roles = org?.roles ?? []
+
     return {
-      canViewFinance: rights.includes("finance_viewer") || rights.includes("org_admin"),
+      canViewFinance:
+        roles.includes("finance_viewer") || roles.includes("org_admin"),
     }
   } catch {
     return { canViewFinance: false }
   }
 }
+
 export default async function OrganizerPage({ searchParams }: PageProps) {
   const user = await requireOrganizer()
   const session = await getSession()
@@ -49,11 +76,7 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
   const dashboard = await getOrganizerDashboardData(filters)
 
   const { canViewFinance } = user.activeOrganization && session?.accessToken
-    ? await getUserFinancialRights(
-        session.accessToken,
-        user.activeOrganization,
-        user.email,
-      )
+    ? await getUserFinancialRights(session.accessToken, user.activeOrganization)
     : { canViewFinance: false }
 
   return (
