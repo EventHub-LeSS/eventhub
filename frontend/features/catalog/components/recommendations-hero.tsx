@@ -135,7 +135,7 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
         <div className="flex flex-col gap-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <CalendarIcon className="size-3.5 shrink-0" />
-            {formatEventDate(event.startTime)}
+            {formatEventDate(event.startTime, event.endTime)}
           </span>
           <span className="flex items-center gap-1.5">
             <MapPinIcon className="size-3.5 shrink-0" />
