@@ -14,6 +14,9 @@ import (
 // is read in one statement, so the booking, payment and event state come from one snapshot.
 type OwnBooking struct {
 	BookingPayment
+	// RatingScore is the score the user gave the event of this booking; nil while it is not rated
+	// yet. The rating counts per user and event, not per booking.
+	RatingScore *int
 	// Event is nil when the event of the booking no longer exists.
 	Event *model.EventModel
 	// Location is nil when the event has no location or the event no longer exists.
@@ -51,6 +54,8 @@ const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
 	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
 	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
+	    (SELECT r.score FROM ratings r JOIN bookings rb ON rb.booking_id = r.booking_id
+	     WHERE rb.user_id = b.user_id AND rb.event_id = b.event_id LIMIT 1) AS rating_score,
 	    clock.database_now
 	FROM bookings b
 	CROSS JOIN clock
@@ -78,8 +83,9 @@ type ownBookingRow struct {
 	LocationCity         *string                     `gorm:"column:location_city"`
 	LocationPostalCode   *string                     `gorm:"column:location_postal_code"`
 	LocationStreet       *string                     `gorm:"column:location_street"`
-	LocationHouseNumber  *string                     `gorm:"column:location_house_number"`
-	DatabaseNow          time.Time                   `gorm:"column:database_now"`
+	LocationHouseNumber  *string                    `gorm:"column:location_house_number"`
+	RatingScore          *int                       `gorm:"column:rating_score"`
+	DatabaseNow          time.Time                  `gorm:"column:database_now"`
 }
 
 func (r *ownBookingRepository) ListByUserNewestFirst(userID uuid.UUID) ([]*OwnBooking, error) {
@@ -116,7 +122,7 @@ func (r *ownBookingRepository) list(query string, args ...any) ([]*OwnBooking, e
 
 func (row *ownBookingRow) ownBooking() *OwnBooking {
 	booking := row.BookingModel
-	own := &OwnBooking{BookingPayment: BookingPayment{Booking: &booking, EventStatus: row.EventStatus, Now: row.DatabaseNow}}
+	own := &OwnBooking{BookingPayment: BookingPayment{Booking: &booking, EventStatus: row.EventStatus, Now: row.DatabaseNow}, RatingScore: row.RatingScore}
 	if booking.PaymentID != nil && row.PaymentStatus != nil {
 		own.Payment = &model.PaymentModel{
 			PaymentID:     *booking.PaymentID,
