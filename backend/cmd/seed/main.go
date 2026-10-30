@@ -33,8 +33,10 @@ func main() {
 
 	keycloakCfg := service.KeycloakClientConfig{
 		Host:             os.Getenv("KEYCLOAK_HOST"),
+		AdminRealm:       firstNonEmpty(os.Getenv("KEYCLOAK_ADMIN_REALM"), os.Getenv("KEYCLOAK_REALM")),
 		UserRealm:        firstNonEmpty(os.Getenv("KEYCLOAK_USER_REALM"), os.Getenv("KEYCLOAK_REALM")),
 		ClientID:         firstNonEmpty(os.Getenv("KEYCLOAK_CLIENT_ID"), "backend"),
+		ClientSecret:     os.Getenv("KEYCLOAK_CLIENT_SECRET"),
 		FrontendClientID: firstNonEmpty(os.Getenv("KEYCLOAK_FRONTEND_CLIENT_ID"), "frontend"),
 	}
 	if keycloakCfg.Host == "" || keycloakCfg.UserRealm == "" {

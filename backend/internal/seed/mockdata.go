@@ -3,11 +3,12 @@ package seed
 const defaultPassword = "password"
 
 type mockUser struct {
-	Username  string
-	Email     string
-	FirstName string
-	LastName  string
-	Phone     string
+	Username     string
+	Email        string
+	FirstName    string
+	LastName     string
+	Phone        string
+	BackendRoles []string
 }
 
 type mockMembership struct {
@@ -44,6 +45,7 @@ var mockUsers = []mockUser{
 	{Username: "visitor4@eventhub.de", Email: "visitor4@eventhub.de", FirstName: "Sophie", LastName: "Kuhn", Phone: "+49 89 44444444"},
 	{Username: "visitor5@eventhub.de", Email: "visitor5@eventhub.de", FirstName: "Jonas", LastName: "Walter", Phone: "+49 611 55555555"},
 	{Username: "visitor6@eventhub.de", Email: "visitor6@eventhub.de", FirstName: "Mia", LastName: "Schmidt", Phone: "+49 351 66666666"},
+	{Username: "moderator@eventhub.de", Email: "moderator@eventhub.de", FirstName: "Eventhub", LastName: "Moderator", Phone: "+49 151 77777777", BackendRoles: []string{"moderator"}},
 }
 
 var mockOrgs = []mockOrg{

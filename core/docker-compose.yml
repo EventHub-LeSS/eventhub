@@ -71,6 +71,8 @@ services:
       KEYCLOAK_HOST: http://keycloak:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-eventhub}
       KEYCLOAK_USER_REALM: ${KEYCLOAK_USER_REALM:-eventhub}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-backend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
       KEYCLOAK_FRONTEND_CLIENT_ID: frontend
       SEED_USERNAME: ${SEED_USERNAME:-finn.betz@grossmeister.de}
       SEED_PASSWORD: ${SEED_PASSWORD:-password}
