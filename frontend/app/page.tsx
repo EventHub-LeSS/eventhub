@@ -1,6 +1,11 @@
 import { Suspense } from "react"
 
-import { EventFilters, EventList, getEventCategories } from "@/features/catalog"
+import {
+  EventFilters,
+  EventList,
+  getEventCategories,
+  RecommendedEvents,
+} from "@/features/catalog"
 
 interface PageProps {
   searchParams: Promise<{
@@ -22,6 +27,10 @@ export default async function Page({ searchParams }: PageProps) {
           Entdecke Veranstaltungen in deiner Region
         </h1>
       </div>
+      {/* Stays visible while searching: the text search filters on every keystroke. */}
+      <Suspense fallback={null}>
+        <RecommendedEvents />
+      </Suspense>
       <Suspense fallback={null}>
         <EventFilters categories={categories} />
       </Suspense>

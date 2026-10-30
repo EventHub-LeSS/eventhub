@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
 import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
@@ -8,7 +8,6 @@ import { EventsTable } from "@/features/organizations/components/events-table"
 import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import { OrganizationStats } from "@/features/organizations/components/organization-stats"
-import { SalesChart } from "@/features/organizations/components/sales-chart"
 import {
   useOrganization,
   useOrganizationMembers,
@@ -17,7 +16,6 @@ import {
   mockActivity,
   mockAuditLog,
   mockEvents,
-  mockSales,
 } from "@/features/organizations/lib/mock-data"
 import type {
   Organization,
@@ -53,12 +51,6 @@ export function OrganizationOverview({
   const [activeTab, setActiveTab] = useState("overview")
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<Organization | null>(null)
-
-  useEffect(() => {
-    if (organizationQuery.data) {
-      setDraft(organizationQuery.data)
-    }
-  }, [organizationQuery.data])
 
   function handleTabChange(value: unknown) {
     setActiveTab(value as string)
@@ -107,7 +99,6 @@ export function OrganizationOverview({
     isAdmin || myRights.includes(right)
   const canViewMembers = hasRight("org_admin")
   const canViewEvents = hasRight("event_manager")
-  const canViewSales = hasRight("finance_viewer")
   const canViewAuditLog = hasRight("org_admin")
 
   if (membersQuery.isError) {
@@ -143,7 +134,6 @@ export function OrganizationOverview({
           {canViewEvents && (
             <TabsTrigger value="events">Veranstaltungen ({mockEvents.length})</TabsTrigger>
           )}
-          {canViewSales && <TabsTrigger value="sales">Verkäufe</TabsTrigger>}
           <TabsTrigger value="settings">Einstellungen</TabsTrigger>
           {canViewAuditLog && (
             <TabsTrigger value="audit-log">Audit-Log</TabsTrigger>
@@ -180,11 +170,6 @@ export function OrganizationOverview({
           </TabsContent>
         )}
 
-        {canViewSales && (
-          <TabsContent value="sales" className="flex flex-col gap-4">
-            <SalesChart data={mockSales} />
-          </TabsContent>
-        )}
 
         {canViewAuditLog && (
           <TabsContent value="audit-log">

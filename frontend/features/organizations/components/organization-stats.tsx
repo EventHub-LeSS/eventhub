@@ -1,5 +1,4 @@
 import {
-  BanknoteIcon,
   CalendarDaysIcon,
   TicketIcon,
   UsersIcon,
@@ -33,7 +32,6 @@ export function OrganizationStats({
   const membersWithRights = members.filter((m) => m.rights.length > 0).length
   const upcomingEvents = events.filter((e) => e.status === "upcoming").length
   const ticketsSold = events.reduce((sum, e) => sum + e.ticketsSold, 0)
-  const revenue = ticketsSold * 12.5
 
   const stats: StatDefinition[] = [
     {
@@ -53,12 +51,6 @@ export function OrganizationStats({
       value: ticketsSold.toLocaleString("de-DE"),
       hint: "über alle Veranstaltungen",
       icon: TicketIcon,
-    },
-    {
-      label: "Umsatz",
-      value: `${revenue.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €`,
-      hint: "geschätzt, dieses Jahr",
-      icon: BanknoteIcon,
     },
   ]
 
