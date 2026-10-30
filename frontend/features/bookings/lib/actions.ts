@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/features/auth"
 import {
   BookingApiError,
+  cancelBooking,
   createBooking,
   createEventRating,
   getPayment,
@@ -31,6 +32,11 @@ export interface PaymentActionResult {
   /** The stored payment after the call. */
   payment?: Payment
   /** Set when the call failed. */
+  message?: string
+}
+
+export interface CancelBookingResult {
+  cancelled?: boolean
   message?: string
 }
 
@@ -195,6 +201,39 @@ export async function completePaymentAction(
     }
 
     throw error
+  }
+}
+
+export async function cancelBookingAction(
+  bookingId: string
+): Promise<CancelBookingResult> {
+  if (!isUUID(bookingId)) {
+    return { message: "Ungültige Buchungs-ID." }
+  }
+
+  const accessToken = await authorize("/tickets")
+
+  try {
+    await cancelBooking(accessToken, bookingId)
+    revalidatePath("/tickets")
+    return { cancelled: true }
+  } catch (error) {
+    if (error instanceof BookingApiError) {
+      return { message: cancelErrorMessage(error) }
+    }
+
+    throw error
+  }
+}
+
+function cancelErrorMessage(error: BookingApiError): string {
+  switch (error.status) {
+    case 404:
+      return "Diese Buchung gibt es nicht mehr."
+    case 409:
+      return "Diese Buchung kann nicht mehr storniert werden."
+    default:
+      return error.message
   }
 }
 

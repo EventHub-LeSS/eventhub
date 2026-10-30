@@ -1,5 +1,6 @@
 import { getSession, requireSession } from "@/features/auth"
 import {
+  getOwnBookings,
   getOwnTickets,
   OwnTickets,
   splitTicketsByEnd,
@@ -11,12 +12,26 @@ export default async function TicketsPage() {
   const session = await getSession()
 
   let tickets: OwnBooking[] | null = null
+  let cancelled: OwnBooking[] = []
   if (session) {
-    try {
-      tickets = await getOwnTickets(session.accessToken)
-    } catch (error) {
-      console.error("Loading own tickets failed:", error)
-      tickets = null
+    const [ticketsResult, cancelledResult] = await Promise.allSettled([
+      getOwnTickets(session.accessToken),
+      getOwnBookings(session.accessToken, "cancelled"),
+    ])
+
+    if (ticketsResult.status === "fulfilled") {
+      tickets = ticketsResult.value
+    } else {
+      console.error("Loading own tickets failed:", ticketsResult.reason)
+    }
+
+    if (cancelledResult.status === "fulfilled") {
+      cancelled = cancelledResult.value
+    } else {
+      console.error(
+        "Loading cancelled bookings failed:",
+        cancelledResult.reason
+      )
     }
   }
 
@@ -25,7 +40,8 @@ export default async function TicketsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Meine Tickets</h1>
         <p className="text-sm text-muted-foreground">
-          Deine gültigen Tickets. Vergangene Veranstaltungen kannst du bewerten.
+          Deine gültigen Tickets. Bevorstehende kannst du stornieren, vergangene
+          Veranstaltungen bewerten.
         </p>
       </div>
       {tickets === null ? (
@@ -34,7 +50,10 @@ export default async function TicketsPage() {
           später erneut.
         </p>
       ) : (
-        <OwnTickets {...splitTicketsByEnd(tickets, Date.now())} />
+        <OwnTickets
+          {...splitTicketsByEnd(tickets, Date.now())}
+          cancelled={cancelled}
+        />
       )}
     </div>
   )

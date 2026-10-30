@@ -1,6 +1,7 @@
 import "server-only"
 import type {
   Booking,
+  BookingStatus,
   OwnBooking,
   Payment,
   SimulatedPaymentOutcome,
@@ -122,6 +123,32 @@ export async function getOwnTickets(
   accessToken: string
 ): Promise<OwnBooking[]> {
   return apiFetch<OwnBooking[]>("/me/tickets", { accessToken })
+}
+
+export async function getOwnBookings(
+  accessToken: string,
+  status?: BookingStatus
+): Promise<OwnBooking[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ""
+
+  return apiFetch<OwnBooking[]>(`/me/bookings${query}`, { accessToken })
+}
+
+export async function getOwnBooking(
+  accessToken: string,
+  bookingId: string
+): Promise<OwnBooking> {
+  return apiFetch<OwnBooking>(`/me/bookings/${bookingId}`, { accessToken })
+}
+
+export async function cancelBooking(
+  accessToken: string,
+  bookingId: string
+): Promise<Booking> {
+  return apiFetch<Booking>(`/bookings/${bookingId}/cancel`, {
+    accessToken,
+    method: "POST",
+  })
 }
 
 export async function createEventRating(

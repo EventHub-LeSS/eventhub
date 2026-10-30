@@ -135,6 +135,7 @@ export const bookingStatusLabels: Record<BookingStatus, string> = {
 
 export const failureReasonLabels: Record<PaymentFailureReason, string> = {
   declined: "Zahlung abgelehnt",
+  booking_cancelled: "Buchung storniert",
   reservation_expired: "Reservierung abgelaufen",
   event_unavailable: "Veranstaltung nicht mehr verfügbar",
 }

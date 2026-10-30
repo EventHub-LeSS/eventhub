@@ -29,6 +29,7 @@ export type PaymentStatus = "pending" | "paid" | "failed" | "refunded"
 /** Mirrors `model.PaymentFailureReason`. */
 export type PaymentFailureReason =
   | "declined"
+  | "booking_cancelled"
   | "reservation_expired"
   | "event_unavailable"
 

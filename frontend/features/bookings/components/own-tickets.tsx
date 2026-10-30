@@ -3,13 +3,16 @@
 import {
   CalendarIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   MapPinIcon,
   StarIcon,
   TicketIcon,
+  TicketXIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 
+import { CancelBookingDialog } from "@/features/bookings/components/cancel-booking-dialog"
 import { RatingDialog } from "@/features/bookings/components/rating-dialog"
 import {
   formatAmount,
@@ -25,6 +28,7 @@ import { Card, CardContent } from "@/features/shared/components/ui/card"
 interface OwnTicketsProps {
   upcoming: OwnBooking[]
   past: OwnBooking[]
+  cancelled: OwnBooking[]
 }
 
 interface LocalRating {
@@ -32,8 +36,10 @@ interface LocalRating {
   message: string
 }
 
-export function OwnTickets({ upcoming, past }: OwnTicketsProps) {
+export function OwnTickets({ upcoming, past, cancelled }: OwnTicketsProps) {
   const [showPast, setShowPast] = useState(false)
+  const [showCancelled, setShowCancelled] = useState(false)
+  const [cancelling, setCancelling] = useState<OwnBooking | null>(null)
   const [ratingFor, setRatingFor] = useState<OwnBookingEvent | null>(null)
   const [rated, setRated] = useState<Record<string, LocalRating>>({})
 
@@ -72,7 +78,18 @@ export function OwnTickets({ upcoming, past }: OwnTicketsProps) {
           <ul className="flex flex-col gap-3">
             {upcoming.map((ticket) => (
               <li key={ticket.bookingId}>
-                <TicketCard ticket={ticket} />
+                <TicketCard ticket={ticket}>
+                  <div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setCancelling(ticket)}
+                    >
+                      <TicketXIcon />
+                      Stornieren
+                    </Button>
+                  </div>
+                </TicketCard>
               </li>
             ))}
           </ul>
@@ -109,7 +126,7 @@ export function OwnTickets({ upcoming, past }: OwnTicketsProps) {
 
                 return (
                   <li key={ticket.bookingId}>
-                    <TicketCard ticket={ticket} past>
+                    <TicketCard ticket={ticket} kind="past">
                       {event &&
                         (hasScore || local ? (
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
@@ -133,6 +150,71 @@ export function OwnTickets({ upcoming, past }: OwnTicketsProps) {
             </ul>
           )}
         </section>
+      )}
+
+      {cancelled.length > 0 && (
+        <section
+          aria-labelledby="cancelled-heading"
+          className="flex flex-col gap-3"
+        >
+          <h2 id="cancelled-heading">
+            <Button
+              variant="ghost"
+              aria-expanded={showCancelled}
+              aria-controls="cancelled-tickets"
+              onClick={() => setShowCancelled((shown) => !shown)}
+              className="-ml-2.5 text-lg font-semibold"
+            >
+              Stornierte Tickets ({cancelled.length})
+              <ChevronDownIcon
+                className={
+                  showCancelled
+                    ? "rotate-180 transition-transform"
+                    : "transition-transform"
+                }
+              />
+            </Button>
+          </h2>
+          {showCancelled && (
+            <ul id="cancelled-tickets" className="flex flex-col gap-3">
+              {cancelled.map((ticket) => (
+                <li key={ticket.bookingId}>
+                  <TicketCard
+                    ticket={ticket}
+                    kind="cancelled"
+                    aside={
+                      <Button
+                        render={
+                          <Link
+                            href={`/tickets/${ticket.bookingId}/cancellation`}
+                          />
+                        }
+                        nativeButton={false}
+                        size="sm"
+                      >
+                        Stornierung ansehen
+                        <ChevronRightIcon data-icon="inline-end" />
+                      </Button>
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {cancelling && (
+        <CancelBookingDialog
+          key={cancelling.bookingId}
+          ticket={cancelling}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setCancelling(null)
+            }
+          }}
+        />
       )}
 
       {ratingFor && (
@@ -176,14 +258,18 @@ function RatingStars({ score }: { score: number }) {
 
 function TicketCard({
   ticket,
-  past = false,
+  kind = "valid",
+  aside,
   children,
 }: {
   ticket: OwnBooking
-  past?: boolean
+  kind?: "valid" | "past" | "cancelled"
+  /** Shown to the right of the details, below them on narrow screens. */
+  aside?: React.ReactNode
   children?: React.ReactNode
 }) {
   const { event } = ticket
+  const past = kind !== "valid"
 
   return (
     <Card className={past ? "gap-3 opacity-90" : "gap-3"}>
@@ -201,7 +287,9 @@ function TicketCard({
               {event?.title ?? "Veranstaltung nicht mehr verfügbar"}
             </p>
           )}
-          {past ? (
+          {kind === "cancelled" ? (
+            <Badge variant="destructive">Storniert</Badge>
+          ) : past ? (
             <Badge variant="outline">Vergangen</Badge>
           ) : (
             <Badge className="bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black">
@@ -210,28 +298,32 @@ function TicketCard({
           )}
         </div>
 
-        {event && (
-          <dl className="grid gap-1.5 text-sm text-muted-foreground">
-            <div className="flex items-start gap-2">
-              <dt className="sr-only">Zeitraum</dt>
-              <CalendarIcon className="mt-0.5 size-4 shrink-0" />
-              <dd>{formatEventPeriod(event.startTime, event.endTime)}</dd>
-            </div>
-            <div className="flex items-start gap-2">
-              <dt className="sr-only">Ort</dt>
-              <MapPinIcon className="mt-0.5 size-4 shrink-0" />
-              <dd>{formatLocation(event.location)}</dd>
-            </div>
-            <div className="flex items-start gap-2">
-              <dt className="sr-only">Tickets</dt>
-              <TicketIcon className="mt-0.5 size-4 shrink-0" />
-              <dd>
-                {formatTicketCount(ticket.numberOfTickets)}
-                {ticket.amount !== null && ` · ${formatAmount(ticket.amount)}`}
-              </dd>
-            </div>
-          </dl>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          {event && (
+            <dl className="grid gap-1.5 text-sm text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <dt className="sr-only">Zeitraum</dt>
+                <CalendarIcon className="mt-0.5 size-4 shrink-0" />
+                <dd>{formatEventPeriod(event.startTime, event.endTime)}</dd>
+              </div>
+              <div className="flex items-start gap-2">
+                <dt className="sr-only">Ort</dt>
+                <MapPinIcon className="mt-0.5 size-4 shrink-0" />
+                <dd>{formatLocation(event.location)}</dd>
+              </div>
+              <div className="flex items-start gap-2">
+                <dt className="sr-only">Tickets</dt>
+                <TicketIcon className="mt-0.5 size-4 shrink-0" />
+                <dd>
+                  {formatTicketCount(ticket.numberOfTickets)}
+                  {ticket.amount !== null &&
+                    ` · ${formatAmount(ticket.amount)}`}
+                </dd>
+              </div>
+            </dl>
+          )}
+          {aside && <div className="shrink-0 sm:ml-auto">{aside}</div>}
+        </div>
 
         {children}
       </CardContent>
