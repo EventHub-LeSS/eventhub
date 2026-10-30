@@ -11,7 +11,6 @@ import {
   type SessionUser,
 } from "@/features/auth/lib/user"
 
-/** Cached per request so several components can ask for the session without re-decrypting it. */
 export const getSession = cache(async (): Promise<Session | null> => {
   return readSession()
 })

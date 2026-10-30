@@ -12,7 +12,11 @@ export {
   requireOrganizer,
   requireSession,
 } from "@/features/auth/lib/dal"
-export { organizationsFromClaims, roleFor } from "@/features/auth/lib/user"
+export {
+  organizationIdFromAccessToken,
+  organizationsFromClaims,
+  roleFor,
+} from "@/features/auth/lib/user"
 export type {
   OrganizationRole,
   SessionUser,

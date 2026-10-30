@@ -1,12 +1,9 @@
 "use client"
 
 import {
-  CalendarDaysIcon,
   CompassIcon,
-  HeartIcon,
   LayoutDashboardIcon,
   MenuIcon,
-  TagsIcon,
   TicketIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -41,15 +38,10 @@ interface NavbarProps {
 const visitorLinks: NavLink[] = [
   { label: "Entdecken", href: "/", icon: CompassIcon },
   { label: "Meine Tickets", href: "/tickets", icon: TicketIcon },
-  { label: "Favoriten", href: "/favorites", icon: HeartIcon },
-  { label: "Kalender", href: "/calendar", icon: CalendarDaysIcon },
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
-  guest: [
-    { label: "Entdecken", href: "/", icon: CompassIcon },
-    { label: "Kategorien", href: "/categories", icon: TagsIcon },
-  ],
+  guest: [{ label: "Entdecken", href: "/", icon: CompassIcon }],
   visitor: visitorLinks,
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [

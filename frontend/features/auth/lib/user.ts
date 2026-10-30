@@ -67,6 +67,36 @@ export function isAdminFromAccessToken(accessToken: string): boolean {
 }
 
 /**
+ * The access token's "organization" claim, keyed by alias, carries each organization's
+ * Keycloak ID and the user's groups in it. Not signature-verified: only used to gate UI and
+ * to address Keycloak, which re-checks the token itself.
+ */
+function organizationClaim(
+  accessToken: string,
+  alias: string
+): { id?: unknown; groups?: unknown } | undefined {
+  try {
+    const claim = decodeJwt(accessToken).organization as
+      | Record<string, { id?: unknown; groups?: unknown }>
+      | undefined
+
+    return claim?.[alias]
+  } catch {
+    return undefined
+  }
+}
+
+/** Keycloak's organization ID for an alias the user is a member of. */
+export function organizationIdFromAccessToken(
+  accessToken: string,
+  alias: string
+): string | null {
+  const id = organizationClaim(accessToken, alias)?.id
+
+  return typeof id === "string" && id ? id : null
+}
+
+/**
  * The user's roles in one organization. Keycloak puts them as groups such as
  * "/event_manager" or "/roles/event_manager" into the organization claim, which
  * is where the API reads them too. Like isAdminFromAccessToken, only for UI.
@@ -79,20 +109,13 @@ export function organizationRolesFromAccessToken(
     return []
   }
 
-  try {
-    const claim = decodeJwt(accessToken).organization as
-      | Record<string, { groups?: unknown }>
-      | undefined
-    const groups = claim?.[organization]?.groups
+  const groups = organizationClaim(accessToken, organization)?.groups
 
-    if (!Array.isArray(groups)) {
-      return []
-    }
-
-    return ORGANIZATION_ROLES.filter(
-      (role) => groups.includes(`/${role}`) || groups.includes(`/roles/${role}`)
-    )
-  } catch {
+  if (!Array.isArray(groups)) {
     return []
   }
+
+  return ORGANIZATION_ROLES.filter(
+    (role) => groups.includes(`/${role}`) || groups.includes(`/roles/${role}`)
+  )
 }
