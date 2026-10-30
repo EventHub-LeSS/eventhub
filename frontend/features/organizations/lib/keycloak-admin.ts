@@ -1,8 +1,8 @@
 import "server-only";
 
+import { organizationIdFromAccessToken } from "@/features/auth";
 import { envConfig } from "@/features/shared/lib/env";
 import type {
-  Organization,
   OrganizationMember,
   OrganizationRight,
 } from "@/features/organizations/lib/types";
@@ -21,20 +21,6 @@ export class KeycloakAdminError extends Error {
     super(message);
     this.name = "KeycloakAdminError";
   }
-}
-
-interface KeycloakOrganizationDomain {
-  name: string;
-  verified?: boolean;
-}
-
-interface KeycloakOrganization {
-  id: string;
-  name: string;
-  alias: string;
-  enabled?: boolean;
-  description?: string;
-  domains?: KeycloakOrganizationDomain[];
 }
 
 interface KeycloakGroup {
@@ -91,13 +77,18 @@ function memberName(user: KeycloakUser): string {
   return name || user.username || user.email || user.id;
 }
 
-export async function getOrganizationByAlias(
+export async function resolveOrganizationId(
   accessToken: string,
   alias: string,
-): Promise<Organization> {
-  const orgs = await keycloakFetch<KeycloakOrganization[]>(
+): Promise<string> {
+  const fromToken = organizationIdFromAccessToken(accessToken, alias);
+  if (fromToken) {
+    return fromToken;
+  }
+
+  const orgs = await keycloakFetch<{ id: string; alias: string }[]>(
     accessToken,
-    "/organizations?max=200",
+    "/organizations?max=200&briefRepresentation=true",
   );
   const match = orgs.find((org) => org.alias === alias);
 
@@ -105,17 +96,7 @@ export async function getOrganizationByAlias(
     throw new KeycloakAdminError(`Organisation „${alias}“ nicht gefunden`, 404);
   }
 
-  return {
-    id: match.id,
-    name: match.name,
-    alias: match.alias,
-    description: match.description ?? "",
-    enabled: match.enabled ?? true,
-    domains: (match.domains ?? []).map((domain) => ({
-      name: domain.name,
-      verified: domain.verified ?? false,
-    })),
-  };
+  return match.id;
 }
 
 async function getOrganizationGroups(
