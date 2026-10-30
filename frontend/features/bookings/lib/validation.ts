@@ -192,3 +192,14 @@ export function cardCvcError(raw: string): string | undefined {
 
   return undefined
 }
+
+export const MAX_RATING_TEXT_LENGTH = 2000
+
+export function isRatingScore(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5
+  )
+}
