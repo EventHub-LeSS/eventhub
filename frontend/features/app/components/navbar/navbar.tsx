@@ -4,7 +4,6 @@ import {
   CompassIcon,
   LayoutDashboardIcon,
   MenuIcon,
-  TagsIcon,
   TicketIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -42,10 +41,7 @@ const visitorLinks: NavLink[] = [
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
-  guest: [
-    { label: "Entdecken", href: "/", icon: CompassIcon },
-    { label: "Kategorien", href: "/categories", icon: TagsIcon },
-  ],
+  guest: [{ label: "Entdecken", href: "/", icon: CompassIcon }],
   visitor: visitorLinks,
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [
