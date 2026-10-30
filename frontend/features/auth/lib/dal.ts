@@ -31,9 +31,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     activeOrganization,
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
-    activeOrganizationRoles: activeOrganization
-      ? organizationRolesFromAccessToken(session.accessToken, activeOrganization)
-      : [],
+    organizationRoles: organizationRolesFromAccessToken(
+      session.accessToken,
+      activeOrganization
+    ),
   }
 }
 

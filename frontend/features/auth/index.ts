@@ -17,7 +17,11 @@ export {
   organizationsFromClaims,
   roleFor,
 } from "@/features/auth/lib/user"
-export type { SessionUser, UserRole } from "@/features/auth/lib/user"
+export type {
+  OrganizationRole,
+  SessionUser,
+  UserRole,
+} from "@/features/auth/lib/user"
 export { refreshAccessToken } from "@/features/auth/lib/oidc"
 export {
   createSessionCookie,

@@ -16,7 +16,7 @@ export default async function OrganizationPage() {
       <div className="w-full max-w-6xl">
         <OrganizationOverview
           alias={user.activeOrganization as string}
-          rights={user.activeOrganizationRoles}
+          rights={user.organizationRoles}
           isAdmin={user.isAdmin}
           eventCount={events ? events.length : null}
           activity={events ? activityByMonth(events) : null}

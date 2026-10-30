@@ -2,6 +2,14 @@ import { decodeJwt } from "jose"
 
 export type UserRole = "guest" | "visitor" | "organizer"
 
+export type OrganizationRole = "org_admin" | "event_manager" | "finance_viewer"
+
+const ORGANIZATION_ROLES: OrganizationRole[] = [
+  "org_admin",
+  "event_manager",
+  "finance_viewer",
+]
+
 /** Client ID whose Keycloak client roles carry the platform-wide admin/moderator/visitor roles. */
 const BACKEND_CLIENT_ID = "backend"
 
@@ -15,7 +23,8 @@ export interface SessionUser {
   role: UserRole
   /** Platform-wide admin, from the "admin" backend client role. Independent of `role`/organization membership. */
   isAdmin: boolean
-  activeOrganizationRoles: string[]
+  /** Roles in the active organization, e.g. event_manager to manage its events. */
+  organizationRoles: OrganizationRole[]
 }
 
 /**
@@ -87,18 +96,26 @@ export function organizationIdFromAccessToken(
   return typeof id === "string" && id ? id : null
 }
 
-/** The user's roles in one organization; groups are "/org_admin" or "/roles/org_admin". */
+/**
+ * The user's roles in one organization. Keycloak puts them as groups such as
+ * "/event_manager" or "/roles/event_manager" into the organization claim, which
+ * is where the API reads them too. Like isAdminFromAccessToken, only for UI.
+ */
 export function organizationRolesFromAccessToken(
   accessToken: string,
-  alias: string
-): string[] {
-  const groups = organizationClaim(accessToken, alias)?.groups
+  organization: string | null
+): OrganizationRole[] {
+  if (!organization) {
+    return []
+  }
+
+  const groups = organizationClaim(accessToken, organization)?.groups
 
   if (!Array.isArray(groups)) {
     return []
   }
 
-  return groups
-    .filter((group) => typeof group === "string")
-    .map((group) => group.replace(/^\/(roles\/)?/, ""))
+  return ORGANIZATION_ROLES.filter(
+    (role) => groups.includes(`/${role}`) || groups.includes(`/roles/${role}`)
+  )
 }
