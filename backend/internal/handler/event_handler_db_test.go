@@ -28,7 +28,7 @@ import (
 type seededEvent struct {
 	eventID    uuid.UUID
 	categoryID uuid.UUID
-	locationID uuid.UUID
+	location   string
 	ownerOrgID uuid.UUID
 }
 
@@ -37,10 +37,11 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 	// The organization ID is derived from the Keycloak org ID so that several
 	// seeded events can share one organization without breaking the unique
 	// constraint on keycloak_org_id.
+	eventID := uuid.New()
 	s := seededEvent{
-		eventID:    uuid.New(),
+		eventID:    eventID,
 		categoryID: uuid.New(),
-		locationID: uuid.New(),
+		location:   "loc-" + eventID.String() + ", Weg 1, 53111 Bonn",
 		ownerOrgID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("org-"+keycloakOrgID)),
 	}
 	statements := []struct {
@@ -48,11 +49,10 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 		args []any
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{s.categoryID, "cat-" + s.categoryID.String()}},
-		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "loc-" + s.locationID.String(), "Bonn", "53111", "Weg"}},
 		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, alias) VALUES (?, ?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID, "alias-" + keycloakOrgID}},
-		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
+		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', 100, ?, 20, ?, ?, ?)`,
-			[]any{s.eventID, "Altes Konzert", string(status), s.categoryID, s.ownerOrgID, s.locationID}},
+			[]any{s.eventID, "Altes Konzert", string(status), s.categoryID, s.ownerOrgID, s.location}},
 	}
 	for _, st := range statements {
 		if err := db.Exec(st.sql, st.args...).Error; err != nil {
@@ -262,7 +262,7 @@ func validBody(s seededEvent) map[string]any {
 		"capacity":   250,
 		"price":      35,
 		"categoryId": s.categoryID.String(),
-		"locationId": s.locationID.String(),
+		"location":   "Neue Halle, Hauptstraße 5, 50667 Köln",
 	}
 }
 
@@ -271,7 +271,7 @@ func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
 	router := newEventRouter(db, principalManaging("kc-org-a", "kc-org-b"))
 
-	rec := putEvent(t, router, seeded.eventID.String(), validBody(seeded))
+	rec := putEvent(t, router, seeded.eventID.String(), with(validBody(seeded), "location", " Neue Halle, Hauptstraße 5, 50667 Köln  "))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -283,11 +283,31 @@ func TestUpdateEventHandler_UpdatesOwnEvent(t *testing.T) {
 	if stored.Title != "Neues Konzert" || stored.Capacity != 250 || !stored.Price.Equal(decimal.NewFromInt(35)) {
 		t.Errorf("update not persisted: title=%q capacity=%d price=%s", stored.Title, stored.Capacity, stored.Price)
 	}
+	if stored.Location == nil || *stored.Location != "Neue Halle, Hauptstraße 5, 50667 Köln" {
+		t.Errorf("location not persisted trimmed: %v", stored.Location)
+	}
 	if stored.Status != model.EventStatusPublished {
 		t.Errorf("status changed to %s", stored.Status)
 	}
 	if stored.OrganizerID == nil || *stored.OrganizerID != seeded.ownerOrgID {
 		t.Errorf("organizer changed to %v", stored.OrganizerID)
+	}
+}
+
+func TestUpdateEventHandler_RejectsBlankLocation(t *testing.T) {
+	db := testdb.Open(t)
+	seeded := seedEventForOrg(t, db, "kc-org-b", model.EventStatusDraft)
+	router := newEventRouter(db, principalManaging("kc-org-b"))
+
+	rec := putEvent(t, router, seeded.eventID.String(), with(validBody(seeded), "location", " \n "))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var stored model.EventModel
+	db.First(&stored, "event_id = ?", seeded.eventID)
+	if stored.Title != "Altes Konzert" || stored.Location == nil || *stored.Location != seeded.location {
+		t.Errorf("rejected update was persisted: title=%q location=%v", stored.Title, stored.Location)
 	}
 }
 

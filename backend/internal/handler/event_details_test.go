@@ -90,8 +90,7 @@ func TestPublishedEventDetailsDatabase(t *testing.T) {
 		!details.StartTime.Equal(stored.StartTime) || !details.EndTime.Equal(stored.EndTime) ||
 		!details.Price.Equal(stored.Price) || details.Status != model.EventStatusPublished ||
 		details.Category.CategoryID != event.categoryID || details.Category.Category != "cat-"+event.categoryID.String() ||
-		details.Location.LocationID != event.locationID || details.Location.City != "Bonn" ||
-		details.Location.Name != "loc-"+event.locationID.String() || details.Alias != "alias-details" || details.OrganizerID != event.ownerOrgID ||
+		details.Location != event.location || details.Alias != "alias-details" || details.OrganizerID != event.ownerOrgID ||
 		details.Capacity != 100 || details.AvailableSeats != 100 || !details.Bookable {
 		t.Fatalf("incorrect details: %+v", details)
 	}
@@ -152,7 +151,7 @@ func TestPublishedEventDetailsVisibility(t *testing.T) {
 	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
 		ids = append(ids, seedEventForOrg(t, db, "details", status).eventID)
 	}
-	for _, column := range []string{"category_id", "location_id", "organizer_id"} {
+	for _, column := range []string{"category_id", "location", "organizer_id"} {
 		event := seedEventForOrg(t, db, "details", model.EventStatusPublished)
 		if err := db.Exec("UPDATE events SET "+column+" = NULL WHERE event_id = ?", event.eventID).Error; err != nil {
 			t.Fatal(err)

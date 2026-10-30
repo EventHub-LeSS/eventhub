@@ -2,6 +2,7 @@ package handler
 
 import (
 	"backend/internal/model"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ func validUpdateEventRequest() model.UpdateEventRequest {
 		Capacity:   100,
 		Price:      decimal.NewFromInt(20),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   "Stadthalle, Markt 1, 53111 Bonn",
 	}
 }
 
@@ -36,7 +37,9 @@ func TestUpdateEventRequestValidation(t *testing.T) {
 		{name: "zero capacity", mutate: func(r *model.UpdateEventRequest) { r.Capacity = 0 }, wantErr: true},
 		{name: "negative price", mutate: func(r *model.UpdateEventRequest) { r.Price = decimal.NewFromInt(-1) }, wantErr: true},
 		{name: "missing category", mutate: func(r *model.UpdateEventRequest) { r.CategoryID = uuid.Nil }, wantErr: true},
-		{name: "missing location", mutate: func(r *model.UpdateEventRequest) { r.LocationID = uuid.Nil }, wantErr: true},
+		{name: "missing location", mutate: func(r *model.UpdateEventRequest) { r.Location = "" }, wantErr: true},
+		{name: "blank location", mutate: func(r *model.UpdateEventRequest) { r.Location = "   " }, wantErr: true},
+		{name: "location too long", mutate: func(r *model.UpdateEventRequest) { r.Location = strings.Repeat("a", 201) }, wantErr: true},
 	}
 
 	for _, tt := range tests {

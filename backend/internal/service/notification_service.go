@@ -77,14 +77,7 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 		}
 		if event == nil || booking.EventID == nil || *booking.EventID != event.EventID ||
 			booking.Status != model.BookingStatusConfirmed || event.Status != model.EventStatusPublished ||
-			!event.StartTime.After(now) || event.LocationID == nil {
-			return ErrReminderUnavailable
-		}
-		location, err := tx.Notifications.GetLocation(*event.LocationID)
-		if err != nil {
-			return err
-		}
-		if location == nil {
+			!event.StartTime.After(now) || event.Location == nil {
 			return ErrReminderUnavailable
 		}
 		existing, err := tx.Notifications.GetReminder(bookingID, userID)
@@ -101,10 +94,6 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 			}
 			return nil
 		}
-		street := location.Street
-		if location.HouseNumber != nil {
-			street += " " + *location.HouseNumber
-		}
 		scheduled := event.StartTime.Add(-24 * time.Hour)
 		if scheduled.Before(now) {
 			scheduled = now
@@ -112,9 +101,8 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 		notification = &model.NotificationData{
 			NotificationID: uuid.New(), UserID: &userID, BookingID: &bookingID,
 			Occasion: "event_reminder", Subject: "Erinnerung: " + event.Title,
-			Content: fmt.Sprintf("%s beginnt am %s in %s, %s (%s %s). Gebuchte Tickets: %d.",
-				event.Title, event.StartTime.Format(time.RFC3339), location.Name, location.City,
-				location.PostalCode, street, booking.NumberOfTickets),
+			Content: fmt.Sprintf("%s beginnt am %s in %s. Gebuchte Tickets: %d.",
+				event.Title, event.StartTime.Format(time.RFC3339), *event.Location, booking.NumberOfTickets),
 			ScheduledAt: &scheduled, Simulated: true, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := tx.Notifications.Create(notification); err != nil {

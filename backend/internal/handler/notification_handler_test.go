@@ -135,8 +135,8 @@ func TestNotificationsDatabaseLifecycle(t *testing.T) {
 	if notification.UserID == nil || *notification.UserID != owner || notification.BookingID == nil || *notification.BookingID != booking ||
 		notification.Occasion != "event_reminder" || !notification.Simulated || notification.CreatedAt.IsZero() || notification.ScheduledAt == nil ||
 		!notification.ScheduledAt.Equal(storedEvent.StartTime.Add(-24*time.Hour)) ||
-		!strings.Contains(notification.Content, storedEvent.Title) || !strings.Contains(notification.Content, "Bonn") ||
-		!strings.Contains(notification.Content, "loc-"+event.locationID.String()) || !strings.Contains(notification.Content, storedEvent.StartTime.Format(time.RFC3339)) {
+		!strings.Contains(notification.Content, storedEvent.Title) ||
+		!strings.Contains(notification.Content, " in "+event.location+".") || !strings.Contains(notification.Content, storedEvent.StartTime.Format(time.RFC3339)) {
 		t.Fatalf("incorrect reminder: %+v", notification)
 	}
 	rec = requestReminder(router, booking)

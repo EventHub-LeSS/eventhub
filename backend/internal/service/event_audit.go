@@ -62,7 +62,7 @@ func eventSnapshot(e *model.EventModel) map[string]any {
 		"status":      string(e.Status),
 		"price":       e.Price.String(),
 		"categoryId":  auditUUID(e.CategoryID),
-		"locationId":  auditUUID(e.LocationID),
+		"location":    auditString(e.Location),
 	}
 }
 

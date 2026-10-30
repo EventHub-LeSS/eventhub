@@ -16,7 +16,8 @@ type PublishedEventResponse struct {
 	Status    EventStatus            `json:"status"`
 	Price     decimal.Decimal        `json:"price" swaggertype:"string" example:"20.00"`
 	Category  PublishedEventCategory `json:"category" gorm:"embedded;embeddedPrefix:category_"`
-	Location  PublishedEventLocation `json:"location" gorm:"embedded;embeddedPrefix:location_"`
+	// Venue and address as free text.
+	Location string `json:"location" example:"Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg"`
 	// Database UUID of the organization that owns the event, as GET /organizations/{organizationID}/rating-summary expects it.
 	OrganizerID uuid.UUID `json:"organizerId" gorm:"column:organizer_id"`
 	// Alias of the organization that owns the event, as tokens and GET /users/me carry it.
@@ -28,16 +29,7 @@ type PublishedEventCategory struct {
 	Category   string    `json:"category" gorm:"column:name"`
 }
 
-type PublishedEventLocation struct {
-	LocationID  uuid.UUID `json:"locationId" gorm:"column:id"`
-	Name        string    `json:"name"`
-	City        string    `json:"city"`
-	PostalCode  string    `json:"postalCode"`
-	Street      string    `json:"street"`
-	HouseNumber *string   `json:"houseNumber"`
-}
-
-// PublishedEventFilter limits the public listing by start date, category and city or venue name.
+// PublishedEventFilter limits the public listing by start date, category and location text.
 type PublishedEventFilter struct {
 	Location   string
 	CategoryID *uuid.UUID

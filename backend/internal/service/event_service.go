@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -29,7 +30,7 @@ var (
 	// ErrOrganizationRequired means the caller manages events in several organizations and did not
 	// say which one a new event belongs to.
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
-	// ErrUnknownReference means the event references a category or location that does not exist.
+	// ErrUnknownReference means the event references a category that does not exist.
 	ErrUnknownReference = repository.ErrUnknownReference
 )
 
@@ -90,6 +91,7 @@ func (s *EventService) CreateDraft(ctx context.Context, keycloakOrgIDs []string,
 	}
 	org := orgs[idx]
 
+	location := strings.TrimSpace(req.Location)
 	event := &model.EventModel{
 		EventID:     uuid.New(),
 		Title:       req.Title,
@@ -101,7 +103,7 @@ func (s *EventService) CreateDraft(ctx context.Context, keycloakOrgIDs []string,
 		Price:       req.Price,
 		CategoryID:  &req.CategoryID,
 		OrganizerID: &org.OrganizationID,
-		LocationID:  &req.LocationID,
+		Location:    &location,
 	}
 
 	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
@@ -196,7 +198,8 @@ func (s *EventService) UpdateEvent(
 		event.Capacity = req.Capacity
 		event.Price = req.Price
 		event.CategoryID = &req.CategoryID
-		event.LocationID = &req.LocationID
+		location := strings.TrimSpace(req.Location)
+		event.Location = &location
 
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
@@ -327,7 +330,7 @@ func isEventComplete(event *model.EventModel) bool {
 		return false
 	}
 	if event.CategoryID == nil || *event.CategoryID == uuid.Nil ||
-		event.LocationID == nil || *event.LocationID == uuid.Nil {
+		event.Location == nil || strings.TrimSpace(*event.Location) == "" {
 		return false
 	}
 	return true

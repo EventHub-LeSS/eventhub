@@ -81,7 +81,7 @@ func CreateEventHandler(c *gin.Context) {
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
 // @Failure      403 {object} model.ErrorResponse
-// @Failure      422 {object} model.ErrorResponse "Unknown categoryId or locationId"
+// @Failure      422 {object} model.ErrorResponse "Unknown categoryId"
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /events/draft [post]
 func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
@@ -442,11 +442,11 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 }
 
 // ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207, EVENTHUB-208 and EVENTHUB-210.
-// @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
+// @Param location query string false "Case-insensitive substring of the location text; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category, location and organizer alias. The location is free text entered by the organizer, e.g. venue and address. Optional location searches the location text; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse

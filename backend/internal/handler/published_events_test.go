@@ -112,12 +112,10 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 		t.Fatalf("wrong event data: %+v", event)
 	}
 	if event.Category.CategoryID != published.categoryID || event.Category.Category != "cat-"+published.categoryID.String() ||
-		event.Location.LocationID != published.locationID || event.Location.Name != "loc-"+published.locationID.String() ||
-		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil ||
-		event.Alias != "alias-listing" || event.OrganizerID != published.ownerOrgID {
+		event.Location != published.location || event.Alias != "alias-listing" || event.OrganizerID != published.ownerOrgID {
 		t.Fatalf("wrong display data: %+v", event)
 	}
-	for _, column := range []string{"category_id", "location_id", "organizer_id"} {
+	for _, column := range []string{"category_id", "location", "organizer_id"} {
 		if err := db.Exec("UPDATE events SET "+column+" = NULL WHERE event_id = ?", published.eventID).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +123,7 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 			t.Fatalf("event missing %s is visible", column)
 		}
 		if err := db.Model(&model.EventModel{}).Where("event_id = ?", published.eventID).
-			Updates(map[string]any{"category_id": published.categoryID, "location_id": published.locationID, "organizer_id": published.ownerOrgID}).Error; err != nil {
+			Updates(map[string]any{"category_id": published.categoryID, "location": published.location, "organizer_id": published.ownerOrgID}).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -215,12 +213,15 @@ func TestPublishedEventsLocationDatabase(t *testing.T) {
 	bonn := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
 	venue := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
 	special := seedEventForOrg(t, db, "filter", model.EventStatusPublished)
-	for _, row := range []struct{ id, city, name string }{
-		{bonn.locationID.String(), "Bonn", "Stadthalle"},
-		{venue.locationID.String(), "Berlin", "Bonner Bühne"},
-		{special.locationID.String(), "Köln", "100%_!Club"},
+	for _, row := range []struct {
+		id       uuid.UUID
+		location string
+	}{
+		{bonn.eventID, "Stadthalle, Markt 1, 53111 Bonn"},
+		{venue.eventID, "Bonner Bühne, Torstraße 2, 10119 Berlin"},
+		{special.eventID, "100%_!Club, Ring 3, 50667 Köln"},
 	} {
-		if err := db.Exec("UPDATE locations SET city = ?, name = ? WHERE location_id = ?", row.city, row.name, row.id).Error; err != nil {
+		if err := db.Exec("UPDATE events SET location = ? WHERE event_id = ?", row.location, row.id).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -302,7 +303,7 @@ func TestPublishedEventsCategoryDatabase(t *testing.T) {
 	if err := db.Exec("UPDATE events SET category_id = ? WHERE event_id = ?", first.categoryID, shared.eventID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("UPDATE locations SET city = 'Berlin' WHERE location_id = ?", shared.locationID).Error; err != nil {
+	if err := db.Exec("UPDATE events SET location = replace(location, '53111 Bonn', '10115 Berlin') WHERE event_id = ?", shared.eventID).Error; err != nil {
 		t.Fatal(err)
 	}
 	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
@@ -323,7 +324,7 @@ func TestPublishedEventsCategoryDatabase(t *testing.T) {
 		{"reset", "", "", []uuid.UUID{first.eventID, shared.eventID, other.eventID}},
 		{"combined city", first.categoryID.String(), "Bonn", []uuid.UUID{first.eventID}},
 		{"combined other city", first.categoryID.String(), "Berlin", []uuid.UUID{shared.eventID}},
-		{"combined venue", first.categoryID.String(), "loc-" + shared.locationID.String(), []uuid.UUID{shared.eventID}},
+		{"combined venue", first.categoryID.String(), "loc-" + shared.eventID.String(), []uuid.UUID{shared.eventID}},
 		{"combined no match", other.categoryID.String(), "Berlin", nil},
 		{"category reset keeps location", "", "Berlin", []uuid.UUID{shared.eventID}},
 	} {

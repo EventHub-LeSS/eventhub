@@ -17,7 +17,6 @@ type NotificationRepository interface {
 	RefreshReminder(uuid.UUID, uuid.UUID) error
 	GetReminder(uuid.UUID, uuid.UUID) (*model.NotificationData, error)
 	Create(*model.NotificationData) error
-	GetLocation(uuid.UUID) (*model.LocationModel, error)
 	DatabaseNow() (time.Time, error)
 }
 type notificationRepository struct{ db *gorm.DB }
@@ -61,11 +60,11 @@ func (r *notificationRepository) refreshReminders(userID uuid.UUID, ids []uuid.U
 	return r.db.Exec(
 		"UPDATE notification_data AS n SET subject = fresh.subject, content = fresh.content, scheduled_at = fresh.scheduled_at, read_at = NULL, updated_at = clock_timestamp() FROM ("+
 			"SELECT note.notification_id, 'Erinnerung: ' || e.title AS subject, "+
-			"e.title || ' beginnt am ' || to_char(e.start_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || ' in ' || l.name || ', ' || l.city || ' (' || l.postal_code || ' ' || l.street || COALESCE(' ' || l.house_number, '') || '). Gebuchte Tickets: ' || b.number_of_tickets::text || '.' AS content, "+
+			"e.title || ' beginnt am ' || to_char(e.start_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || ' in ' || e.location || '. Gebuchte Tickets: ' || b.number_of_tickets::text || '.' AS content, "+
 			"GREATEST(e.start_time - interval '24 hours', note.created_at) AS scheduled_at "+
 			"FROM notification_data AS note JOIN bookings AS b ON b.booking_id = note.booking_id AND b.user_id = note.user_id "+
-			"JOIN events AS e ON e.event_id = b.event_id JOIN locations AS l ON l.location_id = e.location_id "+
-			"WHERE note.user_id = ? AND note.notification_id IN ? AND note.occasion = 'event_reminder' AND note.simulated = TRUE"+
+			"JOIN events AS e ON e.event_id = b.event_id "+
+			"WHERE e.location IS NOT NULL AND note.user_id = ? AND note.notification_id IN ? AND note.occasion = 'event_reminder' AND note.simulated = TRUE"+
 			") AS fresh WHERE n.notification_id = fresh.notification_id AND n.user_id = ? "+
 			"AND (n.subject, n.content, n.scheduled_at) IS DISTINCT FROM (fresh.subject, fresh.content, fresh.scheduled_at)",
 		userID, ids, userID).Error
@@ -106,17 +105,6 @@ func (r *notificationRepository) GetReminder(bookingID, userID uuid.UUID) (*mode
 }
 func (r *notificationRepository) Create(notification *model.NotificationData) error {
 	return r.db.Create(notification).Error
-}
-func (r *notificationRepository) GetLocation(id uuid.UUID) (*model.LocationModel, error) {
-	var location model.LocationModel
-	err := r.db.First(&location, "location_id = ?", id).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &location, nil
 }
 func (r *notificationRepository) DatabaseNow() (time.Time, error) {
 	var now time.Time

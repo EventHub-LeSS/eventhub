@@ -296,7 +296,10 @@ definitions:
         type: string
       endTime:
         type: string
-      locationId:
+      location:
+        description: Venue and address as free text; surrounding whitespace is removed.
+        example: Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg
+        maxLength: 200
         type: string
       organizationId:
         description: |-
@@ -318,7 +321,7 @@ definitions:
     - capacity
     - categoryId
     - endTime
-    - locationId
+    - location
     - startTime
     - title
     type: object
@@ -430,7 +433,7 @@ definitions:
         type: string
       eventId:
         type: string
-      locationId:
+      location:
         type: string
       organizerId:
         type: string
@@ -585,9 +588,9 @@ definitions:
       eventId:
         type: string
       location:
-        allOf:
-        - $ref: '#/definitions/model.PublishedEventLocation'
-        description: Null when the location of the event was deleted.
+        description: Venue and address as free text; null when the event has no location.
+        example: Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg
+        type: string
       startTime:
         type: string
       status:
@@ -635,6 +638,11 @@ definitions:
         allOf:
         - $ref: '#/definitions/model.PaymentStatus'
         description: Null while no payment process has been started.
+      ratingScore:
+        description: |-
+          Score the caller gave the event of this booking; null while it is not rated yet. The rating
+          counts per user and event, not per booking.
+        type: integer
       refundAmount:
         description: Refunded amount of the payment; null without payment.
         example: "0"
@@ -739,7 +747,9 @@ definitions:
       eventId:
         type: string
       location:
-        $ref: '#/definitions/model.PublishedEventLocation'
+        description: Venue and address as free text.
+        example: Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg
+        type: string
       occupancyPercent:
         type: number
       organizerAlias:
@@ -762,21 +772,6 @@ definitions:
       title:
         type: string
     type: object
-  model.PublishedEventLocation:
-    properties:
-      city:
-        type: string
-      houseNumber:
-        type: string
-      locationId:
-        type: string
-      name:
-        type: string
-      postalCode:
-        type: string
-      street:
-        type: string
-    type: object
   model.PublishedEventResponse:
     properties:
       category:
@@ -786,7 +781,9 @@ definitions:
       eventId:
         type: string
       location:
-        $ref: '#/definitions/model.PublishedEventLocation'
+        description: Venue and address as free text.
+        example: Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg
+        type: string
       organizerAlias:
         description: Alias of the organization that owns the event, as tokens and
           GET /users/me carry it.
@@ -871,7 +868,10 @@ definitions:
         type: string
       endTime:
         type: string
-      locationId:
+      location:
+        description: Venue and address as free text; surrounding whitespace is removed.
+        example: Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg
+        maxLength: 200
         type: string
       price:
         minimum: 0
@@ -886,7 +886,7 @@ definitions:
     - capacity
     - categoryId
     - endTime
-    - locationId
+    - location
     - startTime
     - title
     type: object
@@ -1416,7 +1416,8 @@ paths:
   /events:
     get:
       description: Public list of published events with their category, location and
-        organizer alias. Optional location searches city or venue name; categoryId
+        organizer alias. The location is free text entered by the organizer, e.g.
+        venue and address. Optional location searches the location text; categoryId
         selects an exact category. date selects the start calendar day in Europe/Berlin
         (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an
         empty value to reset it. Unknown categories and searches without matches return
@@ -1424,7 +1425,7 @@ paths:
         200 characters after trimming return 400. Events missing a category, location
         or organizer are omitted. Sorted by start time and event ID.
       parameters:
-      - description: Case-insensitive substring of city or venue name; trimmed, empty
+      - description: Case-insensitive substring of the location text; trimmed, empty
           means no filter, maximum 200 characters. Wildcards are treated literally.
         in: query
         name: location
@@ -1950,7 +1951,7 @@ paths:
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "422":
-          description: Unknown categoryId or locationId
+          description: Unknown categoryId
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "500":
@@ -2155,9 +2156,11 @@ paths:
         abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend,
         danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis
         es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für
-        GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails
-        und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an.
-        Ein leeres Array, wenn es keine gültigen Tickets gibt.'
+        GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer
+        das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung
+        zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und
+        GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein
+        leeres Array, wenn es keine gültigen Tickets gibt.'
       produces:
       - application/json
       responses:
@@ -2303,9 +2306,9 @@ paths:
       description: 'Returns only the authenticated user''s notifications, newest first.
         The response contains items, page, limit and total; empty pages return items:
         []. readAt is null for unread notifications. Simulated reminder content and
-        scheduledAt are refreshed from current event and location data before display;
-        changed reminders become unread. Simulation is immediately visible, even before
-        scheduledAt; no email is sent.'
+        scheduledAt are refreshed from current event data, including its location,
+        before display; changed reminders become unread. Simulation is immediately
+        visible, even before scheduledAt; no email is sent.'
       parameters:
       - default: 1
         description: Page number (1-indexed)

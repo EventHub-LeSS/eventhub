@@ -19,7 +19,7 @@ import (
 
 func seedEvent(t *testing.T, db *gorm.DB, capacity int, status model.EventStatus) (eventID, userID uuid.UUID) {
 	t.Helper()
-	categoryID, locationID, orgID := uuid.New(), uuid.New(), uuid.New()
+	categoryID, orgID := uuid.New(), uuid.New()
 	eventID, userID = uuid.New(), uuid.New()
 
 	statements := []struct {
@@ -27,12 +27,11 @@ func seedEvent(t *testing.T, db *gorm.DB, capacity int, status model.EventStatus
 		args []any
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{categoryID, "cat-" + categoryID.String()}},
-		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{locationID, "loc-" + locationID.String(), "Bonn", "53111", "Weg"}},
 		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{orgID, "kc-org-" + orgID.String(), "Org " + orgID.String()}},
 		{"INSERT INTO users (user_id, keycloak_user_id, first_name, last_name, email) VALUES (?, ?, ?, ?, ?)", []any{userID, "kc-" + userID.String(), "Max", "Muster", userID.String() + "@test.de"}},
-		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
+		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', ?, ?, 0, ?, ?, ?)`,
-			[]any{eventID, "Konzert", capacity, string(status), categoryID, orgID, locationID}},
+			[]any{eventID, "Konzert", capacity, string(status), categoryID, orgID, "Stadthalle, Markt 1, 53111 Bonn"}},
 	}
 	for _, st := range statements {
 		if err := db.Exec(st.sql, st.args...).Error; err != nil {

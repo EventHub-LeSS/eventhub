@@ -44,9 +44,6 @@ func (s *DBSeeder) Seed(ctx context.Context) error {
 	if err := s.seedCategories(ctx); err != nil {
 		return err
 	}
-	if err := s.seedLocations(ctx); err != nil {
-		return err
-	}
 	if err := s.seedEvents(ctx); err != nil {
 		return err
 	}
@@ -142,24 +139,13 @@ func (s *DBSeeder) seedCategories(_ context.Context) error {
 	return nil
 }
 
-func (s *DBSeeder) seedLocations(_ context.Context) error {
-	log.Println("db: seeding locations...")
-	locs := []model.LocationModel{
-		{LocationID: seedUUID("loc-Musikhalle Hamburg"), Name: "Musikhalle Hamburg", City: "Hamburg", PostalCode: "20354", Street: "Lombardsbrücke", HouseNumber: ptrString("1")},
-		{LocationID: seedUUID("loc-Olympiahalle München"), Name: "Olympiahalle München", City: "München", PostalCode: "80809", Street: "Spiridon-Louis-Ring", HouseNumber: ptrString("21")},
-		{LocationID: seedUUID("loc-Treptower Park Berlin"), Name: "Treptower Park Berlin", City: "Berlin", PostalCode: "12435", Street: "Alt-Treptow", HouseNumber: ptrString("6")},
-		{LocationID: seedUUID("loc-Stadthalle Bremen"), Name: "Stadthalle Bremen", City: "Bremen", PostalCode: "28215", Street: "Findorffstraße", HouseNumber: ptrString("105")},
-		{LocationID: seedUUID("loc-Frankfurt Festplatz"), Name: "Frankfurt Festplatz", City: "Frankfurt", PostalCode: "60386", Street: "Ratsweg", HouseNumber: ptrString("1")},
-	}
-	for _, l := range locs {
-		var existing model.LocationModel
-		if err := s.db.Where("name = ?", l.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			if err := s.db.Create(&l).Error; err != nil {
-				return fmt.Errorf("create location %q: %w", l.Name, err)
-			}
-		}
-	}
-	return nil
+// seedLocations maps the venue of an event definition to the location text stored with the event.
+var seedLocations = map[string]string{
+	"Musikhalle Hamburg":    "Musikhalle Hamburg, Lombardsbrücke 1, 20354 Hamburg",
+	"Olympiahalle München":  "Olympiahalle München, Spiridon-Louis-Ring 21, 80809 München",
+	"Treptower Park Berlin": "Treptower Park Berlin, Alt-Treptow 6, 12435 Berlin",
+	"Stadthalle Bremen":     "Stadthalle Bremen, Findorffstraße 105, 28215 Bremen",
+	"Frankfurt Festplatz":   "Frankfurt Festplatz, Ratsweg 1, 60386 Frankfurt",
 }
 
 type eventDef struct {
@@ -231,7 +217,10 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 			if !ok {
 				return fmt.Errorf("org %q not found for event %q", e.orgName, e.title)
 			}
-			locID := seedUUID("loc-" + e.location)
+			location, ok := seedLocations[e.location]
+			if !ok {
+				return fmt.Errorf("location %q not found for event %q", e.location, e.title)
+			}
 			price, err := decimal.NewFromString(e.price)
 			if err != nil {
 				return fmt.Errorf("invalid price %q: %w", e.price, err)
@@ -247,7 +236,7 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 				Price:       price,
 				CategoryID:  &catID,
 				OrganizerID: &orgID,
-				LocationID:  &locID,
+				Location:    &location,
 			}
 			if err := s.db.Create(&ev).Error; err != nil {
 				return fmt.Errorf("create event %q: %w", e.title, err)
