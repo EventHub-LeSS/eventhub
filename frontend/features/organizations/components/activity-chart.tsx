@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
 
-import type { ActivityPoint } from "@/features/organizations/lib/mock-data"
+import type { ActivityPoint } from "@/features/organizations/lib/activity"
 import {
   Card,
   CardContent,

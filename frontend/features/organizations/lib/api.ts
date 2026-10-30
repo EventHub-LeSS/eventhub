@@ -10,7 +10,6 @@ import {
 import type { OrganizationPayload } from "@/features/organizations/lib/organization";
 import type {
   AuditLogPage,
-  Organization,
   OrganizationMember,
   OrganizationRight,
 } from "@/features/organizations/lib/types";
@@ -78,29 +77,12 @@ function errorMessage(body: unknown, status: number): string {
   return `Anfrage fehlgeschlagen (${status}).`;
 }
 
-export function useOrganization(alias: string) {
-  return useQuery<Organization, Error>({
-    queryKey: ["organization", alias],
-    queryFn: () => fetchOrganization(alias),
-  });
-}
-
-export function useOrganizationMembers(alias: string) {
+export function useOrganizationMembers(alias: string, enabled = true) {
   return useQuery<OrganizationMember[], Error>({
     queryKey: ["organization", alias, "members"],
     queryFn: () => fetchOrganizationMembers(alias),
+    enabled,
   });
-}
-
-async function fetchOrganization(alias: string): Promise<Organization> {
-  const response = await fetch(`/api/organizations/${alias}`);
-  const body = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
-  }
-
-  return body as Organization;
 }
 
 async function fetchOrganizationMembers(

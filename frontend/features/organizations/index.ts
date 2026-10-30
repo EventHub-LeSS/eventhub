@@ -1,5 +1,10 @@
 export { CreateOrganizationForm } from "@/features/organizations/components/create-organization-form";
+export { EventsTable } from "@/features/organizations/components/events-table";
 export { OrganizationOverview } from "@/features/organizations/components/organization-overview";
+export {
+  type ActivityPoint,
+  activityByMonth,
+} from "@/features/organizations/lib/activity";
 export {
   type CreateOrganizationResponse,
   useCreateOrganization,
@@ -14,7 +19,6 @@ export type {
 } from "@/features/organizations/lib/organization";
 export {
   useInviteMember,
-  useOrganization,
   useOrganizationAuditLog,
   useOrganizationMembers,
   useRemoveMember,
@@ -28,10 +32,10 @@ export type {
 } from "@/features/organizations/lib/api";
 export {
   KeycloakAdminError,
-  getOrganizationByAlias,
   getOrganizationMembersWithRights,
   inviteOrganizationMember,
   removeOrganizationMemberByUsername,
+  resolveOrganizationId,
 } from "@/features/organizations/lib/keycloak-admin";
 export {
   organizationRights,
@@ -41,7 +45,6 @@ export type {
   AuditLogEntry,
   AuditLogPage,
   AuditPhase,
-  Organization,
   OrganizationMember,
   OrganizationRight,
 } from "@/features/organizations/lib/types";

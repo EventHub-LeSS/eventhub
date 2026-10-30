@@ -1,17 +1,3 @@
-export interface OrganizationDomain {
-  name: string;
-  verified: boolean;
-}
-
-export interface Organization {
-  id: string;
-  name: string;
-  alias: string;
-  description: string;
-  enabled: boolean;
-  domains: OrganizationDomain[];
-}
-
 export type OrganizationRight = "org_admin" | "event_manager" | "finance_viewer";
 
 export interface OrganizationRightOption {

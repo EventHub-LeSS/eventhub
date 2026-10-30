@@ -15,6 +15,7 @@ export interface SessionUser {
   role: UserRole
   /** Platform-wide admin, from the "admin" backend client role. Independent of `role`/organization membership. */
   isAdmin: boolean
+  activeOrganizationRoles: string[]
 }
 
 /**
@@ -54,4 +55,50 @@ export function isAdminFromAccessToken(accessToken: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * The access token's "organization" claim, keyed by alias, carries each organization's
+ * Keycloak ID and the user's groups in it. Not signature-verified: only used to gate UI and
+ * to address Keycloak, which re-checks the token itself.
+ */
+function organizationClaim(
+  accessToken: string,
+  alias: string
+): { id?: unknown; groups?: unknown } | undefined {
+  try {
+    const claim = decodeJwt(accessToken).organization as
+      | Record<string, { id?: unknown; groups?: unknown }>
+      | undefined
+
+    return claim?.[alias]
+  } catch {
+    return undefined
+  }
+}
+
+/** Keycloak's organization ID for an alias the user is a member of. */
+export function organizationIdFromAccessToken(
+  accessToken: string,
+  alias: string
+): string | null {
+  const id = organizationClaim(accessToken, alias)?.id
+
+  return typeof id === "string" && id ? id : null
+}
+
+/** The user's roles in one organization; groups are "/org_admin" or "/roles/org_admin". */
+export function organizationRolesFromAccessToken(
+  accessToken: string,
+  alias: string
+): string[] {
+  const groups = organizationClaim(accessToken, alias)?.groups
+
+  if (!Array.isArray(groups)) {
+    return []
+  }
+
+  return groups
+    .filter((group) => typeof group === "string")
+    .map((group) => group.replace(/^\/(roles\/)?/, ""))
 }

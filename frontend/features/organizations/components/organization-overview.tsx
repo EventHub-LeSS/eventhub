@@ -1,28 +1,17 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
 import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
-import { EventsTable } from "@/features/organizations/components/events-table"
 import { MembersTable } from "@/features/organizations/components/members-table"
 import { OrganizationHeader } from "@/features/organizations/components/organization-header"
-import { OrganizationStats } from "@/features/organizations/components/organization-stats"
-import { SalesChart } from "@/features/organizations/components/sales-chart"
 import {
-  useOrganization,
   useOrganizationAuditLog,
   useOrganizationMembers,
 } from "@/features/organizations/lib/api"
-import {
-  mockActivity,
-  mockEvents,
-  mockSales,
-} from "@/features/organizations/lib/mock-data"
-import type {
-  Organization,
-  OrganizationRight,
-} from "@/features/organizations/lib/types"
+import type { ActivityPoint } from "@/features/organizations/lib/activity"
+import type { OrganizationRight } from "@/features/organizations/lib/types"
 import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
@@ -31,7 +20,6 @@ import {
   CardTitle,
 } from "@/features/shared/components/ui/card"
 import { Input } from "@/features/shared/components/ui/input"
-import { Switch } from "@/features/shared/components/ui/switch"
 import {
   Tabs,
   TabsContent,
@@ -41,25 +29,30 @@ import {
 
 export function OrganizationOverview({
   alias,
-  currentUserEmail,
+  rights,
   isAdmin = false,
+  eventCount,
+  activity,
+  eventsTable,
 }: {
   alias: string
-  currentUserEmail: string
+  eventCount: number | null
+  activity: ActivityPoint[] | null
+  eventsTable: React.ReactNode
+  rights: string[]
   isAdmin?: boolean
 }) {
-  const organizationQuery = useOrganization(alias)
-  const membersQuery = useOrganizationMembers(alias)
+  const hasRight = (right: OrganizationRight) =>
+    isAdmin || rights.includes(right)
+  const canViewMembers = isAdmin
+  const canViewEvents = hasRight("event_manager")
+  const canViewAuditLog = hasRight("org_admin")
+
+  const membersQuery = useOrganizationMembers(alias, canViewMembers)
 
   const [activeTab, setActiveTab] = useState("overview")
   const [isEditing, setIsEditing] = useState(false)
-  const [draft, setDraft] = useState<Organization | null>(null)
-
-  useEffect(() => {
-    if (organizationQuery.data) {
-      setDraft(organizationQuery.data)
-    }
-  }, [organizationQuery.data])
+  const [draft, setDraft] = useState({ name: alias, alias })
 
   function handleTabChange(value: unknown) {
     setActiveTab(value as string)
@@ -67,9 +60,7 @@ export function OrganizationOverview({
   }
 
   function handleEditClick() {
-    if (organizationQuery.data) {
-      setDraft(organizationQuery.data)
-    }
+    setDraft({ name: alias, alias })
     setActiveTab("settings")
     setIsEditing(true)
   }
@@ -78,73 +69,30 @@ export function OrganizationOverview({
     setIsEditing(false)
   }
 
-  if (organizationQuery.isLoading || membersQuery.isLoading) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Organisation wird geladen…
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (organizationQuery.isError || !organizationQuery.data) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-destructive">
-          {organizationQuery.error?.message ??
-            "Die Organisation konnte nicht geladen werden. Möglicherweise fehlt dir die Berechtigung."}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const organization = organizationQuery.data
   const members = membersQuery.data ?? []
 
-  const myRights =
-    members.find((member) => member.email === currentUserEmail)?.rights ?? []
-  const hasRight = (right: OrganizationRight) =>
-    isAdmin || myRights.includes(right)
-  const canViewMembers = hasRight("org_admin")
-  const canViewEvents = hasRight("event_manager")
-  const canViewSales = hasRight("finance_viewer")
-  const canViewAuditLog = hasRight("org_admin")
-
-  if (membersQuery.isError) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-destructive">
-          {membersQuery.error?.message ??
-            "Die Mitgliederliste dieser Organisation konnte nicht geladen werden."}
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
-        <OrganizationHeader
-          organization={organization}
-          alias={alias}
-          isEditing={isEditing}
-          onEditClick={handleEditClick}
-          onSaveClick={handleSaveClick}
-        />
-        <OrganizationStats members={members} events={mockEvents} />
-      </div>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
+      <OrganizationHeader
+        alias={alias}
+        isEditing={isEditing}
+        onEditClick={handleEditClick}
+        onSaveClick={handleSaveClick}
+      />
 
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabsList>
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
           {canViewMembers && (
-            <TabsTrigger value="members">Mitglieder ({members.length})</TabsTrigger>
+            <TabsTrigger value="members">
+              Mitglieder{membersQuery.data ? ` (${members.length})` : ""}
+            </TabsTrigger>
           )}
           {canViewEvents && (
-            <TabsTrigger value="events">Veranstaltungen ({mockEvents.length})</TabsTrigger>
+            <TabsTrigger value="events">
+              Veranstaltungen{eventCount !== null ? ` (${eventCount})` : ""}
+            </TabsTrigger>
           )}
-          {canViewSales && <TabsTrigger value="sales">Verkäufe</TabsTrigger>}
           <TabsTrigger value="settings">Einstellungen</TabsTrigger>
           {canViewAuditLog && (
             <TabsTrigger value="audit-log">Audit-Log</TabsTrigger>
@@ -152,7 +100,16 @@ export function OrganizationOverview({
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-4">
-          <ActivityChart data={mockActivity} />
+          {activity ? (
+            <ActivityChart data={activity} />
+          ) : (
+            <Card>
+              <CardContent className="py-6 text-center text-sm text-destructive">
+                Die Aktivität kann gerade nicht geladen werden. Bitte versuche
+                es später erneut.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {canViewMembers && (
@@ -162,7 +119,18 @@ export function OrganizationOverview({
                 <CardTitle>Mitglieder</CardTitle>
               </CardHeader>
               <CardContent>
-                <MembersTable members={members} alias={alias} />
+                {membersQuery.isLoading ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    Mitglieder werden geladen…
+                  </p>
+                ) : membersQuery.isError ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    Die Mitglieder können gerade nicht angezeigt werden. Bitte
+                    versuche es später erneut.
+                  </p>
+                ) : (
+                  <MembersTable members={members} alias={alias} />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -175,15 +143,9 @@ export function OrganizationOverview({
                 <CardTitle>Veranstaltungen</CardTitle>
               </CardHeader>
               <CardContent>
-                <EventsTable events={mockEvents} />
+                {eventsTable}
               </CardContent>
             </Card>
-          </TabsContent>
-        )}
-
-        {canViewSales && (
-          <TabsContent value="sales" className="flex flex-col gap-4">
-            <SalesChart data={mockSales} />
           </TabsContent>
         )}
 
@@ -201,35 +163,16 @@ export function OrganizationOverview({
             <CardContent className="flex flex-col divide-y divide-border">
               <SettingsRow
                 label="Name"
-                value={draft?.name ?? organization.name}
+                value={draft.name}
                 isEditing={isEditing}
-                onChange={(value) =>
-                  setDraft((prev) => (prev ? { ...prev, name: value } : prev))
-                }
+                onChange={(value) => setDraft((prev) => ({ ...prev, name: value }))}
               />
               <SettingsRow
                 label="Alias"
-                value={draft?.alias ?? organization.alias}
+                value={draft.alias}
                 isEditing={isEditing}
-                onChange={(value) =>
-                  setDraft((prev) => (prev ? { ...prev, alias: value } : prev))
-                }
+                onChange={(value) => setDraft((prev) => ({ ...prev, alias: value }))}
               />
-              <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Aktiviert</p>
-                  <p className="text-sm text-muted-foreground">
-                    Deaktivierte Organisationen können keine Veranstaltungen veröffentlichen.
-                  </p>
-                </div>
-                <Switch
-                  checked={draft?.enabled ?? organization.enabled}
-                  disabled={!isEditing}
-                  onCheckedChange={(checked) =>
-                    setDraft((prev) => (prev ? { ...prev, enabled: checked } : prev))
-                  }
-                />
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
