@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   const payload = (await request.json()) as OrganizationPayload
 
-  const response = await fetch(`${process.env.BACKEND_API_URL}/organizations/`, {
+  const response = await fetch(`${process.env.API_BASE_URL}/organizations/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
