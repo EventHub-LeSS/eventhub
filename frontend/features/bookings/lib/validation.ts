@@ -1,4 +1,7 @@
-import type { SimulatedPaymentOutcome } from "@/features/bookings/lib/types"
+import type {
+  SimulatedPaymentOutcome,
+  TicketView,
+} from "@/features/bookings/lib/types"
 
 /**
  * The backend's `payments.amount` column is NUMERIC(12,2), so nothing above
@@ -202,4 +205,15 @@ export function isRatingScore(value: unknown): value is number {
     value >= 1 &&
     value <= 5
   )
+}
+
+const TICKET_VIEWS: readonly string[] = ["upcoming", "past", "cancelled"]
+
+// Reads the ?view= of the tickets page 
+export function parseTicketView(
+  value: string | string[] | undefined
+): TicketView {
+  return typeof value === "string" && TICKET_VIEWS.includes(value)
+    ? (value as TicketView)
+    : "upcoming"
 }

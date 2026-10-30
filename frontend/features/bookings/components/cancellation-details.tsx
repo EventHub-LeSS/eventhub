@@ -36,7 +36,7 @@ export function CancellationDetails({ booking }: { booking: OwnBooking }) {
     >
       <aside className="flex flex-col gap-10 bg-muted/50 px-6 py-8 md:w-2/5 md:max-w-xl md:shrink-0 md:px-10 md:py-12 lg:px-14">
         <Button
-          render={<Link href="/tickets" />}
+          render={<Link href="/tickets?view=cancelled" />}
           nativeButton={false}
           variant="ghost"
           size="sm"
@@ -122,7 +122,10 @@ export function CancellationDetails({ booking }: { booking: OwnBooking }) {
         </dl>
 
         <div className="mt-auto flex flex-col gap-2 border-t pt-6 sm:flex-row">
-          <Button render={<Link href="/tickets" />} nativeButton={false}>
+          <Button
+            render={<Link href="/tickets?view=cancelled" />}
+            nativeButton={false}
+          >
             Zu meinen Tickets
           </Button>
           {event?.status === "published" && (

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getSession, requireSession } from "@/features/auth";
 import type { OrganizationRight } from "@/features/organizations";
+import { envConfig } from "@/features/shared/lib/env";
 
 export async function PUT(
   request: NextRequest,
@@ -29,7 +30,7 @@ export async function PUT(
   const payload = (await request.json()) as { roles: OrganizationRight[] };
 
   const response = await fetch(
-    `${process.env.API_BASE_URL}/organizations/${alias}/members/${username}/roles`,
+    `${envConfig.apiBaseUrl}/organizations/${alias}/members/${username}/roles`,
     {
       method: "PUT",
       headers: {

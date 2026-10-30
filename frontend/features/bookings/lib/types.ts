@@ -97,3 +97,5 @@ export interface OwnBooking {
   expiresAt?: string
   event: OwnBookingEvent | null
 }
+
+export type TicketView = "upcoming" | "past" | "cancelled"

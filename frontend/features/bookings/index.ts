@@ -3,6 +3,7 @@ export { OwnTickets } from "@/features/bookings/components/own-tickets"
 export { PaymentResult } from "@/features/bookings/components/payment-result"
 export { PaymentView } from "@/features/bookings/components/payment-view"
 export { formatAmount, splitTicketsByEnd } from "@/features/bookings/lib/format"
+export { parseTicketView } from "@/features/bookings/lib/validation"
 export { CancellationDetails } from "@/features/bookings/components/cancellation-details"
 export {
   BookingApiError,
@@ -32,4 +33,5 @@ export type {
   PaymentFailureReason,
   PaymentStatus,
   SimulatedPaymentOutcome,
+  TicketView,
 } from "@/features/bookings/lib/types"

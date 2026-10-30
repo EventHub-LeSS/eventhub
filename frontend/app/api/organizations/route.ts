@@ -9,6 +9,7 @@ import {
   setActiveOrganizationCookie,
 } from "@/features/auth"
 import type { OrganizationPayload } from "@/features/organizations"
+import { envConfig } from "@/features/shared/lib/env"
 
 export async function POST(request: NextRequest) {
   await requireSession()
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
 
   const payload = (await request.json()) as OrganizationPayload
 
-  const response = await fetch(`${process.env.API_BASE_URL}/organizations/`, {
+  const response = await fetch(`${envConfig.apiBaseUrl}/organizations/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

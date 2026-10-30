@@ -3,12 +3,18 @@ import {
   getOwnBookings,
   getOwnTickets,
   OwnTickets,
+  parseTicketView,
   splitTicketsByEnd,
   type OwnBooking,
 } from "@/features/bookings"
 
-export default async function TicketsPage() {
+interface PageProps {
+  searchParams: Promise<{ view?: string | string[] }>
+}
+
+export default async function TicketsPage({ searchParams }: PageProps) {
   await requireSession()
+  const { view } = await searchParams
   const session = await getSession()
 
   let tickets: OwnBooking[] | null = null
@@ -35,26 +41,23 @@ export default async function TicketsPage() {
     }
   }
 
+  if (tickets !== null) {
+    return (
+      <OwnTickets
+        {...splitTicketsByEnd(tickets, Date.now())}
+        cancelled={cancelled}
+        initialView={parseTicketView(view)}
+      />
+    )
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Meine Tickets</h1>
-        <p className="text-sm text-muted-foreground">
-          Deine gültigen Tickets. Bevorstehende kannst du stornieren, vergangene
-          Veranstaltungen bewerten.
-        </p>
-      </div>
-      {tickets === null ? (
-        <p className="text-sm text-muted-foreground" role="alert">
-          Deine Tickets können aktuell nicht geladen werden. Bitte versuche es
-          später erneut.
-        </p>
-      ) : (
-        <OwnTickets
-          {...splitTicketsByEnd(tickets, Date.now())}
-          cancelled={cancelled}
-        />
-      )}
+    <div className="flex w-full flex-1 flex-col gap-6 p-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Meine Tickets</h1>
+      <p className="text-sm text-muted-foreground" role="alert">
+        Deine Tickets können aktuell nicht geladen werden. Bitte versuche es
+        später erneut.
+      </p>
     </div>
   )
 }
