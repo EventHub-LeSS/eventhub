@@ -90,7 +90,8 @@ func TestPublishedEventDetailsDatabase(t *testing.T) {
 		!details.Price.Equal(stored.Price) || details.Status != model.EventStatusPublished ||
 		details.Category.CategoryID != event.categoryID || details.Category.Category != "cat-"+event.categoryID.String() ||
 		details.Location.LocationID != event.locationID || details.Location.City != "Bonn" ||
-		details.Location.Name != "loc-"+event.locationID.String() || details.Alias != "alias-details" || details.OrganizerID != event.ownerOrgID ||
+		details.Location.AddressAddition == nil || *details.Location.AddressAddition != "loc-"+event.locationID.String() ||
+		details.Location.Accessible || details.Alias != "alias-details" || details.OrganizerID != event.ownerOrgID ||
 		details.Capacity != 100 || details.AvailableSeats != 100 || !details.Bookable {
 		t.Fatalf("incorrect details: %+v", details)
 	}

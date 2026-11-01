@@ -62,8 +62,9 @@ const cartQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS datab
 	    e.status AS event_status, e.price AS event_price, e.category_id AS event_category_id,
 	    e.organizer_id AS event_organizer_id, e.location_id AS event_location_id,
 	    e.created_at AS event_created_at, e.updated_at AS event_updated_at,
-	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
-	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
+	    l.location_id AS location_id, l.street AS location_street, l.house_number AS location_house_number,
+	    l.postal_code AS location_postal_code, l.city AS location_city,
+	    l.address_addition AS location_address_addition, l.accessible AS location_accessible,
 	    COALESCE(o.occupied, 0) AS occupied, clock.database_now
 	FROM bookings b
 	CROSS JOIN clock
@@ -77,27 +78,28 @@ const cartQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS datab
 // cartRow is one row of cartQuery; the event columns are NULL when the event no longer exists.
 type cartRow struct {
 	model.BookingModel
-	ItemEventID         *uuid.UUID          `gorm:"column:item_event_id"`
-	EventTitle          *string             `gorm:"column:event_title"`
-	EventDescription    *string             `gorm:"column:event_description"`
-	EventStartTime      *time.Time          `gorm:"column:event_start_time"`
-	EventEndTime        *time.Time          `gorm:"column:event_end_time"`
-	EventCapacity       *int                `gorm:"column:event_capacity"`
-	EventStatus         *model.EventStatus  `gorm:"column:event_status"`
-	EventPrice          decimal.NullDecimal `gorm:"column:event_price"`
-	EventCategoryID     *uuid.UUID          `gorm:"column:event_category_id"`
-	EventOrganizerID    *uuid.UUID          `gorm:"column:event_organizer_id"`
-	EventLocationID     *uuid.UUID          `gorm:"column:event_location_id"`
-	EventCreatedAt      *time.Time          `gorm:"column:event_created_at"`
-	EventUpdatedAt      *time.Time          `gorm:"column:event_updated_at"`
-	LocationID          *uuid.UUID          `gorm:"column:location_id"`
-	LocationName        *string             `gorm:"column:location_name"`
-	LocationCity        *string             `gorm:"column:location_city"`
-	LocationPostalCode  *string             `gorm:"column:location_postal_code"`
-	LocationStreet      *string             `gorm:"column:location_street"`
-	LocationHouseNumber *string             `gorm:"column:location_house_number"`
-	Occupied            int64               `gorm:"column:occupied"`
-	DatabaseNow         time.Time           `gorm:"column:database_now"`
+	ItemEventID             *uuid.UUID          `gorm:"column:item_event_id"`
+	EventTitle              *string             `gorm:"column:event_title"`
+	EventDescription        *string             `gorm:"column:event_description"`
+	EventStartTime          *time.Time          `gorm:"column:event_start_time"`
+	EventEndTime            *time.Time          `gorm:"column:event_end_time"`
+	EventCapacity           *int                `gorm:"column:event_capacity"`
+	EventStatus             *model.EventStatus  `gorm:"column:event_status"`
+	EventPrice              decimal.NullDecimal `gorm:"column:event_price"`
+	EventCategoryID         *uuid.UUID          `gorm:"column:event_category_id"`
+	EventOrganizerID        *uuid.UUID          `gorm:"column:event_organizer_id"`
+	EventLocationID         *uuid.UUID          `gorm:"column:event_location_id"`
+	EventCreatedAt          *time.Time          `gorm:"column:event_created_at"`
+	EventUpdatedAt          *time.Time          `gorm:"column:event_updated_at"`
+	LocationID              *uuid.UUID          `gorm:"column:location_id"`
+	LocationStreet          *string             `gorm:"column:location_street"`
+	LocationHouseNumber     *string             `gorm:"column:location_house_number"`
+	LocationPostalCode      *string             `gorm:"column:location_postal_code"`
+	LocationCity            *string             `gorm:"column:location_city"`
+	LocationAddressAddition *string             `gorm:"column:location_address_addition"`
+	LocationAccessible      *bool               `gorm:"column:location_accessible"`
+	Occupied                int64               `gorm:"column:occupied"`
+	DatabaseNow             time.Time           `gorm:"column:database_now"`
 }
 
 func (r *cartRepository) ListCart(userID uuid.UUID) ([]*CartItem, error) {
@@ -180,12 +182,13 @@ func (row *cartRow) cartItem() *CartItem {
 	}
 	if row.LocationID != nil {
 		item.Location = &model.LocationModel{
-			LocationID:  *row.LocationID,
-			Name:        derefString(row.LocationName),
-			City:        derefString(row.LocationCity),
-			PostalCode:  derefString(row.LocationPostalCode),
-			Street:      derefString(row.LocationStreet),
-			HouseNumber: row.LocationHouseNumber,
+			LocationID:      *row.LocationID,
+			Street:          derefString(row.LocationStreet),
+			HouseNumber:     row.LocationHouseNumber,
+			PostalCode:      derefString(row.LocationPostalCode),
+			City:            derefString(row.LocationCity),
+			AddressAddition: row.LocationAddressAddition,
+			Accessible:      row.LocationAccessible != nil && *row.LocationAccessible,
 		}
 	}
 	return item

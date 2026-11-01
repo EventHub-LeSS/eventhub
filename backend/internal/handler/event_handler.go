@@ -71,7 +71,7 @@ func CreateEventHandler(c *gin.Context) {
 
 // EVENTHUB-77: Veranstaltung als Entwurf speichern
 // @Summary      Save event as draft
-// @Description  Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.
+// @Description  Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization. location holds the address fields; the event is linked to the stored location with the same address (compared case-insensitively), which is created if there is none. GET /locations lists existing locations to fill the fields.
 // @Tags         events
 // @Security     BearerAuth
 // @Accept       json
@@ -81,7 +81,7 @@ func CreateEventHandler(c *gin.Context) {
 // @Failure      400 {object} model.ErrorResponse
 // @Failure      401 {object} model.APIError
 // @Failure      403 {object} model.ErrorResponse
-// @Failure      422 {object} model.ErrorResponse "Unknown categoryId or locationId"
+// @Failure      422 {object} model.ErrorResponse "Unknown categoryId"
 // @Failure      500 {object} model.ErrorResponse
 // @Router       /events/draft [post]
 func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
@@ -107,7 +107,7 @@ func (h *EventHandler) SaveEventAsDraftHandler(c *gin.Context) {
 
 // EVENTHUB-78: Veranstaltung bearbeiten
 // @Summary      Update event
-// @Description  Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409).
+// @Description  Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409). A changed address links the event to the stored location with that address, created if there is none; locations themselves are never changed, so other events at the previous address are not affected.
 // @Tags         events
 // @Security     BearerAuth
 // @Accept       json
@@ -442,11 +442,11 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 }
 
 // ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207, EVENTHUB-208 and EVENTHUB-210.
-// @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
+// @Param location query string false "Case-insensitive substring of the city or the address addition of the location; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
 // @Param date query string false "Date in YYYY-MM-DD format, interpreted in Europe/Berlin. Events taking place during this calendar day are returned, including multi-day events that span it. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category, location and organizer alias. Optional location searches the city and the address addition of the location; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse

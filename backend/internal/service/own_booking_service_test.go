@@ -52,7 +52,7 @@ func ownBookingWith(booking model.BookingStatus, expiresAt *time.Time, payment *
 	}
 	if event != nil {
 		own.Event = &model.EventModel{EventID: eventID, Title: "Konzert", StartTime: now.Add(24 * time.Hour), EndTime: now.Add(26 * time.Hour), Status: *event}
-		own.Location = &model.LocationModel{LocationID: uuid.New(), Name: "Halle", City: "Bonn", PostalCode: "53111", Street: "Weg"}
+		own.Location = &model.LocationModel{LocationID: uuid.New(), Street: "Weg", PostalCode: "53111", City: "Bonn", AddressAddition: ptr("Halle"), Accessible: true}
 	} else {
 		own.Booking.EventID = nil
 	}

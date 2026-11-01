@@ -22,24 +22,33 @@ type capacityFixture struct {
 	events     *EventService
 	orgID      string
 	categoryID uuid.UUID
-	locationID uuid.UUID
+	location   model.LocationInput
 }
 
 func newCapacityFixture(t *testing.T, capacity int) capacityFixture {
 	t.Helper()
 	f := capacityFixture{paymentFixture: newPaymentFixture(t, capacity, "20")}
 	var row struct {
-		KeycloakOrgID string
-		CategoryID    uuid.UUID
-		LocationID    uuid.UUID
+		KeycloakOrgID   string
+		CategoryID      uuid.UUID
+		Street          string
+		HouseNumber     *string
+		PostalCode      string
+		City            string
+		AddressAddition *string
+		Accessible      bool
 	}
-	err := f.db.Raw(`SELECT o.keycloak_org_id, e.category_id, e.location_id
+	err := f.db.Raw(`SELECT o.keycloak_org_id, e.category_id, l.street, l.house_number, l.postal_code, l.city,
+	                        l.address_addition, l.accessible
 	                 FROM events e JOIN organizations o ON o.organization_id = e.organizer_id
+	                 JOIN locations l ON l.location_id = e.location_id
 	                 WHERE e.event_id = ?`, f.eventID).Scan(&row).Error
 	if err != nil {
 		t.Fatalf("load event: %v", err)
 	}
-	f.orgID, f.categoryID, f.locationID = row.KeycloakOrgID, row.CategoryID, row.LocationID
+	f.orgID, f.categoryID = row.KeycloakOrgID, row.CategoryID
+	f.location = model.LocationInput{Street: row.Street, HouseNumber: row.HouseNumber, PostalCode: row.PostalCode,
+		City: row.City, AddressAddition: row.AddressAddition, Accessible: row.Accessible}
 	f.events = NewEventService(repository.NewEventRepository(f.db), repository.NewOrganizationRepository(f.db), repository.NewTransactor(f.db))
 	return f
 }
@@ -53,7 +62,7 @@ func (f capacityFixture) setCapacity(capacity int) error {
 		Capacity:   capacity,
 		Price:      decimal.NewFromInt(20),
 		CategoryID: f.categoryID,
-		LocationID: f.locationID,
+		Location:   f.location,
 	})
 	return err
 }

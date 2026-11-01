@@ -28,16 +28,33 @@ type PublishedEventCategory struct {
 	Category   string    `json:"category" gorm:"column:name"`
 }
 
+// PublishedEventLocation is the address of an event, as event listings, event details, own
+// bookings and GET /locations show it.
 type PublishedEventLocation struct {
 	LocationID  uuid.UUID `json:"locationId" gorm:"column:id"`
-	Name        string    `json:"name"`
-	City        string    `json:"city"`
-	PostalCode  string    `json:"postalCode"`
 	Street      string    `json:"street"`
 	HouseNumber *string   `json:"houseNumber"`
+	PostalCode  string    `json:"postalCode"`
+	City        string    `json:"city"`
+	// Venue, hall or floor; null when there is none.
+	AddressAddition *string `json:"addressAddition"`
+	Accessible      bool    `json:"accessible"`
 }
 
-// PublishedEventFilter limits the public listing by start date, category and city or venue name.
+// LocationResponse returns the location as events and GET /locations show it.
+func LocationResponse(l *LocationModel) PublishedEventLocation {
+	return PublishedEventLocation{
+		LocationID:      l.LocationID,
+		Street:          l.Street,
+		HouseNumber:     l.HouseNumber,
+		PostalCode:      l.PostalCode,
+		City:            l.City,
+		AddressAddition: l.AddressAddition,
+		Accessible:      l.Accessible,
+	}
+}
+
+// PublishedEventFilter limits the public listing by start date, category and city or address addition.
 type PublishedEventFilter struct {
 	Location   string
 	CategoryID *uuid.UUID

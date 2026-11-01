@@ -3,6 +3,7 @@ package handler
 import (
 	"math"
 	"reflect"
+	"strings"
 
 	"backend/internal/model"
 
@@ -11,8 +12,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Lets gin's validator apply numeric rules such as gte=0 to decimal.Decimal fields
-// and validates organization role names in request models.
+// Lets gin's validator apply numeric rules such as gte=0 to decimal.Decimal fields,
+// validates organization role names and rejects whitespace-only text in request models.
 func init() {
 	v, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok {
@@ -33,5 +34,10 @@ func init() {
 		return model.IsValidOrganizationRole(fl.Field().String())
 	}); err != nil {
 		panic("register org_role validation: " + err.Error())
+	}
+	if err := v.RegisterValidation("notblank", func(fl validator.FieldLevel) bool {
+		return strings.TrimSpace(fl.Field().String()) != ""
+	}); err != nil {
+		panic("register notblank validation: " + err.Error())
 	}
 }

@@ -169,8 +169,8 @@ func TestListOwnTickets_PaidViaAPI_AppearsWithEventLocationAndPayment(t *testing
 		t.Fatalf("unexpected event: %+v", ev)
 	}
 	loc := ev.Location
-	if loc == nil || loc.LocationID != event.locationID || loc.Name != "loc-"+event.locationID.String() ||
-		loc.City != "Bonn" || loc.PostalCode != "53111" || loc.Street != "Weg" {
+	if loc == nil || loc.LocationID != event.locationID || loc.AddressAddition == nil || *loc.AddressAddition != "loc-"+event.locationID.String() ||
+		loc.City != "Bonn" || loc.PostalCode != "53111" || loc.Street != "Weg" || loc.HouseNumber != nil || loc.Accessible {
 		t.Errorf("unexpected location: %+v", loc)
 	}
 

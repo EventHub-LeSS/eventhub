@@ -138,17 +138,18 @@ type paymentViewRow struct {
 	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
 	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
 	model.BookingModel
-	EventStatus         *model.EventStatus `gorm:"column:event_status"`
-	EventTitle          *string            `gorm:"column:event_title"`
-	EventStartTime      *time.Time         `gorm:"column:event_start_time"`
-	EventEndTime        *time.Time         `gorm:"column:event_end_time"`
-	LocationID          *uuid.UUID         `gorm:"column:location_id"`
-	LocationName        *string            `gorm:"column:location_name"`
-	LocationCity        *string            `gorm:"column:location_city"`
-	LocationPostalCode  *string            `gorm:"column:location_postal_code"`
-	LocationStreet      *string            `gorm:"column:location_street"`
-	LocationHouseNumber *string            `gorm:"column:location_house_number"`
-	DatabaseNow         time.Time          `gorm:"column:database_now"`
+	EventStatus             *model.EventStatus `gorm:"column:event_status"`
+	EventTitle              *string            `gorm:"column:event_title"`
+	EventStartTime          *time.Time         `gorm:"column:event_start_time"`
+	EventEndTime            *time.Time         `gorm:"column:event_end_time"`
+	LocationID              *uuid.UUID         `gorm:"column:location_id"`
+	LocationStreet          *string            `gorm:"column:location_street"`
+	LocationHouseNumber     *string            `gorm:"column:location_house_number"`
+	LocationPostalCode      *string            `gorm:"column:location_postal_code"`
+	LocationCity            *string            `gorm:"column:location_city"`
+	LocationAddressAddition *string            `gorm:"column:location_address_addition"`
+	LocationAccessible      *bool              `gorm:"column:location_accessible"`
+	DatabaseNow             time.Time          `gorm:"column:database_now"`
 }
 
 // paymentViewQuery selects a payment with its bookings, events and locations. The clock CTE
@@ -158,8 +159,9 @@ const paymentViewQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() A
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
 	    b.*,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
-	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
-	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
+	    l.location_id AS location_id, l.street AS location_street, l.house_number AS location_house_number,
+	    l.postal_code AS location_postal_code, l.city AS location_city,
+	    l.address_addition AS location_address_addition, l.accessible AS location_accessible,
 	    clock.database_now
 	FROM payments p
 	CROSS JOIN clock
@@ -211,12 +213,13 @@ func (row *paymentViewRow) paymentItem() *PaymentItem {
 	}
 	if row.LocationID != nil {
 		item.Location = &model.LocationModel{
-			LocationID:  *row.LocationID,
-			Name:        derefString(row.LocationName),
-			City:        derefString(row.LocationCity),
-			PostalCode:  derefString(row.LocationPostalCode),
-			Street:      derefString(row.LocationStreet),
-			HouseNumber: row.LocationHouseNumber,
+			LocationID:      *row.LocationID,
+			Street:          derefString(row.LocationStreet),
+			HouseNumber:     row.LocationHouseNumber,
+			PostalCode:      derefString(row.LocationPostalCode),
+			City:            derefString(row.LocationCity),
+			AddressAddition: row.LocationAddressAddition,
+			Accessible:      row.LocationAccessible != nil && *row.LocationAccessible,
 		}
 	}
 	return item
