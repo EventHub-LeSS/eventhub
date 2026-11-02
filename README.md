@@ -443,6 +443,33 @@ Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen K
 
 **Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.
 
+### Inhalte moderieren (Frontend)
+
+Globale Administratoren erreichen **Moderation** über die Navigation oder
+`/admin/moderation`. Die Ansicht zeigt Bewertungen mit Kommentartext, Sternen,
+Sichtbarkeit, Zeitpunkt sowie Veranstaltungs- und Organisationsbezug. Sie gilt
+plattformweit, unabhängig von der aktuell gewählten Organisation. Normale Nutzer
+und reine Organisations-Admins haben keinen Zugriff auf die Seite oder ihre API-Proxys.
+
+Die Ansicht verwendet `GET /api/v1/moderation/ratings` mit Sichtbarkeitsfilter,
+optionalem `eventId` und Seitennavigation. **Ausblenden** und **Wieder einblenden**
+verwenden `PUT /api/v1/moderation/ratings/{ratingId}/visibility`. Jede Änderung
+erfordert eine Begründung mit 1–1.000 Zeichen nach Entfernen äußerer Leerzeichen.
+Erst nach API-Bestätigung wird der Status aktualisiert und eine Bestätigung angezeigt.
+Der bestehende Organisations-Audit-Log zeigt die Aktion und ihre Begründung.
+Ausgeblendete Bewertungen zählen nicht mehr für öffentliche Zusammenfassungen und
+Empfehlungen; Wieder-Einblenden stellt die vorherige Sichtbarkeit wieder her.
+
+**Backend-Grenzen der Story:** Administrative Kommentar-Bearbeitung/-Löschung,
+plattformweite Moderation von Veranstaltungen/Beschreibungen und das Sperren von
+Organisationen/Veranstaltern sind noch nicht unterstützt. Bestehende Event-Aktionen
+bleiben an Organisationsrechte und Event-Status gebunden; sie sind kein Ersatz für
+plattformweite Moderationsrechte. Das Backend erlaubt zusätzlich globale Moderatoren,
+während diese Frontend-Story den Zugriff auf globale Administratoren beschränkt.
+
+Validierungs- und API-Antworttests: im Frontend-Verzeichnis
+`bun test features/moderation/lib/validation.test.ts`.
+
 ### Benachrichtigungen (EVENTHUB-240)
 
 Nach Migrationen 000009 und 000010 liefert GET /api/v1/notifications die eigenen

@@ -4,6 +4,7 @@ import {
   CompassIcon,
   LayoutDashboardIcon,
   MenuIcon,
+  ShieldCheckIcon,
   TicketIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -69,14 +70,23 @@ function activeHref(pathname: string, links: NavLink[]) {
 export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
-  const links = navigationByRole[role]
+  const links = user?.isAdmin
+    ? [
+        ...navigationByRole[role],
+        {
+          label: "Moderation",
+          href: "/admin/moderation",
+          icon: ShieldCheckIcon,
+        },
+      ]
+    : navigationByRole[role]
   const active = activeHref(pathname, links)
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="mx-auto flex h-14 max-w-screen-xl items-center gap-4 px-4">
         <Brand user={user} />
-        <nav className="hidden flex-1 items-center justify-center gap-2 md:flex lg:gap-4">
+        <nav className="hidden flex-1 items-center justify-center gap-4 xl:flex">
           {links.map((link) => {
             const Icon = link.icon
 
@@ -119,7 +129,7 @@ export function Navbar({ user }: NavbarProps) {
           <Sheet>
             <SheetTrigger
               render={
-                <Button variant="ghost" size="icon-lg" className="md:hidden" />
+                <Button variant="ghost" size="icon-lg" className="xl:hidden" />
               }
               aria-label="Menü öffnen"
             >
