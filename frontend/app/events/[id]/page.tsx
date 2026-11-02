@@ -45,8 +45,9 @@ function DetailRow({
  * Public detail page of a published event (EVENTHUB-211/212) and the entry
  * point of the booking flow (EVENTHUB-235): the amount to pay is calculated
  * from the ticket count and the price here, before anything is reserved.
- * The organizer is shown with its average rating (EVENTHUB-239), the footer
- * shows the event's public rating summary (EVENTHUB-238).
+ * The organizer is shown with its average rating (EVENTHUB-239), the event's
+ * public rating summary (EVENTHUB-238) sits next to the category above the
+ * title
  */
 export default async function EventDetailPage({ params }: PageProps) {
   const { id } = await params;
@@ -95,8 +96,8 @@ export default async function EventDetailPage({ params }: PageProps) {
     `${location.postalCode} ${location.city}`,
   ].join(", ");
 
-  // The rating summary is non-critical: without it only the reminder note
-  // is shown, the rest of the page works regardless.
+  // The rating summary is non-critical: without it only the category is
+  // shown above the title, the rest of the page works regardless.
   const ratingSummary = rating.status === "ok" ? rating.summary : null;
   const averageRating = ratingSummary?.averageRating ?? null;
   const ratingCount = ratingSummary?.ratingCount ?? 0;
@@ -142,9 +143,33 @@ export default async function EventDetailPage({ params }: PageProps) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-bold tracking-wider text-purple-700 uppercase">
-              {category.category}
-            </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs font-bold tracking-wider text-purple-700 uppercase">
+                {category.category}
+              </span>
+              {ratingSummary && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center gap-0.5"
+                    aria-hidden="true"
+                  >
+                    {[0, 1, 2, 3, 4].map((star) => (
+                      <StarIcon
+                        key={star}
+                        className={
+                          star < filledStars
+                            ? "size-4 fill-amber-500 text-amber-500"
+                            : "size-4 text-muted-foreground/40"
+                        }
+                      />
+                    ))}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {ratingLabel}
+                  </span>
+                </div>
+              )}
+            </div>
             <h1 className="text-3xl font-extrabold tracking-tight break-words text-foreground">
               {event.title}
             </h1>
@@ -184,36 +209,9 @@ export default async function EventDetailPage({ params }: PageProps) {
 
           <hr className="border-border" />
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {ratingSummary && (
-              <>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="flex items-center gap-0.5"
-                    aria-hidden="true"
-                  >
-                    {[0, 1, 2, 3, 4].map((star) => (
-                      <StarIcon
-                        key={star}
-                        className={
-                          star < filledStars
-                            ? "size-4 fill-amber-500 text-amber-500"
-                            : "size-4 text-muted-foreground/40"
-                        }
-                      />
-                    ))}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {ratingLabel}
-                  </span>
-                </div>
-                <div className="hidden h-9 w-px bg-border sm:block" />
-              </>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Du erhältst eine Erinnerung vor Veranstaltungsbeginn
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Du erhältst eine Erinnerung vor Veranstaltungsbeginn
+          </p>
         </div>
 
         <div className="flex flex-col gap-2">
