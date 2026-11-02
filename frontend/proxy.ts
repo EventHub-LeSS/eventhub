@@ -29,7 +29,13 @@ function externalOrigin(request: NextRequest) {
   return `${proto}://${host}`
 }
 
-function loginRedirect(request: NextRequest) {
+function authenticationRequired(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/api/moderation/")) {
+    return NextResponse.json(
+      { detail: "Anmeldung erforderlich." },
+      { status: 401 }
+    )
+  }
   const loginUrl = new URL("/api/auth/login", externalOrigin(request))
   loginUrl.searchParams.set(
     "returnTo",
@@ -91,7 +97,7 @@ async function withRefreshedSession(
     return response
   } catch {
     // The refresh token itself expired (idle/SSO session timeout) or was revoked.
-    const response = loginRedirect(request)
+    const response = authenticationRequired(request)
     for (const name of staleSessionCookieNames(request.cookies.getAll())) {
       response.cookies.delete(name)
     }
@@ -108,13 +114,13 @@ export async function proxy(request: NextRequest) {
   const cookie = joinSessionCookie(request.cookies.getAll())
 
   if (!cookie) {
-    return loginRedirect(request)
+    return authenticationRequired(request)
   }
 
   const session = await unsealSession(cookie)
 
   if (!session || session.expiresAt < Date.now()) {
-    return loginRedirect(request)
+    return authenticationRequired(request)
   }
 
   return withRefreshedSession(request, session)
@@ -122,6 +128,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/admin/:path*",
+    "/api/moderation/:path*",
     "/tickets/:path*",
     "/favorites/:path*",
     "/organizer/:path*",

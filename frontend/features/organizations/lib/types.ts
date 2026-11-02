@@ -1,9 +1,9 @@
-export type OrganizationRight = "org_admin" | "event_manager" | "finance_viewer";
+export type OrganizationRight = "org_admin" | "event_manager" | "finance_viewer"
 
 export interface OrganizationRightOption {
-  value: OrganizationRight;
-  label: string;
-  description: string;
+  value: OrganizationRight
+  label: string
+  description: string
 }
 
 export const organizationRights: OrganizationRightOption[] = [
@@ -22,15 +22,15 @@ export const organizationRights: OrganizationRightOption[] = [
     label: "Finanzeinsicht",
     description: "Ticketverkäufe und Finanzberichte einsehen.",
   },
-];
+]
 
 export interface OrganizationMember {
-  id: string;
-  username: string;
-  name: string;
-  email: string;
-  joinedAt: string | null;
-  rights: OrganizationRight[];
+  id: string
+  username: string
+  name: string
+  email: string
+  joinedAt: string | null
+  rights: OrganizationRight[]
 }
 
 export type AuditAction =
@@ -39,25 +39,26 @@ export type AuditAction =
   | "event.published"
   | "event.cancelled"
   | "event.deleted"
-  | "organization.member_roles_changed";
+  | "rating.visibility_changed"
+  | "organization.member_roles_changed"
 
-export type AuditPhase = "completed" | "started" | "succeeded" | "incomplete";
+export type AuditPhase = "completed" | "started" | "succeeded" | "incomplete"
 
 export interface AuditLogEntry {
-  id: string;
-  operationId: string;
-  occurredAt: string;
-  actorSubject: string;
-  actorUsername: string;
-  organizationId: string;
-  action: AuditAction;
-  resourceType: "event" | "organization_member";
-  resourceId: string;
-  phase: AuditPhase;
-  changes: Record<string, unknown>;
+  id: string
+  operationId: string
+  occurredAt: string
+  actorSubject: string
+  actorUsername: string
+  organizationId: string
+  action: AuditAction
+  resourceType: "event" | "organization_member" | "rating"
+  resourceId: string
+  phase: AuditPhase
+  changes: Record<string, unknown>
 }
 
 export interface AuditLogPage {
-  items: AuditLogEntry[];
-  nextCursor: string | null;
+  items: AuditLogEntry[]
+  nextCursor: string | null
 }

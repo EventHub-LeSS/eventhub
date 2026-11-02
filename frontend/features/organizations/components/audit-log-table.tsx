@@ -20,11 +20,13 @@ const actionLabel: Record<AuditAction, string> = {
   "event.published": "Veranstaltung veröffentlicht",
   "event.cancelled": "Veranstaltung abgesagt",
   "event.deleted": "Veranstaltung gelöscht",
+  "rating.visibility_changed": "Sichtbarkeit einer Bewertung geändert",
   "organization.member_roles_changed": "Rechte geändert",
 }
 
 const categoryLabel: Record<AuditLogEntry["resourceType"], string> = {
   event: "Veranstaltung",
+  rating: "Bewertung",
   organization_member: "Mitglied",
 }
 
@@ -33,6 +35,7 @@ const categoryVariant: Record<
   "default" | "secondary"
 > = {
   event: "secondary",
+  rating: "secondary",
   organization_member: "default",
 }
 
@@ -88,10 +91,24 @@ function rights(values: string[]) {
 function describeChange(entry: AuditLogEntry): string {
   const { changes } = entry
 
+  if (entry.action === "rating.visibility_changed") {
+    const visibility = asRecord(asRecord(changes.fields)?.isVisible)
+    const status =
+      visibility?.to === true
+        ? "Wieder eingeblendet"
+        : visibility?.to === false
+          ? "Ausgeblendet"
+          : "Sichtbarkeit geändert"
+    return typeof changes.reason === "string"
+      ? `${status}: ${changes.reason}`
+      : status
+  }
+
   if (entry.action === "organization.member_roles_changed") {
     const target =
       typeof changes.targetUsername === "string" ? changes.targetUsername : ""
-    const concluded = entry.phase === "succeeded" || entry.phase === "incomplete"
+    const concluded =
+      entry.phase === "succeeded" || entry.phase === "incomplete"
     const granted = asStrings(concluded ? changes.granted : changes.toGrant)
     const revoked = asStrings(concluded ? changes.revoked : changes.toRevoke)
     const parts = [
@@ -178,7 +195,9 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant={categoryVariant[entry.resourceType] ?? "outline"}>
+                <Badge
+                  variant={categoryVariant[entry.resourceType] ?? "outline"}
+                >
                   {categoryLabel[entry.resourceType] ?? entry.resourceType}
                 </Badge>
               </TableCell>
