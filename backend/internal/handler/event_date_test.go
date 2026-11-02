@@ -100,16 +100,16 @@ func TestPublishedEventsDateDatabase(t *testing.T) {
 				name, date, city, cat string
 				want                  []uuid.UUID
 			}{
-			// Events overlapping the day are matched (EVENTHUB-269): ids[0] starts one
-			// microsecond before midnight and runs one hour into the day, ids[2] starts
-			// one microsecond before the end of the day.
-			{"selected day", calendarDay, "", "", ids[:3]},
-			{"all filters", calendarDay, "Bonn", category.String(), ids[:3]},
-			{"other city", calendarDay, "Berlin", "", nil},
-			{"other category", calendarDay, "", uuid.NewString(), nil},
-			{"no results", "2020-01-01", "", "", nil},
-			// ids[2] starts one microsecond before the next day and runs into it.
-			{"change day", next.Format(time.DateOnly), "", "", ids[2:]},
+				// Events overlapping the day are matched (EVENTHUB-269): ids[0] starts one
+				// microsecond before midnight and runs one hour into the day, ids[2] starts
+				// one microsecond before the end of the day.
+				{"selected day", calendarDay, "", "", ids[:3]},
+				{"all filters", calendarDay, "Bonn", category.String(), ids[:3]},
+				{"other city", calendarDay, "Berlin", "", nil},
+				{"other category", calendarDay, "", uuid.NewString(), nil},
+				{"no results", "2020-01-01", "", "", nil},
+				// ids[2] starts one microsecond before the next day and runs into it.
+				{"change day", next.Format(time.DateOnly), "", "", ids[2:]},
 				{"reset", "", "", "", ids},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
