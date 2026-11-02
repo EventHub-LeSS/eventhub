@@ -102,6 +102,7 @@ func main() {
 	applicationHandler := handler.NewOrganizerApplicationHandler(service.NewOrganizerApplicationService(tx, repository.NewOrganizerApplicationRepository(db), userRepo, orgRepo, orgService), userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
+	orgAdminHandler := handler.NewOrganizationAdminHandler(orgRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	locationHandler := handler.NewLocationHandler(locationService)
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
@@ -180,6 +181,14 @@ func main() {
 			adminApplications.GET("/:applicationId", applicationHandler.GetApplicationHandler)
 			adminApplications.POST("/:applicationId/approve", middleware.Audit(audit.OrganizerApplicationApproved), applicationHandler.ApproveApplicationHandler)
 			adminApplications.POST("/:applicationId/reject", middleware.Audit(audit.OrganizerApplicationRejected), applicationHandler.RejectApplicationHandler)
+		}
+
+		// EVENTHUB-293: admins review and approve organizations requested via the contact form
+		adminOrgs := v1.Group("/admin/organizations")
+		adminOrgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+		{
+			adminOrgs.GET("/pending", orgAdminHandler.ListPendingOrganizations)
+			adminOrgs.PATCH("/:organizationID/approve", orgAdminHandler.ApproveOrganization)
 		}
 
 		// Platform moderation of user content by global admins and moderators.

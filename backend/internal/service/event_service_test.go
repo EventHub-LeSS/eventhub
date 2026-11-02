@@ -1095,3 +1095,11 @@ func TestDeleteEvent_RowAlreadyGone_ReturnsErrEventNotFound(t *testing.T) {
 		t.Errorf("deletion without a deleted row recorded %d entries", len(auditRepo.entries))
 	}
 }
+
+func (f *fakeOrgRepo) ListPending(int, int) ([]*model.OrganizationModel, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeOrgRepo) Activate(uuid.UUID) (bool, error) {
+	return false, nil
+}

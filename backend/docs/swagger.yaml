@@ -64,6 +64,19 @@ definitions:
     required:
     - reason
     type: object
+  handler.PendingOrganizationListResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.OrganizationModel'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   handler.RatingVisibilityRequest:
     properties:
       hidden:
@@ -852,6 +865,35 @@ definitions:
       updatedAt:
         type: string
     type: object
+  model.OrganizationModel:
+    properties:
+      alias:
+        type: string
+      city:
+        type: string
+      contactEmail:
+        type: string
+      contactPhoneNumber:
+        type: string
+      countryCode:
+        type: string
+      createdAt:
+        type: string
+      houseNumber:
+        type: string
+      keycloakOrgId:
+        type: string
+      name:
+        type: string
+      organizationId:
+        type: string
+      postalCode:
+        type: string
+      street:
+        type: string
+      updatedAt:
+        type: string
+    type: object
   model.OrganizationRole:
     enum:
     - org_admin
@@ -1403,6 +1445,99 @@ paths:
       summary: Health check
       tags:
       - system
+  /admin/organizations/{organizationID}/approve:
+    patch:
+      description: Approves a pending organization so it becomes public. Available
+        only to global admins. An organization can be approved only once; approving
+        an already approved organization returns 409.
+      parameters:
+      - description: Organization ID (database UUID)
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizationModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve organization
+      tags:
+      - organizations
+  /admin/organizations/pending:
+    get:
+      description: Returns the organizations waiting for admin approval, oldest request
+        first. Available only to global admins.
+      parameters:
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.PendingOrganizationListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List pending organizations
+      tags:
+      - organizations
   /admin/organizer-applications:
     get:
       description: Requires the global admin role or the org_admin role in any organization.

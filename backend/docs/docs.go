@@ -35,6 +35,144 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/organizations/pending": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the organizations waiting for admin approval, oldest request first. Available only to global admins.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "List pending organizations",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-indexed)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size (1-100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.PendingOrganizationListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/organizations/{organizationID}/approve": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Approves a pending organization so it becomes public. Available only to global admins. An organization can be approved only once; approving an already approved organization returns 409.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Approve organization",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Organization ID (database UUID)",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizationModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/organizer-applications": {
             "get": {
                 "security": [
@@ -4016,6 +4154,26 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.PendingOrganizationListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.OrganizationModel"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "handler.RatingVisibilityRequest": {
             "type": "object",
             "required": [
@@ -5112,6 +5270,50 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "street": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OrganizationModel": {
+            "type": "object",
+            "properties": {
+                "alias": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "contactEmail": {
+                    "type": "string"
+                },
+                "contactPhoneNumber": {
+                    "type": "string"
+                },
+                "countryCode": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
+                "keycloakOrgId": {
                     "type": "string"
                 },
                 "name": {
