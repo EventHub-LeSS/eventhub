@@ -5,16 +5,13 @@ import { useEffect, useState, useTransition } from "react"
 
 import { createBookingAction } from "@/features/bookings/lib/actions"
 import {
+  type CheckoutEvent,
+  saveCheckoutEvent,
   savePendingCheckout,
   takePendingCheckout,
 } from "@/features/bookings/lib/checkout-state"
 import { formatAmount } from "@/features/bookings/lib/format"
 import {
-  cardCvcError,
-  cardExpiryError,
-  cardNumberError,
-  cardholderError,
-  formatCardExpiry,
   MAX_TICKETS_PER_BOOKING,
   parseTicketCount,
   ticketCountError,
@@ -27,12 +24,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/shared/components/ui/card"
-import { Input } from "@/features/shared/components/ui/input"
 
 interface BookingFormProps {
-  eventId: string
-  /** Decimal string as the API returns it, e.g. "20.00"; "0" is a free event. */
-  price: string
+  /** What is being bought; passed on to the payment view's order summary. */
+  event: CheckoutEvent
   /** Snapshot from the event details; the backend counts capacity itself when reserving. */
   availableSeats: number | null
   /** Total capacity, only shown as context next to the remaining seats. */
@@ -45,25 +40,20 @@ interface BookingFormProps {
 /**
  * AK1: the checkout card of the event detail page. The amount to pay is
  * calculated from ticket count and price here, before anything is reserved.
- * The card data belongs to the simulated payment — it is validated in the
- * frontend (AK4) but never leaves the browser, and completing the payment
- * happens in the payment view the booking redirects to. Anonymous
- * visitors park their checkout for the login roundtrip and continue with
- * the booking straight after signing in.
+ * Choosing the payment method and completing the payment happen in the
+ * payment view the booking redirects to; the event is parked for that
+ * view's order summary. Anonymous visitors park their checkout for the
+ * login roundtrip and continue with the booking straight after signing in.
  */
 export function BookingForm({
-  eventId,
-  price,
+  event,
   availableSeats,
   capacity,
   bookable,
   isAuthenticated,
 }: BookingFormProps) {
+  const { eventId, price } = event
   const [ticketCount, setTicketCount] = useState("1")
-  const [cardholder, setCardholder] = useState("")
-  const [cardNumber, setCardNumber] = useState("")
-  const [cardExpiry, setCardExpiry] = useState("")
-  const [cardCvc, setCardCvc] = useState("")
   const [message, setMessage] = useState<string>()
   const [isPending, startTransition] = useTransition()
 
@@ -88,32 +78,11 @@ export function BookingForm({
   const total =
     priceKnown && count !== null && count >= 1 ? unitPrice * count : null
 
-  // AK4: the simulated card data is validated live, before anything is sent.
-  // Untouched fields stay silent; the submit button just stays disabled.
-  const holderError = cardholderError(cardholder)
-  const numberError = cardNumberError(cardNumber)
-  const expiryError = cardExpiryError(cardExpiry)
-  const cvcError = cardCvcError(cardCvc)
-  const cardFilled =
-    cardholder.trim() !== "" &&
-    cardNumber.trim() !== "" &&
-    cardExpiry.trim() !== "" &&
-    cardCvc.trim() !== ""
-
-  const canSubmit =
-    priceKnown &&
-    !countError &&
-    cardFilled &&
-    !holderError &&
-    !numberError &&
-    !expiryError &&
-    !cvcError &&
-    bookable &&
-    !isPending
+  const canSubmit = priceKnown && !countError && bookable && !isPending
 
   // A checkout parked for the login roundtrip is taken up here: signed-in
   // visitors continue straight with the booking, anonymous ones at least
-  // find their input restored. The entry is consumed, so it never books
+  // find their selection restored. The entry is consumed, so it never books
   // again later.
   //
   // This effect exists to synchronize the form with the checkout parked in
@@ -128,10 +97,6 @@ export function BookingForm({
     }
 
     setTicketCount(stored.ticketCount)
-    setCardholder(stored.cardholder)
-    setCardNumber(stored.cardNumber)
-    setCardExpiry(stored.cardExpiry)
-    setCardCvc(stored.cardCvc)
 
     if (!isAuthenticated || !bookable) {
       return
@@ -146,13 +111,22 @@ export function BookingForm({
       return
     }
 
+    saveCheckoutEvent(event)
+
     startTransition(async () => {
       // On success the action redirects to the payment view, so a result
       // only arrives when reserving failed.
       const result = await createBookingAction(eventId, storedCount)
       setMessage(result.message)
     })
-  }, [eventId, isAuthenticated, bookable, availableSeats, startTransition])
+  }, [
+    event,
+    eventId,
+    isAuthenticated,
+    bookable,
+    availableSeats,
+    startTransition,
+  ])
   // oxlint-enable react/set-state-in-effect
 
   function updateCount(next: number) {
@@ -171,15 +145,10 @@ export function BookingForm({
     if (!isAuthenticated) {
       // The booking needs a login roundtrip that loses this form's state;
       // park it, so the checkout continues right after the login.
-      savePendingCheckout({
-        eventId,
-        ticketCount,
-        cardholder,
-        cardNumber,
-        cardExpiry,
-        cardCvc,
-      })
+      savePendingCheckout({ eventId, ticketCount })
     }
+
+    saveCheckoutEvent(event)
 
     startTransition(async () => {
       // On success the action redirects to the payment view, so a result
@@ -266,97 +235,6 @@ export function BookingForm({
             )}
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Input
-                id="cardholder"
-                aria-label="Karteninhaber"
-                placeholder="Karteninhaber"
-                autoComplete="cc-name"
-                value={cardholder}
-                onChange={(changed) => {
-                  setMessage(undefined)
-                  setCardholder(changed.target.value)
-                }}
-                aria-invalid={Boolean(holderError)}
-                disabled={isPending}
-                className="bg-muted"
-              />
-              {holderError ? (
-                <p className="text-xs text-destructive" role="alert">
-                  {holderError}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Input
-                id="card-number"
-                aria-label="Kartennummer"
-                placeholder="Kartennummer"
-                inputMode="numeric"
-                autoComplete="cc-number"
-                value={cardNumber}
-                onChange={(changed) => {
-                  setMessage(undefined)
-                  setCardNumber(changed.target.value)
-                }}
-                aria-invalid={Boolean(numberError)}
-                disabled={isPending}
-                className="bg-muted"
-              />
-              {numberError ? (
-                <p className="text-xs text-destructive" role="alert">
-                  {numberError}
-                </p>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Input
-                  id="card-expiry"
-                  aria-label="Ablaufdatum (MM/JJ)"
-                  placeholder="MM/JJ"
-                  autoComplete="cc-exp"
-                  value={cardExpiry}
-                  onChange={(changed) => {
-                    setMessage(undefined)
-                    setCardExpiry(formatCardExpiry(changed.target.value))
-                  }}
-                  aria-invalid={Boolean(expiryError)}
-                  disabled={isPending}
-                  className="bg-muted"
-                />
-                {expiryError ? (
-                  <p className="text-xs text-destructive" role="alert">
-                    {expiryError}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Input
-                  id="card-cvc"
-                  aria-label="CVC"
-                  placeholder="CVC"
-                  inputMode="numeric"
-                  autoComplete="cc-csc"
-                  value={cardCvc}
-                  onChange={(changed) => {
-                    setMessage(undefined)
-                    setCardCvc(changed.target.value)
-                  }}
-                  aria-invalid={Boolean(cvcError)}
-                  disabled={isPending}
-                  className="bg-muted"
-                />
-                {cvcError ? (
-                  <p className="text-xs text-destructive" role="alert">
-                    {cvcError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
           {!bookable && (
             <p className="text-sm text-muted-foreground">
               Diese Veranstaltung kann aktuell nicht gebucht werden.
@@ -366,8 +244,8 @@ export function BookingForm({
           {!isAuthenticated && (
             <p className="text-xs text-muted-foreground">
               Beim Absenden wirst du aufgefordert, dich anzumelden. Deine
-              Eingaben bleiben erhalten und die Buchung geht nach dem Login
-              direkt weiter.
+              Auswahl bleibt erhalten und die Buchung geht nach dem Login direkt
+              weiter.
             </p>
           )}
 
@@ -381,6 +259,10 @@ export function BookingForm({
             <TicketIcon />
             {isPending ? "Checkout läuft …" : "Zum Checkout"}
           </Button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Bezahlen kannst du im nächsten Schritt per Karte oder PayPal.
+          </p>
         </form>
       </CardContent>
     </Card>

@@ -216,8 +216,15 @@ export default async function EventDetailPage({ params }: PageProps) {
 
         <div className="flex flex-col gap-2">
           <BookingForm
-            eventId={event.eventId}
-            price={event.price}
+            event={{
+              eventId: event.eventId,
+              title: event.title,
+              category: category.category,
+              startTime: event.startTime,
+              endTime: event.endTime,
+              address,
+              price: event.price,
+            }}
             availableSeats={event.availableSeats}
             capacity={event.capacity}
             bookable={event.bookable}

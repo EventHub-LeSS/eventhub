@@ -8,13 +8,21 @@ import {
   ShieldQuestionIcon,
 } from "lucide-react"
 import Link from "next/link"
-import { useCallback, useEffect, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
+import { OrderSummary } from "@/features/bookings/components/order-summary"
+import {
+  type FormPaymentMethod,
+  PaymentMethods,
+  useCardDetails,
+  useSepaDetails,
+} from "@/features/bookings/components/payment-methods"
 import { PaymentResult } from "@/features/bookings/components/payment-result"
 import {
   completePaymentAction,
   startPaymentAction,
 } from "@/features/bookings/lib/actions"
+import { readCheckoutEvent } from "@/features/bookings/lib/checkout-state"
 import {
   formatAmount,
   formatDateTime,
@@ -39,16 +47,24 @@ import {
 /**
  * EVENTHUB-235: the view that carries out the simulated payment process of a
  * booking. It starts the payment, shows the amount stored by the backend
- * before anything is completed, lets the visitor pick the simulated outcome
- * and then shows the stored result.
  */
 export function PaymentView({ bookingId }: { bookingId: string }) {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [message, setMessage] = useState<string>()
   const [now, setNow] = useState(() => Date.now())
   const [isPending, startTransition] = useTransition()
+  const [selectedMethod, setSelectedMethod] =
+    useState<FormPaymentMethod>("card")
+  const [method, setMethod] = useState<FormPaymentMethod | "paypal">()
+  const card = useCardDetails()
+  const sepa = useSepaDetails()
 
-  /** Starts the payment, or reads what became of an already started one. */
+  const eventId = payment?.eventId ?? null
+  const checkoutEvent = useMemo(
+    () => (eventId ? readCheckoutEvent(eventId) : null),
+    [eventId]
+  )
+
   const start = useCallback(() => {
     startTransition(async () => {
       const result = await startPaymentAction(bookingId)
@@ -97,13 +113,19 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
 
   const canComplete =
     isPendingPayment && storedAmount !== null && !expired && !isPending
+  const selectedValid = selectedMethod === "card" ? card.valid : sepa.valid
+  const canPayWithSelected = canComplete && selectedValid
 
-  function complete(outcome: SimulatedPaymentOutcome) {
+  function complete(
+    outcome: SimulatedPaymentOutcome,
+    via: FormPaymentMethod | "paypal" = selectedMethod
+  ) {
     if (!payment || storedAmount === null) {
       return
     }
 
     setMessage(undefined)
+    setMethod(via)
 
     startTransition(async () => {
       const result = await completePaymentAction(
@@ -127,7 +149,7 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
   if (!payment) {
     if (isPending) {
       return (
-        <Card>
+        <Card className="max-w-xl">
           <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
             <LoaderCircleIcon className="size-4 animate-spin" />
             Zahlungsvorgang wird geladen …
@@ -137,7 +159,7 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
     }
 
     return (
-      <Card className="border-destructive/50">
+      <Card className="max-w-xl border-destructive/50">
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-start gap-2">
             <CircleXIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
@@ -170,13 +192,36 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
 
   // AK3: the stored result of the completed payment.
   if (!isPendingPayment) {
-    return <PaymentResult payment={payment} />
+    return (
+      <div className="max-w-xl">
+        <PaymentResult payment={payment} />
+      </div>
+    )
   }
 
-  // AK2: the view that carries out and simulates the payment process.
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+      <div className="lg:col-start-2 lg:row-start-1">
+        <OrderSummary
+          event={checkoutEvent}
+          eventId={payment.eventId}
+          numberOfTickets={payment.numberOfTickets}
+        />
+      </div>
+
+      <div className="lg:col-start-1 lg:row-span-3 lg:row-start-1">
+        <PaymentMethods
+          method={selectedMethod}
+          onMethodChange={setSelectedMethod}
+          card={card}
+          sepa={sepa}
+          disabled={!canComplete}
+          onPayPal={() => complete("success", "paypal")}
+          payPalPending={isPending && method === "paypal"}
+        />
+      </div>
+
+      <Card className="lg:col-start-2 lg:row-start-2">
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
             Zahlungsvorgang
@@ -186,8 +231,9 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Kein echter Zahlungsanbieter ist angebunden. Du bestimmst das
-            Ergebnis der simulierten Zahlung selbst.
+            Kein echter Zahlungsanbieter ist angebunden. Bei Karte und
+            Lastschrift bestimmst du das Ergebnis der simulierten Zahlung
+            selbst.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -240,20 +286,30 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   onClick={() => complete("success")}
-                  disabled={!canComplete}
+                  disabled={!canPayWithSelected}
                 >
-                  {isPending
+                  {isPending && method !== "paypal"
                     ? "Verarbeite …"
-                    : "Zahlung erfolgreich abschließen"}
+                    : selectedMethod === "card"
+                      ? "Mit Karte bezahlen"
+                      : "Per Lastschrift bezahlen"}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => complete("failure")}
-                  disabled={!canComplete}
+                  disabled={!canPayWithSelected}
                 >
                   Zahlung ablehnen (Simulation)
                 </Button>
               </div>
+              {!selectedValid && (
+                <p className="text-xs text-muted-foreground">
+                  {selectedMethod === "card"
+                    ? "Gib deine Kartendaten ein, um mit Karte zu bezahlen"
+                    : "Gib Kontoinhaber und IBAN ein, um per Lastschrift zu bezahlen"}{" "}
+                  — oder nutze PayPal Express.
+                </p>
+              )}
             </>
           )}
 
@@ -270,7 +326,7 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
         </CardContent>
       </Card>
 
-      <div>
+      <div className="lg:col-start-2 lg:row-start-3">
         <Button
           render={
             <Link href={payment.eventId ? `/events/${payment.eventId}` : "/"} />
