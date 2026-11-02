@@ -41,6 +41,7 @@ type PublishedEventLocation struct {
 type PublishedEventFilter struct {
 	Location   string
 	CategoryID *uuid.UUID
-	// Date is midnight in the calendar timezone; nil means no date filter.
+	// Date is midnight in the calendar timezone; events overlapping this calendar day
+	// (including multi-day events that span it) are included. Nil means no date filter.
 	Date *time.Time
 }

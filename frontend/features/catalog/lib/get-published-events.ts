@@ -5,7 +5,7 @@ import { envConfig } from "@/features/shared/lib/env"
 export interface PublishedEventsFilter {
   /** Case-insensitive substring of city or venue name. */
   location?: string
-  /** Start calendar day in YYYY-MM-DD, interpreted in Europe/Berlin by the backend. */
+  /** Calendar day in YYYY-MM-DD, interpreted in Europe/Berlin by the backend. Events taking place during that day are returned, including multi-day events that span it. */
   date?: string
   /** Exact category UUID. */
   categoryId?: string
