@@ -37,6 +37,7 @@ func (r *fakeOwnBookingRepo) GetByUser(bookingID, _ uuid.UUID) (*repository.OwnB
 }
 
 // ownBookingWith builds an own booking of a published event; payment and event status may be nil.
+// A booking with a payment stores its line amount, like a checkout does.
 func ownBookingWith(booking model.BookingStatus, expiresAt *time.Time, payment *model.PaymentModel, event *model.EventStatus, now time.Time) *repository.OwnBooking {
 	eventID := uuid.New()
 	own := &repository.OwnBooking{BookingPayment: repository.BookingPayment{
@@ -45,6 +46,10 @@ func ownBookingWith(booking model.BookingStatus, expiresAt *time.Time, payment *
 		EventStatus: event,
 		Now:         now,
 	}}
+	if payment != nil {
+		line := payment.Amount
+		own.Booking.LineAmount = &line
+	}
 	if event != nil {
 		own.Event = &model.EventModel{EventID: eventID, Title: "Konzert", StartTime: now.Add(24 * time.Hour), EndTime: now.Add(26 * time.Hour), Status: *event}
 		own.Location = &model.LocationModel{LocationID: uuid.New(), Name: "Halle", City: "Bonn", PostalCode: "53111", Street: "Weg"}
@@ -56,6 +61,17 @@ func ownBookingWith(booking model.BookingStatus, expiresAt *time.Time, payment *
 
 func paymentWith(status model.PaymentStatus, reason *model.PaymentFailureReason) *model.PaymentModel {
 	return &model.PaymentModel{PaymentID: uuid.New(), Amount: decimal.NewFromInt(40), Status: status, FailureReason: reason}
+}
+
+// paymentViewOf builds the payment view of one own booking: the payment with its single item.
+// A checkout of one item charges the line amount as the payment amount.
+func paymentViewOf(own *repository.OwnBooking) *repository.PaymentView {
+	item := &repository.PaymentItem{Booking: own.Booking, EventStatus: own.EventStatus}
+	if own.Event != nil {
+		item.Event = own.Event
+		item.Location = own.Location
+	}
+	return &repository.PaymentView{Payment: own.Payment, Items: []*repository.PaymentItem{item}, Now: own.Now}
 }
 
 // C5: for every booking with a payment the own booking view says what the payment result says.
@@ -84,13 +100,14 @@ func TestOwnBookingResponse_BookingsWithPayment_MatchPaymentResponse(t *testing.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ownBookingResponse(tc.own)
-			want := paymentResponse(&tc.own.BookingPayment)
+			want := paymentResponse(paymentViewOf(tc.own))
 			if got.TicketsValid != want.TicketsValid || got.Message != want.Message {
 				t.Errorf("expected ticketsValid=%v message=%q like the payment result, got ticketsValid=%v message=%q",
 					want.TicketsValid, want.Message, got.TicketsValid, got.Message)
 			}
-			if got.PaymentStatus == nil || *got.PaymentStatus != want.Status || got.Amount == nil || !got.Amount.Equal(want.Amount) {
-				t.Errorf("expected payment %s of %s, got %v of %v", want.Status, want.Amount, got.PaymentStatus, got.Amount)
+			if got.PaymentStatus == nil || *got.PaymentStatus != want.Status || got.Amount == nil ||
+				want.Items[0].LineAmount.IsZero() || !got.Amount.Equal(want.Items[0].LineAmount) {
+				t.Errorf("expected payment %s of %s, got %v of %v", want.Status, want.Items[0].LineAmount, got.PaymentStatus, got.Amount)
 			}
 			if (got.FailureReason == nil) != (want.FailureReason == nil) || (got.FailureReason != nil && *got.FailureReason != *want.FailureReason) {
 				t.Errorf("expected failureReason %v, got %v", want.FailureReason, got.FailureReason)

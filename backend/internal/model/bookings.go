@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 type BookingStatus string
@@ -34,8 +35,11 @@ type BookingModel struct {
 	NumberOfTickets int           `json:"numberOfTickets" gorm:"column:number_of_tickets"`
 	Status          BookingStatus `json:"status" gorm:"column:status"`
 	ExpiresAt       *time.Time    `json:"expiresAt" gorm:"column:expires_at"`
-	CreatedAt       time.Time     `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt       time.Time     `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
+	// LineAmount is what the booking costs within its payment: its tickets times the event
+	// price at checkout time. Null while the reservation sits in the cart without a payment.
+	LineAmount *decimal.Decimal `json:"lineAmount,omitempty" gorm:"column:line_amount;type:numeric(12,2)"`
+	CreatedAt  time.Time        `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt  time.Time        `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
 }
 
 func (BookingModel) TableName() string { return "bookings" }

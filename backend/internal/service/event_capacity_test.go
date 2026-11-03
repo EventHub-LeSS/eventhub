@@ -78,12 +78,12 @@ func (f capacityFixture) occupied(t *testing.T) int64 {
 	return occupied
 }
 
-// Reproduces the review finding: capacity 2, two tickets reserved and the payment started, then
+// Reproduces the review finding: capacity 2, two tickets reserved and the checkout started, then
 // the organizer lowers the capacity to 1 and the payment succeeds.
 func TestCheckout_CapacityCannotDropBelowReservedTickets(t *testing.T) {
 	f := newCapacityFixture(t, 2)
-	bookingID := f.reserve(t, 2)
-	f.start(t, bookingID)
+	f.reserve(t, 2)
+	pending := f.checkout(t)
 
 	err := f.setCapacity(1)
 	var capErr *CapacityBelowOccupiedError
@@ -94,7 +94,7 @@ func TestCheckout_CapacityCannotDropBelowReservedTickets(t *testing.T) {
 		t.Fatalf("a rejected update must keep the capacity, got %d", c)
 	}
 
-	resp, err := f.payments.SimulatePayment(context.Background(), bookingID, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(40))
+	resp, err := f.payments.SimulatePayment(context.Background(), pending.PaymentID, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(40))
 	if err != nil {
 		t.Fatalf("simulate: %v", err)
 	}
@@ -110,18 +110,22 @@ func TestUpdateEvent_CapacityCountsSoldAndLiveReservedTickets(t *testing.T) {
 	f := newCapacityFixture(t, 10)
 	ctx := context.Background()
 
-	// 3 sold and 2 reserved tickets occupy the event; expired and failed bookings do not.
-	sold := f.reserve(t, 3)
-	f.start(t, sold)
-	if _, err := f.payments.SimulatePayment(ctx, sold, f.userID, model.SimulatedPaymentSuccess, decimal.NewFromInt(60)); err != nil {
+	// 3 sold and 2 reserved tickets occupy the event; expired and failed bookings do not. Every
+	// state needs its own visitor, because the cart merges the tickets of one visitor for one
+	// event into a single reservation.
+	soldUser, liveUser, expiredUser, failedUser := f.seedUser(t), f.seedUser(t), f.seedUser(t), f.seedUser(t)
+
+	f.addToCart(t, soldUser, 3)
+	soldPayment := f.checkoutFor(t, soldUser)
+	if _, err := f.payments.SimulatePayment(ctx, soldPayment.PaymentID, soldUser, model.SimulatedPaymentSuccess, decimal.NewFromInt(60)); err != nil {
 		t.Fatalf("simulate success: %v", err)
 	}
-	f.reserve(t, 2)
-	expired := f.reserve(t, 4)
+	f.addToCart(t, liveUser, 2)
+	expired := f.addToCart(t, expiredUser, 4)
 	expireReservation(t, f.db, expired)
-	failed := f.reserve(t, 1)
-	f.start(t, failed)
-	if _, err := f.payments.SimulatePayment(ctx, failed, f.userID, model.SimulatedPaymentFailure, decimal.NewFromInt(20)); err != nil {
+	f.addToCart(t, failedUser, 1)
+	failedPayment := f.checkoutFor(t, failedUser)
+	if _, err := f.payments.SimulatePayment(ctx, failedPayment.PaymentID, failedUser, model.SimulatedPaymentFailure, decimal.NewFromInt(20)); err != nil {
 		t.Fatalf("simulate failure: %v", err)
 	}
 
@@ -158,20 +162,25 @@ func TestUpdateEvent_KeepingTheCapacityNeedsNoRoom(t *testing.T) {
 // Lowering the capacity while visitors reserve must never leave more occupied tickets than seats.
 func TestUpdateEvent_CapacityReductionRacesWithReservations(t *testing.T) {
 	f := newCapacityFixture(t, 10)
+	// Distinct visitors: the cart merges the tickets of one visitor for one event into one item.
 	for i := 0; i < 4; i++ {
-		f.reserve(t, 1)
+		f.addToCart(t, f.seedUser(t), 1)
+	}
+	visitors := make([]uuid.UUID, 6)
+	for i := range visitors {
+		visitors[i] = f.seedUser(t)
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 6; i++ {
+	for _, visitor := range visitors {
 		wg.Add(1)
-		go func() {
+		go func(visitor uuid.UUID) {
 			defer wg.Done()
 			var capErr *CapacityExceededError
-			if _, err := f.bookings.ReserveTickets(context.Background(), f.eventID, f.userID, 1); err != nil && !errors.As(err, &capErr) {
-				t.Errorf("reserve: %v", err)
+			if _, err := f.carts.AddToCart(context.Background(), visitor, f.eventID, 1); err != nil && !errors.As(err, &capErr) {
+				t.Errorf("add to cart: %v", err)
 			}
-		}()
+		}(visitor)
 	}
 	wg.Add(1)
 	go func() {

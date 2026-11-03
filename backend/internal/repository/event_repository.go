@@ -15,6 +15,13 @@ type EventRepository interface {
 	CreateEvent(event *model.EventModel) error
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
 	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
+	// LockEvents locks the events by ID, ordered by event_id; use it inside a transaction.
+	// The caller learns which events are missing by comparing with the IDs it asked for.
+	LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error)
+	// TryLockEvents locks the events by ID with FOR UPDATE SKIP LOCKED, ordered by event_id,
+	// and returns only the ones it got. Events locked elsewhere are skipped, which lets the
+	// payment cleanup defer payments that are being completed right now.
+	TryLockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error)
 	GetAllEvents() ([]*model.EventModel, error)
 	ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error)
 	UpdateEvent(event *model.EventModel) error
@@ -47,6 +54,31 @@ func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, er
 
 func (r *eventRepository) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {
 	return r.getEvent(eventID, true)
+}
+
+func (r *eventRepository) LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
+	return r.lockEvents(eventIDs, false)
+}
+
+func (r *eventRepository) TryLockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
+	return r.lockEvents(eventIDs, true)
+}
+
+func (r *eventRepository) lockEvents(eventIDs []uuid.UUID, skipLocked bool) ([]*model.EventModel, error) {
+	if len(eventIDs) == 0 {
+		return nil, nil
+	}
+	q := r.db.Where("event_id IN ?", eventIDs).Order("event_id")
+	if skipLocked {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"})
+	} else {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var events []*model.EventModel
+	if err := q.Find(&events).Error; err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func (r *eventRepository) getEvent(eventID uuid.UUID, lock bool) (*model.EventModel, error) {
