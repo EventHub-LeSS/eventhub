@@ -32,6 +32,119 @@ func (s *ModerationService) ListRatings(filter model.ModeratedRatingFilter, page
 	return &model.ModeratedRatingPage{Items: items, Page: page, Limit: limit, Total: total}, nil
 }
 
+func (s *ModerationService) ListEvents(filter model.ModeratedEventFilter, page, limit int) (*model.ModeratedEventPage, error) {
+	items, total, err := s.ratings.ListEvents(filter, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ModeratedEventPage{Items: items, Page: page, Limit: limit, Total: total}, nil
+}
+
+func (s *ModerationService) GetEvent(eventID uuid.UUID) (*model.ModeratedEvent, error) {
+	items, _, err := s.ratings.ListEvents(model.ModeratedEventFilter{EventID: &eventID}, 1, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, ErrEventNotFound
+	}
+	return &items[0], nil
+}
+
+func (s *ModerationService) EditEventContent(ctx context.Context, eventID uuid.UUID, req model.ModerateEventContentRequest) (*model.EventModerationResponse, error) {
+	meta, err := audit.MetaFromContext(ctx, audit.EventModerated)
+	if err != nil {
+		return nil, err
+	}
+	result := &model.EventModerationResponse{EventID: eventID}
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		before := *event
+		if req.Title != nil {
+			event.Title = *req.Title
+		}
+		if req.Description != nil {
+			event.Description = req.Description
+		}
+		result.Status = event.Status
+		fields := eventFieldChanges(&before, event)
+		if len(fields) == 0 {
+			return nil
+		}
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		if err := appendModeratedEventAudit(tx, meta, event, model.AuditChanges{"fields": fields, "reason": req.Reason}); err != nil {
+			return err
+		}
+		result.Changed = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *ModerationService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, reason string) (*model.EventModerationResponse, error) {
+	meta, err := audit.MetaFromContext(ctx, audit.EventModerated)
+	if err != nil {
+		return nil, err
+	}
+	result := &model.EventModerationResponse{EventID: eventID, Status: model.EventStatusCancelled}
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.Status == model.EventStatusCancelled {
+			return nil
+		}
+		if event.Status != model.EventStatusDraft && event.Status != model.EventStatusPublished {
+			return ErrInvalidStatus
+		}
+		before := event.Status
+		event.Status = model.EventStatusCancelled
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		changes := statusChange(before, event.Status)
+		changes["reason"] = reason
+		if err := appendModeratedEventAudit(tx, meta, event, changes); err != nil {
+			return err
+		}
+		result.Changed = true
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func appendModeratedEventAudit(tx repository.Tx, meta audit.Meta, event *model.EventModel, changes model.AuditChanges) error {
+	org := &model.OrganizationModel{KeycloakOrgID: audit.ScopePlatform}
+	if event.OrganizerID != nil {
+		owner, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if owner != nil && owner.KeycloakOrgID != "" {
+			org = owner
+		}
+	}
+	return appendEventAudit(tx, meta, org, event.EventID, changes)
+}
+
 // SetRatingVisibility hides or shows a rating. Hidden ratings no longer count towards rating
 // summaries and recommendations. Requesting the current visibility changes and records nothing.
 func (s *ModerationService) SetRatingVisibility(ctx context.Context, ratingID uuid.UUID, hidden bool, reason string) (*model.RatingVisibilityResponse, error) {

@@ -66,6 +66,36 @@ type EventWithdrawnResponse struct {
 	Message string `json:"message" example:"event withdrawn"`
 }
 
+type EventModerationResponse struct {
+	EventID uuid.UUID   `json:"eventId"`
+	Status  EventStatus `json:"status"`
+	Changed bool        `json:"changed"`
+}
+
+type ModeratedEvent struct {
+	EventModel
+	OrganizationName *string `json:"organizationName" gorm:"column:organization_name" extensions:"x-nullable"`
+}
+
+type ModeratedEventFilter struct {
+	Status         EventStatus
+	OrganizationID *uuid.UUID
+	EventID        *uuid.UUID
+}
+
+type ModeratedEventPage struct {
+	Items []ModeratedEvent `json:"items"`
+	Page  int              `json:"page"`
+	Limit int              `json:"limit"`
+	Total int64            `json:"total"`
+}
+
+type ModerateEventContentRequest struct {
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	Reason      string  `json:"reason" binding:"required" minLength:"1" maxLength:"1000"`
+}
+
 // EVENTHUB-256: Veranstaltungsentwurf löschen
 type EventDeletedResponse struct {
 	Message string `json:"message" example:"event deleted"`
