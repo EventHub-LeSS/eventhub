@@ -278,10 +278,11 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
                       ? "Mit Karte bezahlen"
                       : "Per Lastschrift bezahlen"}
                 </Button>
+                {/* Declining needs no card or account data. */}
                 <Button
                   variant="outline"
                   onClick={() => complete("failure")}
-                  disabled={!canPayWithSelected}
+                  disabled={!canComplete}
                 >
                   Zahlung ablehnen (Simulation)
                 </Button>
