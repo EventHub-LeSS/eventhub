@@ -19,6 +19,7 @@ type ModerationRepository interface {
 	SetRatingVisibility(ratingID uuid.UUID, visible bool) error
 	// ListRatings returns one page of ratings, newest first, and the number of all matching ratings.
 	ListRatings(filter model.ModeratedRatingFilter, page, limit int) ([]model.ModeratedRating, int64, error)
+	ListEvents(filter model.ModeratedEventFilter, page, limit int) ([]model.ModeratedEvent, int64, error)
 }
 
 type moderationRepository struct {
@@ -27,6 +28,35 @@ type moderationRepository struct {
 
 func NewModerationRepository(db *gorm.DB) ModerationRepository {
 	return &moderationRepository{db: db}
+}
+
+func (r *moderationRepository) ListEvents(filter model.ModeratedEventFilter, page, limit int) ([]model.ModeratedEvent, int64, error) {
+	if page < 1 || limit < 1 || page-1 > math.MaxInt/limit {
+		return nil, 0, errors.New("invalid event pagination")
+	}
+	query := func() *gorm.DB {
+		query := r.db.Table("events AS e").
+			Joins("LEFT JOIN organizations AS o ON o.organization_id = e.organizer_id")
+		if filter.Status != "" {
+			query = query.Where("e.status = ?", filter.Status)
+		}
+		if filter.OrganizationID != nil {
+			query = query.Where("e.organizer_id = ?", *filter.OrganizationID)
+		}
+		if filter.EventID != nil {
+			query = query.Where("e.event_id = ?", *filter.EventID)
+		}
+		return query
+	}
+	var total int64
+	if err := query().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	items := make([]model.ModeratedEvent, 0, limit)
+	err := query().Select("e.*, o.name AS organization_name").
+		Order("e.created_at DESC, e.event_id DESC").Offset((page - 1) * limit).Limit(limit).
+		Scan(&items).Error
+	return items, total, err
 }
 
 func (r *moderationRepository) LockRating(ratingID uuid.UUID) (*model.RatingModerationTarget, error) {
