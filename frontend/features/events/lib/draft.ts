@@ -1,6 +1,9 @@
-import type { Event } from "@/features/events/lib/types"
+import type { Event, EventLocation } from "@/features/events/lib/types"
 
-/** Form state. Every field is a string because that is what the inputs hold. */
+/**
+ * Form state. Every field but the accessibility checkbox is a string because
+ * that is what the inputs hold.
+ */
 export interface EventDraft {
   title: string
   description: string
@@ -9,7 +12,12 @@ export interface EventDraft {
   capacity: string
   price: string
   categoryId: string
-  locationId: string
+  street: string
+  houseNumber: string
+  postalCode: string
+  city: string
+  addressAddition: string
+  accessible: boolean
 }
 
 export const emptyDraft: EventDraft = {
@@ -20,7 +28,12 @@ export const emptyDraft: EventDraft = {
   capacity: "",
   price: "",
   categoryId: "",
-  locationId: "",
+  street: "",
+  houseNumber: "",
+  postalCode: "",
+  city: "",
+  addressAddition: "",
+  accessible: false,
 }
 
 export type DraftErrors = Partial<Record<keyof EventDraft, string>>
@@ -35,7 +48,18 @@ export interface EventDraftPayload {
   capacity: number
   price: string
   categoryId: string
-  locationId: string
+  /**
+   * The backend links the event to the stored location with this address, or
+   * creates one, so no locationId is sent.
+   */
+  location: {
+    street: string
+    houseNumber: string | null
+    postalCode: string
+    city: string
+    addressAddition: string | null
+    accessible: boolean
+  }
 }
 
 const TITLE_MIN_LENGTH = 3
@@ -43,6 +67,10 @@ const TITLE_MAX_LENGTH = 200
 const DESCRIPTION_MAX_LENGTH = 5000
 const CAPACITY_MAX = 100_000
 const PRICE_MAX = 10_000
+const STREET_MAX_LENGTH = 200
+const HOUSE_NUMBER_MAX_LENGTH = 20
+const CITY_MAX_LENGTH = 100
+const ADDRESS_ADDITION_MAX_LENGTH = 200
 
 /**
  * Mirrors the binding rules of the backend's CreateDraftRequest so the organizer
@@ -109,8 +137,36 @@ export function validateDraft(draft: EventDraft): DraftErrors {
     errors.categoryId = "Bitte wähle eine Kategorie."
   }
 
-  if (!draft.locationId) {
-    errors.locationId = "Bitte wähle einen Veranstaltungsort."
+  const street = draft.street.trim()
+
+  if (!street) {
+    errors.street = "Bitte gib eine Straße ein."
+  } else if (street.length > STREET_MAX_LENGTH) {
+    errors.street = `Höchstens ${STREET_MAX_LENGTH} Zeichen.`
+  }
+
+  if (draft.houseNumber.trim().length > HOUSE_NUMBER_MAX_LENGTH) {
+    errors.houseNumber = `Höchstens ${HOUSE_NUMBER_MAX_LENGTH} Zeichen.`
+  }
+
+  const postalCode = draft.postalCode.trim()
+
+  if (!postalCode) {
+    errors.postalCode = "Bitte gib eine Postleitzahl ein."
+  } else if (!/^\d{5}$/.test(postalCode)) {
+    errors.postalCode = "Gib genau 5 Ziffern ein."
+  }
+
+  const city = draft.city.trim()
+
+  if (!city) {
+    errors.city = "Bitte gib einen Ort ein."
+  } else if (city.length > CITY_MAX_LENGTH) {
+    errors.city = `Höchstens ${CITY_MAX_LENGTH} Zeichen.`
+  }
+
+  if (draft.addressAddition.trim().length > ADDRESS_ADDITION_MAX_LENGTH) {
+    errors.addressAddition = `Höchstens ${ADDRESS_ADDITION_MAX_LENGTH} Zeichen.`
   }
 
   return errors
@@ -131,7 +187,14 @@ export function toDraftPayload(
     capacity: Number(draft.capacity),
     price: draft.price.trim(),
     categoryId: draft.categoryId,
-    locationId: draft.locationId,
+    location: {
+      street: draft.street.trim(),
+      houseNumber: draft.houseNumber.trim() || null,
+      postalCode: draft.postalCode.trim(),
+      city: draft.city.trim(),
+      addressAddition: draft.addressAddition.trim() || null,
+      accessible: draft.accessible,
+    },
   }
 }
 
@@ -148,9 +211,25 @@ function toLocalInput(isoTime: string): string {
   return new Date(time.getTime() - offset).toISOString().slice(0, 16)
 }
 
-/** Prefills the form when an existing draft is edited. */
-export function toDraft(event: Event): EventDraft {
+/** Fills the address fields from a stored location. */
+export function withLocation(
+  draft: EventDraft,
+  location: EventLocation
+): EventDraft {
   return {
+    ...draft,
+    street: location.street,
+    houseNumber: location.houseNumber ?? "",
+    postalCode: location.postalCode,
+    city: location.city,
+    addressAddition: location.addressAddition ?? "",
+    accessible: location.accessible,
+  }
+}
+
+export function toDraft(event: Event, locations: EventLocation[]): EventDraft {
+  const draft: EventDraft = {
+    ...emptyDraft,
     title: event.title,
     description: event.description ?? "",
     startTime: toLocalInput(event.startTime),
@@ -158,6 +237,10 @@ export function toDraft(event: Event): EventDraft {
     capacity: String(event.capacity),
     price: event.price,
     categoryId: event.categoryId ?? "",
-    locationId: event.locationId ?? "",
   }
+  const location = locations.find(
+    (candidate) => candidate.locationId === event.locationId
+  )
+
+  return location ? withLocation(draft, location) : draft
 }
