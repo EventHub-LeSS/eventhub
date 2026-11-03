@@ -12,7 +12,7 @@ import {
   formatCardExpiry,
   formatIban,
   ibanError,
-} from "@/features/bookings/lib/validation"
+} from "@/features/cart/lib/validation"
 import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,

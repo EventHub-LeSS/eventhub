@@ -1,21 +1,27 @@
 "use client"
 
+import { useQueryClient } from "@tanstack/react-query"
 import { MinusIcon, PlusIcon, TicketIcon } from "lucide-react"
-import { useEffect, useState, useTransition } from "react"
+import Link from "next/link"
+import { useCallback, useEffect, useState, useTransition } from "react"
 
-import { createBookingAction } from "@/features/bookings/lib/actions"
+import { addToCartAction } from "@/features/cart/lib/actions"
+import type { CartActionResult } from "@/features/cart/lib/actions"
 import {
-  type CheckoutEvent,
-  saveCheckoutEvent,
-  savePendingCheckout,
-  takePendingCheckout,
-} from "@/features/bookings/lib/checkout-state"
-import { formatAmount } from "@/features/bookings/lib/format"
+  saveParkedAddToCart,
+  takeParkedAddToCart,
+} from "@/features/cart/lib/cart-state"
+import { formatAmount, formatTicketCount } from "@/features/cart/lib/format"
 import {
-  MAX_TICKETS_PER_BOOKING,
+  cartItemOf,
+  CART_QUERY_KEY,
+  useCart,
+} from "@/features/cart/lib/use-cart"
+import {
+  MAX_TICKETS_PER_EVENT,
   parseTicketCount,
   ticketCountError,
-} from "@/features/bookings/lib/validation"
+} from "@/features/cart/lib/validation"
 import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
@@ -25,9 +31,10 @@ import {
   CardTitle,
 } from "@/features/shared/components/ui/card"
 
-interface BookingFormProps {
-  /** What is being bought; passed on to the payment view's order summary. */
-  event: CheckoutEvent
+interface AddToCartFormProps {
+  eventId: string
+  /** Decimal string as the API returns it, e.g. "20.00"; "0" is a free event. */
+  price: string
   /** Snapshot from the event details; the backend counts capacity itself when reserving. */
   availableSeats: number | null
   /** Total capacity, only shown as context next to the remaining seats. */
@@ -38,24 +45,31 @@ interface BookingFormProps {
 }
 
 /**
- * AK1: the checkout card of the event detail page. The amount to pay is
- * calculated from ticket count and price here, before anything is reserved.
- * Choosing the payment method and completing the payment happen in the
- * payment view the booking redirects to; the event is parked for that
- * view's order summary. Anonymous visitors park their checkout for the
- * login roundtrip and continue with the booking straight after signing in.
+ * The cart card of the event detail page: how many tickets go into the
+ * cart. The amount shown is the line total of this addition, calculated
+ * from ticket count and price here — the checkout then stores the amounts
+ * it charges. Anonymous visitors park their input for the login roundtrip
+ * and the cart is filled right after signing in.
  */
-export function BookingForm({
-  event,
+export function AddToCartForm({
+  eventId,
+  price,
   availableSeats,
   capacity,
   bookable,
   isAuthenticated,
-}: BookingFormProps) {
-  const { eventId, price } = event
+}: AddToCartFormProps) {
+  const queryClient = useQueryClient()
+  const queryCart = useCart({ enabled: isAuthenticated })
   const [ticketCount, setTicketCount] = useState("1")
   const [message, setMessage] = useState<string>()
+  const [notice, setNotice] = useState<string>()
   const [isPending, startTransition] = useTransition()
+
+  // The item already in the cart holds its seats, so they count as room
+  // for this addition (see ticketCountError).
+  const quantityInCart =
+    cartItemOf(queryCart.data, eventId)?.numberOfTickets ?? 0
 
   // A price that cannot be read must not produce a total (AK4): without a
   // valid amount nothing is reserved.
@@ -63,105 +77,132 @@ export function BookingForm({
   const priceKnown = Number.isFinite(unitPrice) && unitPrice >= 0
 
   const count = parseTicketCount(ticketCount)
-  const countError = ticketCountError(ticketCount, availableSeats)
+  const countError = ticketCountError(
+    ticketCount,
+    availableSeats,
+    quantityInCart
+  )
 
-  // EVENTHUB-91 / AK3: the stepper stops at the remaining seats, not only at
-  // the per-booking limit.
+  // EVENTHUB-91 / AK3: the stepper stops at the remaining seats, not only
+  // at the per-event limit.
   const maxTickets =
     availableSeats === null
-      ? MAX_TICKETS_PER_BOOKING
-      : Math.min(MAX_TICKETS_PER_BOOKING, availableSeats)
+      ? MAX_TICKETS_PER_EVENT - quantityInCart
+      : Math.min(
+          MAX_TICKETS_PER_EVENT - quantityInCart,
+          availableSeats + quantityInCart
+        )
 
-  // AK1: the amount to pay, calculated from ticket count and price, shown
-  // before anything is reserved. The payment view then shows the amount the
-  // backend actually stored.
+  // The line total of this addition, shown before anything is reserved.
   const total =
     priceKnown && count !== null && count >= 1 ? unitPrice * count : null
 
   const canSubmit = priceKnown && !countError && bookable && !isPending
 
-  // A checkout parked for the login roundtrip is taken up here: signed-in
-  // visitors continue straight with the booking, anonymous ones at least
-  // find their selection restored. The entry is consumed, so it never books
-  // again later.
+  const applyResult = useCallback(
+    (result: CartActionResult) => {
+      if (result.cart) {
+        // The badge and the cart page read the same query, so the change is
+        // everywhere at once, without a refetch.
+        queryClient.setQueryData(CART_QUERY_KEY, result.cart)
+        setTicketCount("1")
+        setMessage(undefined)
+        setNotice(
+          "Die Tickets liegen im Warenkorb und sind 15 Minuten für dich reserviert."
+        )
+      } else {
+        setNotice(undefined)
+        setMessage(
+          result.message ??
+            "Die Tickets konnten nicht in den Warenkorb gelegt werden. Bitte versuche es erneut."
+        )
+      }
+    },
+    [queryClient]
+  )
+
+  // An addition parked for the login roundtrip is taken up here: signed-in
+  // visitors continue straight with the reservation, anonymous ones at
+  // least find their input restored. The entry is consumed, so it never
+  // reserves again later.
   //
-  // This effect exists to synchronize the form with the checkout parked in
+  // This effect exists to synchronize the form with the addition parked in
   // sessionStorage — an external system that is only readable in the
-  // browser, so the values cannot be derived during render.
+  // browser, so the values cannot be derived during render. It waits for
+  // the cart of a just-signed-in visitor, so the parked addition is
+  // checked against what is already in the cart.
   // oxlint-disable react/set-state-in-effect
   useEffect(() => {
-    const stored = takePendingCheckout(eventId)
-
-    if (!stored) {
+    if (isAuthenticated && bookable && queryCart.isPending) {
       return
     }
 
-    setTicketCount(stored.ticketCount)
+    const parked = takeParkedAddToCart(eventId)
+
+    if (!parked) {
+      return
+    }
+
+    setTicketCount(parked.ticketCount)
 
     if (!isAuthenticated || !bookable) {
       return
     }
 
-    const storedCount = parseTicketCount(stored.ticketCount)
+    const parkedCount = parseTicketCount(parked.ticketCount)
 
     if (
-      storedCount === null ||
-      ticketCountError(stored.ticketCount, availableSeats)
+      parkedCount === null ||
+      ticketCountError(parked.ticketCount, availableSeats, quantityInCart)
     ) {
       return
     }
 
-    saveCheckoutEvent(event)
-
     startTransition(async () => {
-      // On success the action redirects to the payment view, so a result
-      // only arrives when reserving failed.
-      const result = await createBookingAction(eventId, storedCount)
-      setMessage(result.message)
+      applyResult(await addToCartAction(eventId, parkedCount))
     })
   }, [
-    event,
     eventId,
     isAuthenticated,
     bookable,
     availableSeats,
+    quantityInCart,
+    queryCart.isPending,
+    applyResult,
     startTransition,
   ])
   // oxlint-enable react/set-state-in-effect
 
   function updateCount(next: number) {
     setMessage(undefined)
+    setNotice(undefined)
     setTicketCount(String(next))
   }
 
   function handleSubmit(submitEvent: React.FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
     setMessage(undefined)
+    setNotice(undefined)
 
     if (count === null || countError || !canSubmit) {
       return
     }
 
     if (!isAuthenticated) {
-      // The booking needs a login roundtrip that loses this form's state;
-      // park it, so the checkout continues right after the login.
-      savePendingCheckout({ eventId, ticketCount })
+      // The reservation needs a login roundtrip that loses this form's
+      // state; park it, so the cart is filled right after the login.
+      saveParkedAddToCart({ eventId, ticketCount })
     }
 
-    saveCheckoutEvent(event)
-
     startTransition(async () => {
-      // On success the action redirects to the payment view, so a result
-      // only arrives when reserving failed.
-      const result = await createBookingAction(eventId, count)
-      setMessage(result.message)
+      applyResult(await addToCartAction(eventId, count))
     })
   }
 
   return (
     <Card className="gap-4 shadow-md">
       <CardHeader>
-        <CardTitle className="text-xl font-bold">Tickets buchen</CardTitle>
+        <CardTitle className="text-xl font-bold">Tickets reservieren</CardTitle>
         <CardDescription>
           {availableSeats === null
             ? "Die Platzanzeige ist derzeit nicht verfügbar."
@@ -191,6 +232,7 @@ export function BookingForm({
                   value={ticketCount}
                   onChange={(changed) => {
                     setMessage(undefined)
+                    setNotice(undefined)
                     setTicketCount(changed.target.value)
                   }}
                   aria-invalid={Boolean(countError)}
@@ -216,7 +258,8 @@ export function BookingForm({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Höchstens {MAX_TICKETS_PER_BOOKING} Tickets pro Buchung.
+                Höchstens {MAX_TICKETS_PER_EVENT} Tickets pro Veranstaltung im
+                Warenkorb.
               </p>
             )}
           </div>
@@ -235,6 +278,23 @@ export function BookingForm({
             )}
           </div>
 
+          {quantityInCart > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
+              <span className="text-sm text-muted-foreground">
+                {formatTicketCount(quantityInCart)} für diese Veranstaltung im
+                Warenkorb.
+              </span>
+              <Button
+                render={<Link href="/cart" />}
+                nativeButton={false}
+                variant="outline"
+                size="sm"
+              >
+                Zum Warenkorb
+              </Button>
+            </div>
+          )}
+
           {!bookable && (
             <p className="text-sm text-muted-foreground">
               Diese Veranstaltung kann aktuell nicht gebucht werden.
@@ -244,9 +304,15 @@ export function BookingForm({
           {!isAuthenticated && (
             <p className="text-xs text-muted-foreground">
               Beim Absenden wirst du aufgefordert, dich anzumelden. Deine
-              Auswahl bleibt erhalten und die Buchung geht nach dem Login direkt
-              weiter.
+              Eingaben bleiben erhalten und der Warenkorb wird nach dem Login
+              direkt befüllt.
             </p>
+          )}
+
+          {notice && (
+            <output className="text-sm text-emerald-600 dark:text-emerald-400">
+              {notice}
+            </output>
           )}
 
           {message && (
@@ -257,12 +323,8 @@ export function BookingForm({
 
           <Button type="submit" disabled={!canSubmit} className="w-full">
             <TicketIcon />
-            {isPending ? "Checkout läuft …" : "Zum Checkout"}
+            {isPending ? "Wird hinzugefügt …" : "In den Warenkorb"}
           </Button>
-
-          <p className="text-center text-xs text-muted-foreground">
-            Bezahlen kannst du im nächsten Schritt per Karte oder PayPal.
-          </p>
         </form>
       </CardContent>
     </Card>

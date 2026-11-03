@@ -1,5 +1,6 @@
 "use client"
 
+import { useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
   CircleXIcon,
@@ -8,32 +9,29 @@ import {
   ShieldQuestionIcon,
 } from "lucide-react"
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 
-import { OrderSummary } from "@/features/bookings/components/order-summary"
+import { OrderSummary } from "@/features/cart/components/order-summary"
 import {
   type FormPaymentMethod,
   PaymentMethods,
   useCardDetails,
   useSepaDetails,
-} from "@/features/bookings/components/payment-methods"
-import { PaymentResult } from "@/features/bookings/components/payment-result"
-import {
-  completePaymentAction,
-  startPaymentAction,
-} from "@/features/bookings/lib/actions"
-import { readCheckoutEvent } from "@/features/bookings/lib/checkout-state"
+} from "@/features/cart/components/payment-methods"
+import { PaymentResult } from "@/features/cart/components/payment-result"
+import { completePaymentAction } from "@/features/cart/lib/actions"
 import {
   formatAmount,
   formatDateTime,
   formatRemaining,
-  formatTicketCount,
-} from "@/features/bookings/lib/format"
-import type {
-  Payment,
-  SimulatedPaymentOutcome,
-} from "@/features/bookings/lib/types"
-import { parseAmount } from "@/features/bookings/lib/validation"
+} from "@/features/cart/lib/format"
+import type { SimulatedPaymentOutcome } from "@/features/cart/lib/types"
+import {
+  CART_QUERY_KEY,
+  paymentQueryKey,
+  usePayment,
+} from "@/features/cart/lib/use-cart"
+import { parseAmount } from "@/features/cart/lib/validation"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
 import {
@@ -45,11 +43,17 @@ import {
 } from "@/features/shared/components/ui/card"
 
 /**
- * EVENTHUB-235: the view that carries out the simulated payment process of a
- * booking. It starts the payment, shows the amount stored by the backend
+ * EVENTHUB-235: the view that carries out the simulated payment of a whole
+ * cart checkout. It shows the line amounts and the total amount stored by
+ * the backend before anything is completed, lets the visitor pick a payment
+ * method (card, SEPA direct debit or PayPal Express) and the simulated
+ * outcome, and then shows the stored result. Card and account data belong
+ * to the simulated payment — they are validated in the frontend (AK4) but
+ * never leave the browser.
  */
-export function PaymentView({ bookingId }: { bookingId: string }) {
-  const [payment, setPayment] = useState<Payment | null>(null)
+export function CartPaymentView({ paymentId }: { paymentId: string }) {
+  const queryClient = useQueryClient()
+  const paymentQuery = usePayment(paymentId)
   const [message, setMessage] = useState<string>()
   const [now, setNow] = useState(() => Date.now())
   const [isPending, startTransition] = useTransition()
@@ -59,130 +63,57 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
   const card = useCardDetails()
   const sepa = useSepaDetails()
 
-  const eventId = payment?.eventId ?? null
-  const checkoutEvent = useMemo(
-    () => (eventId ? readCheckoutEvent(eventId) : null),
-    [eventId]
-  )
-
-  const start = useCallback(() => {
-    startTransition(async () => {
-      const result = await startPaymentAction(bookingId)
-
-      if (result.payment) {
-        setPayment(result.payment)
-        setMessage(undefined)
-      } else {
-        setMessage(
-          result.message ??
-            "Der Zahlungsvorgang konnte nicht geladen werden. Bitte versuche es später erneut."
-        )
-      }
-    })
-  }, [bookingId])
-
-  // The payment process starts as soon as the view opens: the backend stores
-  // the amount at that point, so what is shown is what is charged.
-  useEffect(() => {
-    start()
-  }, [start])
+  const payment = paymentQuery.data
+  const isPendingPayment = payment?.status === "pending"
 
   // Ticks the remaining reservation time while the payment is open.
   useEffect(() => {
-    if (payment?.status !== "pending") {
+    if (!isPendingPayment) {
       return
     }
 
     const timer = setInterval(() => setNow(Date.now()), 1000)
 
     return () => clearInterval(timer)
-  }, [payment?.status])
+  }, [isPendingPayment])
 
-  const isPendingPayment = payment?.status === "pending"
-
-  // AK4: what gets confirmed is the stored amount — read from the server's
-  // response, not from anything the user could mistype. The backend rejects
-  // any deviation from the amount it stored when the payment started (422).
-  const storedAmount = isPendingPayment ? parseAmount(payment.amount) : null
-
-  const expiresAt = payment?.expiresAt
-  const deadline = expiresAt ? Date.parse(expiresAt) : null
-  const deadlineKnown = deadline !== null && Number.isFinite(deadline)
-  const remaining = deadlineKnown ? formatRemaining(expiresAt, now) : null
-  const expired = deadlineKnown && deadline <= now
-
-  const canComplete =
-    isPendingPayment && storedAmount !== null && !expired && !isPending
-  const selectedValid = selectedMethod === "card" ? card.valid : sepa.valid
-  const canPayWithSelected = canComplete && selectedValid
-
-  function complete(
-    outcome: SimulatedPaymentOutcome,
-    via: FormPaymentMethod | "paypal" = selectedMethod
-  ) {
-    if (!payment || storedAmount === null) {
-      return
-    }
-
-    setMessage(undefined)
-    setMethod(via)
-
-    startTransition(async () => {
-      const result = await completePaymentAction(
-        bookingId,
-        outcome,
-        storedAmount
-      )
-
-      if (result.payment) {
-        setPayment(result.payment)
-      } else {
-        setMessage(
-          result.message ??
-            "Die Zahlung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
-        )
-      }
-    })
+  // The payment process is being loaded; nothing to show yet.
+  if (paymentQuery.isPending) {
+    return (
+      <Card className="max-w-xl">
+        <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircleIcon className="size-4 animate-spin" />
+          Zahlungsvorgang wird geladen …
+        </CardContent>
+      </Card>
+    )
   }
 
-  // The payment process is being started; nothing to show yet.
-  if (!payment) {
-    if (isPending) {
-      return (
-        <Card className="max-w-xl">
-          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LoaderCircleIcon className="size-4 animate-spin" />
-            Zahlungsvorgang wird geladen …
-          </CardContent>
-        </Card>
-      )
-    }
-
+  if (paymentQuery.isError || !payment) {
     return (
       <Card className="max-w-xl border-destructive/50">
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-start gap-2">
             <CircleXIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium">
-                Der Zahlungsvorgang konnte nicht geladen werden.
-              </p>
-              {message && (
-                <p className="text-sm text-muted-foreground">{message}</p>
-              )}
-            </div>
+            <p className="text-sm font-medium">
+              Der Zahlungsvorgang konnte nicht geladen werden.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={start} disabled={isPending}>
-              Erneut versuchen
+            <Button
+              size="sm"
+              onClick={() => paymentQuery.refetch()}
+              disabled={paymentQuery.isFetching}
+            >
+              {paymentQuery.isFetching ? "Lädt …" : "Erneut versuchen"}
             </Button>
             <Button
-              render={<Link href="/" />}
+              render={<Link href="/cart" />}
               nativeButton={false}
               size="sm"
               variant="outline"
             >
-              Veranstaltungen entdecken
+              Zum Warenkorb
             </Button>
           </div>
         </CardContent>
@@ -199,14 +130,59 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
     )
   }
 
+  // AK4: what gets confirmed is the stored amount — read from the server's
+  // response, not from anything the user could mistype. The backend rejects
+  // any deviation from the amount it stored at checkout (422).
+  const storedAmount = parseAmount(payment.amount)
+
+  const expiresAt = payment.expiresAt
+  const deadline = expiresAt ? Date.parse(expiresAt) : null
+  const deadlineKnown = deadline !== null && Number.isFinite(deadline)
+  const remaining = deadlineKnown ? formatRemaining(expiresAt, now) : null
+  const expired = deadlineKnown && deadline <= now
+
+  const canComplete = storedAmount !== null && !expired && !isPending
+  const selectedValid = selectedMethod === "card" ? card.valid : sepa.valid
+  const canPayWithSelected = canComplete && selectedValid
+
+  function complete(
+    outcome: SimulatedPaymentOutcome,
+    via: FormPaymentMethod | "paypal" = selectedMethod
+  ) {
+    if (storedAmount === null) {
+      return
+    }
+
+    setMessage(undefined)
+    setMethod(via)
+
+    startTransition(async () => {
+      const result = await completePaymentAction(
+        paymentId,
+        outcome,
+        storedAmount
+      )
+
+      if (result.payment) {
+        // The stored result replaces the open payment; the cart emptied
+        // into it (or the items were released after a failure), so the
+        // badge must not keep counting them.
+        queryClient.setQueryData(paymentQueryKey(paymentId), result.payment)
+        queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY })
+      } else {
+        setMessage(
+          result.message ??
+            "Die Zahlung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
+        )
+      }
+    })
+  }
+
+  // AK2: the view that carries out and simulates the payment process.
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
       <div className="lg:col-start-2 lg:row-start-1">
-        <OrderSummary
-          event={checkoutEvent}
-          eventId={payment.eventId}
-          numberOfTickets={payment.numberOfTickets}
-        />
+        <OrderSummary items={payment.items} />
       </div>
 
       <div className="lg:col-start-1 lg:row-span-3 lg:row-start-1">
@@ -239,12 +215,6 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
         <CardContent className="flex flex-col gap-4">
           <dl className="grid gap-2 text-sm">
             <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-muted-foreground">Reservierte Tickets</dt>
-              <dd className="font-medium">
-                {formatTicketCount(payment.numberOfTickets)}
-              </dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-2">
               <dt className="text-muted-foreground">Reservierung gültig bis</dt>
               <dd className="flex items-center gap-1.5 font-medium">
                 {remaining && !expired ? (
@@ -270,16 +240,16 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
               {formatAmount(payment.amount)}
             </span>
             <span className="text-xs text-muted-foreground">
-              Berechnet aus {payment.numberOfTickets}{" "}
-              {payment.numberOfTickets === 1 ? "Ticket" : "Tickets"} ×
-              Veranstaltungspreis; der Betrag wird serverseitig gespeichert.
+              Summe der Zeilenbeträge aller Items; der Betrag wird serverseitig
+              gespeichert.
             </span>
           </div>
 
           {expired ? (
             <p className="text-sm text-destructive" role="alert">
               Die Reservierung ist abgelaufen. Die Zahlung kann nicht mehr
-              abgeschlossen werden — bitte starte eine neue Buchung.
+              abgeschlossen werden — bitte lege die Tickets erneut in den
+              Warenkorb.
             </p>
           ) : (
             <>
@@ -320,23 +290,22 @@ export function PaymentView({ bookingId }: { bookingId: string }) {
           )}
 
           <p className="text-xs text-muted-foreground">
-            Nicht bezahlte Reservierungen laufen automatisch ab und die Tickets
-            werden wieder freigegeben.
+            Alle Items werden zusammen abgeschlossen — oder gar nicht. Nicht
+            bezahlte Reservierungen laufen automatisch ab und die Tickets werden
+            wieder freigegeben.
           </p>
         </CardContent>
       </Card>
 
       <div className="lg:col-start-2 lg:row-start-3">
         <Button
-          render={
-            <Link href={payment.eventId ? `/events/${payment.eventId}` : "/"} />
-          }
+          render={<Link href="/cart" />}
           nativeButton={false}
           variant="ghost"
           size="sm"
         >
           <ArrowLeftIcon />
-          Zurück zur Veranstaltung
+          Zurück zum Warenkorb
         </Button>
       </div>
     </div>

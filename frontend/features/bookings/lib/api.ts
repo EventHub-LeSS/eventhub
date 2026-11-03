@@ -1,16 +1,11 @@
 import "server-only"
-import type {
-  Booking,
-  OwnBooking,
-  Payment,
-  SimulatedPaymentOutcome,
-} from "@/features/bookings/lib/types"
+import type { OwnBooking } from "@/features/bookings/lib/types"
 import { envConfig } from "@/features/shared/lib/env"
 
 /**
  * Talks to the Go API with the signed-in user's own access token, like the
- * other features do. Bookings and payments are always the caller's own; the
- * API checks that per request.
+ * other features do. Own tickets and ratings are always the caller's own;
+ * the API checks that per request.
  */
 export class BookingApiError extends Error {
   constructor(
@@ -56,66 +51,6 @@ async function apiFetch<T>(
   }
 
   return (await response.json()) as T
-}
-
-/**
- * EVENTHUB-235 step 0: reserves tickets of a published event. The
- * reservation expires after 15 minutes unless the payment completes it.
- */
-export async function createBooking(
-  accessToken: string,
-  eventId: string,
-  numberOfTickets: number
-): Promise<Booking> {
-  return apiFetch<Booking>("/bookings", {
-    accessToken,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ eventId, numberOfTickets }),
-  })
-}
-
-/**
- * Step 1: turns the reservation into a pending payment. The amount is the
- * number of tickets times the event price, computed and stored by the
- * backend only; a repeated call returns the pending payment unchanged, so
- * the amount shown stays the amount that is charged.
- */
-export async function startPayment(
-  accessToken: string,
-  bookingId: string
-): Promise<Payment> {
-  return apiFetch<Payment>(`/bookings/${bookingId}/payment`, {
-    accessToken,
-    method: "POST",
-  })
-}
-
-/**
- * Step 2: completes the payment with the outcome of the simulated payment
- * provider. The amount must be the one shown to the user; any deviation is
- * rejected with 422 without changing anything.
- */
-export async function simulatePayment(
-  accessToken: string,
-  bookingId: string,
-  outcome: SimulatedPaymentOutcome,
-  amount: number
-): Promise<Payment> {
-  return apiFetch<Payment>(`/bookings/${bookingId}/payment/simulate`, {
-    accessToken,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome, amount }),
-  })
-}
-
-/** Step 3, any time: the stored payment process of the booking. */
-export async function getPayment(
-  accessToken: string,
-  bookingId: string
-): Promise<Payment> {
-  return apiFetch<Payment>(`/bookings/${bookingId}/payment`, { accessToken })
 }
 
 export async function getOwnTickets(

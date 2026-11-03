@@ -7,21 +7,23 @@ import {
   formatAmount,
   formatTicketCount,
   paymentStatusLabels,
-} from "@/features/bookings/lib/format"
-import type { Payment } from "@/features/bookings/lib/types"
+} from "@/features/cart/lib/format"
+import type { Payment } from "@/features/cart/lib/types"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
 import { Card, CardContent } from "@/features/shared/components/ui/card"
 
 /**
- * AK3: the clear result of a completed payment, straight from the stored
- * state. `payment.message` is the backend's own wording, so the result can
- * never contradict what was booked and charged.
+ * AK3: the clear result of a completed cart payment, straight from the
+ * stored state. `payment.message` is the backend's own wording, so the
+ * result can never contradict what was booked and charged — for every
+ * single item.
  */
 export function PaymentResult({ payment }: { payment: Payment }) {
   const success = payment.status === "paid" && payment.ticketsValid
   const failed = payment.status === "failed"
   const paidWithoutTickets = payment.status === "paid" && !payment.ticketsValid
+  const refunded = payment.status === "refunded"
 
   const heading = success
     ? "Zahlung erfolgreich"
@@ -29,11 +31,11 @@ export function PaymentResult({ payment }: { payment: Payment }) {
       ? "Zahlung abgeschlossen"
       : failed
         ? "Zahlung fehlgeschlagen"
-        : payment.status === "refunded"
+        : refunded
           ? "Zahlung erstattet"
           : "Zahlungsvorgang"
 
-  const eventHref = payment.eventId ? `/events/${payment.eventId}` : "/"
+  const showsTickets = success || refunded
 
   return (
     <Card data-testid="payment-result" className="gap-4">
@@ -60,9 +62,6 @@ export function PaymentResult({ payment }: { payment: Payment }) {
           <Badge variant={success ? "secondary" : "outline"}>
             Zahlung: {paymentStatusLabels[payment.status]}
           </Badge>
-          <Badge variant={success ? "secondary" : "outline"}>
-            Buchung: {bookingStatusLabels[payment.bookingStatus]}
-          </Badge>
           {payment.ticketsValid && (
             <Badge className="bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black">
               Tickets gültig
@@ -70,17 +69,33 @@ export function PaymentResult({ payment }: { payment: Payment }) {
           )}
         </div>
 
+        <ul className="flex flex-col gap-2">
+          {payment.items.map((item) => (
+            <li
+              key={item.bookingId}
+              className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-2 text-sm last:border-b-0 last:pb-0"
+            >
+              <div className="flex flex-col">
+                <span className="font-medium">
+                  {item.event?.title ?? "Veranstaltung nicht mehr verfügbar"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatTicketCount(item.numberOfTickets)} · Buchung:{" "}
+                  {bookingStatusLabels[item.bookingStatus]}
+                </span>
+              </div>
+              <span className="font-medium tabular-nums">
+                {formatAmount(item.lineAmount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
         <dl className="grid gap-2 text-sm">
           <div className="flex items-baseline justify-between gap-2">
-            <dt className="text-muted-foreground">Bezahlter Betrag</dt>
+            <dt className="text-muted-foreground">Gesamtbetrag</dt>
             <dd className="font-medium tabular-nums">
               {formatAmount(payment.amount)}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <dt className="text-muted-foreground">Tickets</dt>
-            <dd className="font-medium">
-              {formatTicketCount(payment.numberOfTickets)}
             </dd>
           </div>
           {payment.failureReason && (
@@ -96,12 +111,13 @@ export function PaymentResult({ payment }: { payment: Payment }) {
 
         {failed && (
           <p className="text-xs text-muted-foreground">
-            Für einen neuen Versuch ist eine neue Buchung nötig.
+            Für einen neuen Versuch lege die Tickets einfach erneut in den
+            Warenkorb.
           </p>
         )}
 
         <div className="flex flex-wrap gap-2">
-          {success ? (
+          {showsTickets ? (
             <>
               <Button render={<Link href="/tickets" />} nativeButton={false}>
                 Zu meinen Tickets
@@ -116,15 +132,15 @@ export function PaymentResult({ payment }: { payment: Payment }) {
             </>
           ) : (
             <>
-              <Button render={<Link href={eventHref} />} nativeButton={false}>
-                Erneut buchen
+              <Button render={<Link href="/" />} nativeButton={false}>
+                Veranstaltungen entdecken
               </Button>
               <Button
-                render={<Link href="/" />}
+                render={<Link href="/cart" />}
                 nativeButton={false}
                 variant="outline"
               >
-                Veranstaltungen entdecken
+                Zum Warenkorb
               </Button>
             </>
           )}
