@@ -394,7 +394,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Liefert den Warenkorb des Aufrufers: jede lebende Reservierung ohne Zahlung mit der aktuellen Verfügbarkeit und den aktuellen Preisen ihres Events. Reservierungen halten ihre Plätze bis expiresAt; danach sind sie nicht mehr Teil des Warenkorb. totalAmount ist die Summe der aktuellen Zeilenbeträge — der Checkout berechnet und speichert den zu zahlenden Betrag selbst. checkoutReady ist nur true, wenn der Warenkorb Items hat und alle Events noch veröffentlicht sind.",
+                "description": "Liefert den Warenkorb des Aufrufers: jede lebende Reservierung ohne Zahlung mit der aktuellen Verfügbarkeit und den aktuellen Preisen ihres Events. Reservierungen halten ihre Plätze bis expiresAt; danach sind sie nicht mehr Teil des Warenkorb. totalAmount ist die Summe der aktuellen Zeilenbeträge — der Checkout berechnet und speichert den zu zahlenden Betrag selbst. checkoutReady ist nur true, wenn der Warenkorb Items hat und alle Events noch veröffentlicht sind. openPayment nennt den offenen Zahlungsvorgang des Aufrufers, falls einer existiert: Dessen Items haben den Warenkorb verlassen und warten auf ihre Zahlung — sie halten ihre Plätze bis expiresAt — und neue Items können erst ausgecheckt werden, wenn der Vorgang abgeschlossen ist.",
                 "produces": [
                     "application/json"
                 ],
@@ -817,7 +817,7 @@ const docTemplate = `{
         },
         "/events": {
             "get": {
-                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
+                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -840,7 +840,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter.",
+                        "description": "Date in YYYY-MM-DD format, interpreted in Europe/Berlin. Events taking place during this calendar day are returned, including multi-day events that span it. Empty means no date filter.",
                         "name": "date",
                         "in": "query"
                     }
@@ -3207,6 +3207,14 @@ const docTemplate = `{
                         "$ref": "#/definitions/model.CartItemResponse"
                     }
                 },
+                "openPayment": {
+                    "description": "The caller's checkout that is still open, if any: its items left the cart and wait for\ntheir payment, so the cart reports the checkout instead of letting the items vanish.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OpenCartPayment"
+                        }
+                    ]
+                },
                 "totalAmount": {
                     "description": "Sum of the line totals of the items, from the current event data. The checkout computes\nand stores the charged amount itself.",
                     "type": "string",
@@ -3649,6 +3657,29 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.OpenCartPayment": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Stored sum of the line amounts: the amount completing the payment would charge.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "expiresAt": {
+                    "description": "Shared deadline of the payment's reservations; the payment must complete before it.",
+                    "type": "string"
+                },
+                "paymentId": {
+                    "description": "Identifies the payment; GET /payments/{paymentId} shows its items.",
+                    "type": "string"
+                },
+                "totalTickets": {
+                    "description": "Reserved tickets over all items of the payment.",
+                    "type": "integer",
+                    "example": 2
                 }
             }
         },

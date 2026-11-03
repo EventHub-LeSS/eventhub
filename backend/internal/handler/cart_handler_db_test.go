@@ -276,6 +276,44 @@ func TestGetCart_ShowsItemsPricesAndSkipsExpired(t *testing.T) {
 	}
 }
 
+func TestGetCart_ShowsTheOpenCheckout(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	seedBookingUser(t, db, bookingKeycloakUserID)
+	router := newCartRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+
+	addToCartViaAPI(t, router, event.eventID, 2)
+	payment := checkoutViaAPI(t, router)
+
+	// The items left the cart with the checkout; the open payment takes their place with the
+	// stored sums, so a return from the payment view does not look like lost items.
+	cart := getCartViaAPI(t, router)
+	if len(cart.Items) != 0 {
+		t.Fatalf("checked-out items must leave the cart: %+v", cart.Items)
+	}
+	if cart.OpenPayment == nil || cart.OpenPayment.PaymentID != payment.PaymentID ||
+		!cart.OpenPayment.Amount.Equal(payment.Amount) || cart.OpenPayment.TotalTickets != 2 {
+		t.Fatalf("unexpected open payment: %+v, want payment %s (%s, 2 tickets)", cart.OpenPayment, payment.PaymentID, payment.Amount)
+	}
+	if cart.OpenPayment.ExpiresAt.Before(time.Now()) {
+		t.Errorf("the shared deadline must be live, got %v", cart.OpenPayment.ExpiresAt)
+	}
+
+	// Items added while the checkout is open coexist with it; it stays unchanged.
+	addToCartViaAPI(t, router, event.eventID, 1)
+	cart = getCartViaAPI(t, router)
+	if len(cart.Items) != 1 || cart.OpenPayment == nil || cart.OpenPayment.PaymentID != payment.PaymentID {
+		t.Fatalf("the open checkout must stay while items coexist: %+v", cart)
+	}
+
+	// Once the payment completes, no checkout is open anymore.
+	simulateViaAPI(t, router, payment.PaymentID, model.SimulatedPaymentSuccess, payment.Amount)
+	cart = getCartViaAPI(t, router)
+	if len(cart.Items) != 1 || cart.OpenPayment != nil {
+		t.Fatalf("a completed payment must not show as open: %+v", cart)
+	}
+}
+
 func TestUpdateCartItem_Quantity(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)

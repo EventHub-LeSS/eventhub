@@ -29,7 +29,7 @@ import {
   formatRemaining,
   formatTicketCount,
 } from "@/features/cart/lib/format"
-import type { CartItem } from "@/features/cart/lib/types"
+import type { CartItem, OpenCartPayment } from "@/features/cart/lib/types"
 import { CART_QUERY_KEY, useCart } from "@/features/cart/lib/use-cart"
 import { MAX_TICKETS_PER_EVENT } from "@/features/cart/lib/validation"
 import { Badge } from "@/features/shared/components/ui/badge"
@@ -53,17 +53,19 @@ export function CartView() {
   const items = cart.data?.items ?? []
   const totalTickets = cart.data?.totalTickets ?? 0
   const checkoutReady = cart.data?.checkoutReady ?? false
+  const openPayment = cart.data?.openPayment ?? null
 
-  // Ticks the remaining reservation time while the cart holds items.
+  // Ticks the remaining reservation time while the cart holds items or an
+  // open checkout keeps theirs.
   useEffect(() => {
-    if (items.length === 0) {
+    if (items.length === 0 && openPayment === null) {
       return
     }
 
     const timer = setInterval(() => setNow(Date.now()), 1000)
 
     return () => clearInterval(timer)
-  }, [items.length])
+  }, [items.length, openPayment])
 
   // A reservation that ran out holds no seats; the backend drops it on the
   // next read. Until the refresh, the row shows it as expired.
@@ -168,41 +170,35 @@ export function CartView() {
     )
   }
 
-  if (items.length === 0) {
+  if (items.length === 0 && openPayment === null) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-start gap-3">
-          <p className="text-sm text-muted-foreground">
-            Dein Warenkorb ist leer. Reservierte Tickets erscheinen hier — ihre
-            Plätze bleiben 15 Minuten für dich reserviert.
-          </p>
-          <Button
-            render={<Link href="/" />}
-            nativeButton={false}
-            variant="outline"
-          >
-            Veranstaltungen entdecken
-          </Button>
-        </CardContent>
-      </Card>
+      <EmptyCartCard hint="Tickets im Warenkorb bleiben 15 Minuten für dich reserviert." />
     )
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-3">
-        {items.map((item) => (
-          <li key={item.bookingId}>
-            <CartRow
-              item={item}
-              now={now}
-              disabled={isPending}
-              onChange={changeQuantity}
-              onRemove={removeItem}
-            />
-          </li>
-        ))}
-      </ul>
+      {openPayment && <OpenCheckoutCard payment={openPayment} now={now} />}
+
+      {items.length === 0 ? (
+        // The banner above already explains how new items relate to the
+        // open checkout, so the card only states that none are waiting.
+        <EmptyCartCard />
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((item) => (
+            <li key={item.bookingId}>
+              <CartRow
+                item={item}
+                now={now}
+                disabled={isPending}
+                onChange={changeQuantity}
+                onRemove={removeItem}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
 
       {anyExpired && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 p-3">
@@ -220,51 +216,65 @@ export function CartView() {
         </div>
       )}
 
-      <Card className="gap-4">
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm font-semibold">Gesamt</span>
-              <span className="text-2xl font-extrabold tabular-nums">
-                {formatAmount(cart.data?.totalAmount ?? null)}
-              </span>
+      {items.length > 0 && (
+        <Card className="gap-4">
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold">Gesamt</span>
+                <span className="text-2xl font-extrabold tabular-nums">
+                  {formatAmount(cart.data?.totalAmount ?? null)}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatTicketCount(totalTickets)} · Beträge der aktuellen
+                Veranstaltungspreise
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {formatTicketCount(totalTickets)} · Beträge der aktuellen
-              Veranstaltungspreise
-            </p>
-          </div>
 
-          {message && (
-            <p className="text-sm text-destructive" role="alert">
-              {message}
-            </p>
-          )}
+            {message && (
+              <p className="text-sm text-destructive" role="alert">
+                {message}
+              </p>
+            )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={handleCheckout}
-              disabled={!checkoutReady || anyExpired || isPending}
-            >
-              <ShoppingCartIcon />
-              {isPending ? "Checkout läuft …" : "Zur Kasse"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleClear}
-              disabled={items.length === 0 || isPending}
-            >
-              Warenkorb leeren
-            </Button>
-          </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={handleCheckout}
+                disabled={
+                  !checkoutReady ||
+                  anyExpired ||
+                  isPending ||
+                  openPayment !== null
+                }
+              >
+                <ShoppingCartIcon />
+                {isPending ? "Checkout läuft …" : "Zur Kasse"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleClear}
+                disabled={items.length === 0 || isPending}
+              >
+                Warenkorb leeren
+              </Button>
+            </div>
 
-          <p className="text-xs text-muted-foreground">
-            Alle Reservierungen werden zusammen in einem Zahlungsvorgang
-            abgeschlossen — oder gar nicht. Unbezahlt laufen sie ab und die
-            Plätze werden wieder freigegeben.
-          </p>
-        </CardContent>
-      </Card>
+            {openPayment ? (
+              <p className="text-sm text-muted-foreground" role="note">
+                Weitere Artikel können erst ausgecheckt werden, wenn die offene
+                Zahlung abgeschlossen ist.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Alle Reservierungen werden zusammen in einem Zahlungsvorgang
+                abgeschlossen — oder gar nicht. Unbezahlt laufen sie ab und die
+                Plätze werden wieder freigegeben.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
@@ -273,6 +283,88 @@ function isExpired(item: CartItem, now: number): boolean {
   const deadline = Date.parse(item.expiresAt)
 
   return Number.isFinite(deadline) && deadline <= now
+}
+
+/**
+ * The empty cart, as a quiet centered hint instead of item rows, like the
+ * empty states of the event list and the notifications. The hint explains
+ * what happens to tickets once they are added; it is omitted while a
+ * checkout is open, because the banner above already explains how new
+ * items relate to it.
+ */
+function EmptyCartCard({ hint }: { hint?: string }) {
+  return (
+    <Card className="border border-dashed border-border py-8 ring-0">
+      <CardContent className="flex flex-col items-center gap-2 text-center">
+        <ShoppingCartIcon className="size-6 text-muted-foreground" />
+        <p className="text-sm font-medium text-foreground">
+          Dein Warenkorb ist leer
+        </p>
+        {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+        <Button
+          className="mt-2"
+          render={<Link href="/" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          Veranstaltungen entdecken
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * The banner of the caller's open checkout: its items left the cart with
+ * the checkout and wait for their payment. The cart query reports the
+ * checkout, so returning from the payment view does not look like lost
+ * items.
+ */
+function OpenCheckoutCard({
+  payment,
+  now,
+}: {
+  payment: OpenCartPayment
+  now: number
+}) {
+  const remaining = formatRemaining(payment.expiresAt, now)
+
+  return (
+    <Card className="border-primary/40">
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm font-semibold">
+            Dein Checkout wartet auf die Zahlung
+          </p>
+          {remaining && (
+            <Badge variant="secondary" className="tabular-nums">
+              <ClockIcon data-icon="inline-start" />
+              {remaining}
+            </Badge>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {formatTicketCount(payment.totalTickets)} für{" "}
+          {formatAmount(payment.amount)} sind bereits ausgecheckt und halten
+          ihre Plätze, bis die Zahlung abgeschlossen ist oder die Reservierung
+          abläuft.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            render={<Link href={`/cart/payment/${payment.paymentId}`} />}
+            nativeButton={false}
+          >
+            Zahlung abschließen
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Artikel, die du jetzt in den Warenkorb legst, bleiben reserviert und
+          können erst ausgecheckt werden, wenn diese Zahlung abgeschlossen ist.
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 /** One cart item: the reserved tickets of one event. */

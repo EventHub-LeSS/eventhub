@@ -47,6 +47,23 @@ export interface CartItem {
   createdAt: string
 }
 
+/**
+ * Mirrors `model.OpenCartPayment`: the checkout of the caller that still
+ * waits for its payment. Its items have left the cart — they hold their
+ * seats until the payment completes or the shared deadline passes. Null
+ * while no checkout is open; new items can only be checked out after the
+ * open one completes.
+ */
+export interface OpenCartPayment {
+  paymentId: string
+  /** Stored sum of the line amounts, as an exact decimal string. */
+  amount: string
+  /** Reserved tickets over all items of the payment. */
+  totalTickets: number
+  /** Shared deadline of the payment's reservations. */
+  expiresAt: string
+}
+
 /** Mirrors `model.CartResponse`. */
 export interface Cart {
   items: CartItem[]
@@ -56,6 +73,12 @@ export interface Cart {
   totalAmount: string
   /** True when the cart has items and all of them belong to published events. */
   checkoutReady: boolean
+  /**
+   * The caller's checkout that is still open, if any: its items left the
+   * cart and wait for their payment, so the cart reports the checkout
+   * instead of letting the items vanish.
+   */
+  openPayment: OpenCartPayment | null
 }
 
 /** Mirrors `model.BookingStatus`. */

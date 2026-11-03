@@ -53,7 +53,14 @@ func (s *CartService) GetCart(ctx context.Context, userID uuid.UUID) (*model.Car
 	if err != nil {
 		return nil, err
 	}
-	return cartResponse(items), nil
+	resp := cartResponse(items)
+	// The items of an open checkout left the cart but keep their seats; the cart reports the
+	// checkout, so returning from the payment view does not look like lost items.
+	resp.OpenPayment, err = s.carts.OpenPayment(userID)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // AddToCart reserves tickets of a published event for the user, like a booking did before, and

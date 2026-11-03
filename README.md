@@ -193,7 +193,7 @@ Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt der Client.
 
 | Endpunkt | Bedeutung |
 | --- | --- |
-| `GET /api/v1/cart` | Warenkorb des Aufrufers: jedes Item mit Event, Ticketanzahl, aktuellem Einzelpreis und Zeilenbetrag, Platzgrenze (`availableSeats` = freie Plätze **plus** eigene Tickets), `bookable` und `expiresAt`; dazu `totalTickets`, `totalAmount` (Summe der aktuellen Zeilenbeträge) und `checkoutReady`. |
+| `GET /api/v1/cart` | Warenkorb des Aufrufers: jedes Item mit Event, Ticketanzahl, aktuellem Einzelpreis und Zeilenbetrag, Platzgrenze (`availableSeats` = freie Plätze **plus** eigene Tickets), `bookable` und `expiresAt`; dazu `totalTickets`, `totalAmount` (Summe der aktuellen Zeilenbeträge) und `checkoutReady`. `openPayment` nennt den offenen Zahlungsvorgang des Aufrufers (`paymentId`, gespeicherter Betrag, Ticketzahl, gemeinsame Ablauffrist), falls einer existiert: Dessen Items haben den Warenkorb verlassen und warten auf ihre Zahlung, und neue Items können erst ausgecheckt werden, wenn er abgeschlossen ist. |
 | `POST /api/v1/cart/items` | Reserviert Tickets eines veröffentlichten Events (`eventId`, `quantity`) und legt sie in den Warenkorb. Existiert bereits ein Item für das Event, wächst dessen Anzahl (max. 10) und die Reservierung wird erneuert; ein abgelaufenes Item ohne Zahlung wird in derselben Zeile ersetzt. Der Platz wird sofort gegen die Kapazität geprüft. Antwort `201` mit dem Warenkorb. |
 | `PATCH /api/v1/cart/items/{bookingId}` | Setzt die Ticketanzahl eines eigenen Items. Das Item behält seine reservierten Plätze, mehr Tickets brauchen freie Plätze; die Reservierung wird erneuert. |
 | `DELETE /api/v1/cart/items/{bookingId}` | Entfernt ein Item und gibt dessen Plätze sofort frei. |
@@ -216,7 +216,9 @@ antwortet der Checkout `409`, bei leerem Warenkorb `422`. Ein nicht mehr veröff
 lässt den gesamten Checkout scheitern (`409`): Der Zahlungsvorgang gilt für alle Buchungen zusammen
 oder für keine. Ein Nutzer hat höchstens einen offenen Zahlungsvorgang; Items, die danach in den
 Warenkorb gelegt werden, koexistieren, können aber erst ausgecheckt werden, wenn er abgeschlossen
-ist.
+ist. Der offene Vorgang ist über `openPayment` in `GET /cart` sichtbar, sodass die ausgecheckten
+Artikel nicht wie verloren wirken: Wer von der Zahlung zurückkehrt, findet den Vorgang im
+Warenkorb und kann ihn fortsetzen.
 
 **Ergebnisse:** Alle drei Zahlungsendpunkte antworten mit `PaymentResponse` aus den gespeicherten
 Daten: `amount` (Summe), `items` (je `bookingId`, `event`, `numberOfTickets`, `lineAmount`,
@@ -278,12 +280,14 @@ ihrer Zahlung; Reservierungen ohne Zahlung (Warenkorb-Items) bleiben `NULL`.
 **Frontend:** Die Eventseite legt Tickets mit einem Stepper in den Warenkorb (Gesamt der
 **Hinzufügung** aus Anzahl × Preis, Kapazitätsgrenze im Stepper); anonyme Besucher parken ihre
 Eingabe für den Login-Roundtrip und der Warenkorb wird direkt nach der Anmeldung befüllt. Die
-Navigation zeigt einen Warenkorb-Button mit der Anzahl reservierter Tickets (geteilter
-TanStack-Query über die BFF-Route `/api/cart`, Refetch alle 60 Sekunden). Die Seite `/cart`
-verwaltet Mengen, zeigt Ablauffristen pro Item und checkt an der Kasse aus;
-`/cart/payment/{paymentId}` führt die simulierte Zahlung über Kartendaten, die nur im Browser
-validiert werden, und zeigt das Ergebnis aller Items. `/cart` ist wie `/tickets` über den Proxy
-(`proxy.ts`) geschützt.
+Navigation zeigt einen Warenkorb-Button mit der Anzahl reservierter Tickets — Warenkorb plus
+offenem Checkout (geteilter TanStack-Query über die BFF-Route `/api/cart`, Refetch alle 60
+Sekunden). Die Seite `/cart` verwaltet Mengen, zeigt Ablauffristen pro Item und checkt an der
+Kasse aus; während ein Zahlungsvorgang offen ist, zeigt sie einen Hinweis mit Fortsetzen-Link und
+sperrt die Kasse für neue Artikel. `/cart/payment/{paymentId}` führt die simulierte Zahlung über
+Kartendaten, die nur im Browser validiert werden, zeigt das Ergebnis aller Items und weist auf
+Warenkorb-Artikel hin, die erst nach dieser Zahlung ausgecheckt werden können. `/cart` ist wie
+`/tickets` über den Proxy (`proxy.ts`) geschützt.
 
 **Getestet:** Automatisch über `TestAddToCart_*`, `TestGetCart_*`, `TestUpdateQuantity_*`,
 `TestRemoveCartItem_*`, `TestClearCart*`, `TestCheckout_*`, `TestGetPayment_*`,

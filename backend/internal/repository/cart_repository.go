@@ -32,6 +32,10 @@ type CartRepository interface {
 	// ListCart returns the live cart items of the user, the oldest first, from one statement
 	// and thus one snapshot: one clock for every expiry and one occupancy count per event.
 	ListCart(userID uuid.UUID) ([]*CartItem, error)
+	// OpenPayment returns the user's open checkout — the pending payment that their live
+	// reservations belong to — or nil when no checkout is open. Its items are no cart items,
+	// but they keep their seats.
+	OpenPayment(userID uuid.UUID) (*model.OpenCartPayment, error)
 }
 
 type cartRepository struct {
@@ -109,6 +113,49 @@ func (r *cartRepository) ListCart(userID uuid.UUID) ([]*CartItem, error) {
 		items = append(items, rows[i].cartItem())
 	}
 	return items, nil
+}
+
+// openPaymentQuery selects the user's open checkout: the pending payment their live
+// reservations belong to. The checkout gives all of its bookings one shared expiry, so the
+// reservations judge as live together. The clock CTE reads clock_timestamp() once, like the
+// cart query; at most one checkout can be open, the latest one wins defensively.
+const openPaymentQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
+	SELECT p.payment_id AS payment_id, p.amount AS amount,
+	    COALESCE(SUM(b.number_of_tickets), 0) AS total_tickets,
+	    MIN(b.expires_at) AS expires_at
+	FROM payments p
+	CROSS JOIN clock
+	JOIN bookings b ON b.payment_id = p.payment_id
+	WHERE b.user_id = ? AND b.status = ? AND p.status = ?
+	    AND b.expires_at > (SELECT database_now FROM clock)
+	GROUP BY p.payment_id, p.amount, p.created_at
+	ORDER BY p.created_at DESC, p.payment_id
+	LIMIT 1`
+
+// openPaymentRow is the single row of openPaymentQuery; a zero payment ID marks "none".
+type openPaymentRow struct {
+	PaymentID    uuid.UUID           `gorm:"column:payment_id"`
+	Amount       decimal.NullDecimal `gorm:"column:amount"`
+	TotalTickets int64               `gorm:"column:total_tickets"`
+	ExpiresAt    time.Time           `gorm:"column:expires_at"`
+}
+
+func (r *cartRepository) OpenPayment(userID uuid.UUID) (*model.OpenCartPayment, error) {
+	var row openPaymentRow
+	err := r.db.Raw(openPaymentQuery, userID, model.BookingStatusReserved, model.PaymentStatusPending).
+		Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.PaymentID == uuid.Nil {
+		return nil, nil
+	}
+	return &model.OpenCartPayment{
+		PaymentID:    row.PaymentID,
+		Amount:       row.Amount.Decimal,
+		TotalTickets: int(row.TotalTickets),
+		ExpiresAt:    row.ExpiresAt,
+	}, nil
 }
 
 func (row *cartRow) cartItem() *CartItem {
