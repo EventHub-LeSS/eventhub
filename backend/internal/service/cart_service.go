@@ -437,8 +437,8 @@ func eventTitle(event *model.EventModel, booking *model.BookingModel) string {
 // cartResponse builds the cart view from one snapshot of the cart items.
 func cartResponse(items []*repository.CartItem) *model.CartResponse {
 	resp := &model.CartResponse{
-		Items:        make([]model.CartItemResponse, 0, len(items)),
-		TotalAmount:  decimal.Zero,
+		Items:         make([]model.CartItemResponse, 0, len(items)),
+		TotalAmount:   decimal.Zero,
 		CheckoutReady: len(items) > 0,
 	}
 	for _, item := range items {

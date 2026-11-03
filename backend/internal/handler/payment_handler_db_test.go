@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	otherBookingKeycloakUserID  = "kc-other-booking-user"
+	otherBookingKeycloakUserID   = "kc-other-booking-user"
 	expiredBookingKeycloakUserID = "kc-expired-booking-user"
 )
 

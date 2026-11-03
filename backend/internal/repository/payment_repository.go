@@ -138,17 +138,17 @@ type paymentViewRow struct {
 	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
 	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
 	model.BookingModel
-	EventStatus          *model.EventStatus `gorm:"column:event_status"`
-	EventTitle           *string            `gorm:"column:event_title"`
-	EventStartTime       *time.Time         `gorm:"column:event_start_time"`
-	EventEndTime         *time.Time         `gorm:"column:event_end_time"`
-	LocationID           *uuid.UUID         `gorm:"column:location_id"`
-	LocationName         *string            `gorm:"column:location_name"`
-	LocationCity         *string            `gorm:"column:location_city"`
-	LocationPostalCode   *string            `gorm:"column:location_postal_code"`
-	LocationStreet       *string            `gorm:"column:location_street"`
-	LocationHouseNumber  *string            `gorm:"column:location_house_number"`
-	DatabaseNow          time.Time          `gorm:"column:database_now"`
+	EventStatus         *model.EventStatus `gorm:"column:event_status"`
+	EventTitle          *string            `gorm:"column:event_title"`
+	EventStartTime      *time.Time         `gorm:"column:event_start_time"`
+	EventEndTime        *time.Time         `gorm:"column:event_end_time"`
+	LocationID          *uuid.UUID         `gorm:"column:location_id"`
+	LocationName        *string            `gorm:"column:location_name"`
+	LocationCity        *string            `gorm:"column:location_city"`
+	LocationPostalCode  *string            `gorm:"column:location_postal_code"`
+	LocationStreet      *string            `gorm:"column:location_street"`
+	LocationHouseNumber *string            `gorm:"column:location_house_number"`
+	DatabaseNow         time.Time          `gorm:"column:database_now"`
 }
 
 // paymentViewQuery selects a payment with its bookings, events and locations. The clock CTE
@@ -211,12 +211,12 @@ func (row *paymentViewRow) paymentItem() *PaymentItem {
 	}
 	if row.LocationID != nil {
 		item.Location = &model.LocationModel{
-			LocationID:   *row.LocationID,
-			Name:         derefString(row.LocationName),
-			City:         derefString(row.LocationCity),
-			PostalCode:   derefString(row.LocationPostalCode),
-			Street:       derefString(row.LocationStreet),
-			HouseNumber:  row.LocationHouseNumber,
+			LocationID:  *row.LocationID,
+			Name:        derefString(row.LocationName),
+			City:        derefString(row.LocationCity),
+			PostalCode:  derefString(row.LocationPostalCode),
+			Street:      derefString(row.LocationStreet),
+			HouseNumber: row.LocationHouseNumber,
 		}
 	}
 	return item

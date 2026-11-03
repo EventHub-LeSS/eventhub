@@ -56,11 +56,11 @@ const (
 type PaymentItemResponse struct {
 	BookingID uuid.UUID `json:"bookingId"`
 	// Null when the event of the booking no longer exists.
-	Event *OwnBookingEvent `json:"event"`
-	NumberOfTickets int `json:"numberOfTickets" example:"2"`
+	Event           *OwnBookingEvent `json:"event"`
+	NumberOfTickets int              `json:"numberOfTickets" example:"2"`
 	// Tickets times the event price at checkout time; the charged amount of this item.
-	LineAmount decimal.Decimal `json:"lineAmount" swaggertype:"string" example:"40"`
-	BookingStatus BookingStatus `json:"bookingStatus"`
+	LineAmount    decimal.Decimal `json:"lineAmount" swaggertype:"string" example:"40"`
+	BookingStatus BookingStatus   `json:"bookingStatus"`
 	// True only when the payment is paid, this booking is confirmed and the event takes place
 	// or took place.
 	TicketsValid bool `json:"ticketsValid"`

@@ -46,8 +46,8 @@ func newCartAPI(db *gorm.DB) cartAPI {
 	bookingRepo := repository.NewBookingRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	return cartAPI{
-		cart: NewCartHandler(service.NewCartService(tx, bookingRepo, repository.NewCartRepository(db), paymentRepo, 0), userRepo),
-		payment: NewPaymentHandler(service.NewPaymentService(tx, bookingRepo, paymentRepo), userRepo),
+		cart:     NewCartHandler(service.NewCartService(tx, bookingRepo, repository.NewCartRepository(db), paymentRepo, 0), userRepo),
+		payment:  NewPaymentHandler(service.NewPaymentService(tx, bookingRepo, paymentRepo), userRepo),
 		cancel:   CancelBooking(service.NewBookingService(tx, bookingRepo, paymentRepo), userRepo),
 		userRepo: userRepo,
 	}
@@ -305,11 +305,11 @@ func TestUpdateCartItem_Quantity(t *testing.T) {
 	wantProblem(t, doPaymentRequest(t, router, http.MethodPatch, path, map[string]any{"quantity": 2}), http.StatusConflict)
 
 	cases := []struct {
-		name      string
-		router    http.Handler
-		path      string
-		body      any
-		want      int
+		name   string
+		router http.Handler
+		path   string
+		body   any
+		want   int
 	}{
 		{"missing principal", newCartRouter(db, nil), path, map[string]any{"quantity": 2}, http.StatusUnauthorized},
 		{"user not synced", newCartRouter(db, &middleware.Principal{Subject: "kc-unknown"}), path, map[string]any{"quantity": 2}, http.StatusForbidden},

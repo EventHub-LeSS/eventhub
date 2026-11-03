@@ -245,7 +245,7 @@ func TestAddToCart_ExpiredReservationIsReplaced(t *testing.T) {
 	if item == nil {
 		t.Fatalf("no item for the event: %+v", cart)
 	}
-	if item.ExpiresAt.Before(time.Now().Add(14*time.Minute)) {
+	if item.ExpiresAt.Before(time.Now().Add(14 * time.Minute)) {
 		t.Errorf("expected expiry about 15 minutes ahead, got %v", item.ExpiresAt)
 	}
 	var rows int64
