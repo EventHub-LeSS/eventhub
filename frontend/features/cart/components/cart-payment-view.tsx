@@ -1,48 +1,48 @@
-"use client"
+"use client";
 
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftIcon,
   CircleXIcon,
   ClockIcon,
   LoaderCircleIcon,
   ShieldQuestionIcon,
-} from "lucide-react"
-import Link from "next/link"
-import { useEffect, useState, useTransition } from "react"
+} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState, useTransition } from "react";
 
-import { OrderSummary } from "@/features/cart/components/order-summary"
+import { OrderSummary } from "@/features/cart/components/order-summary";
 import {
   type FormPaymentMethod,
   PaymentMethods,
   useCardDetails,
   useSepaDetails,
-} from "@/features/cart/components/payment-methods"
-import { PaymentResult } from "@/features/cart/components/payment-result"
-import { completePaymentAction } from "@/features/cart/lib/actions"
+} from "@/features/cart/components/payment-methods";
+import { PaymentResult } from "@/features/cart/components/payment-result";
+import { completePaymentAction } from "@/features/cart/lib/actions";
 import {
   formatAmount,
   formatDateTime,
   formatRemaining,
   formatTicketCount,
-} from "@/features/cart/lib/format"
-import type { SimulatedPaymentOutcome } from "@/features/cart/lib/types"
+} from "@/features/cart/lib/format";
+import type { SimulatedPaymentOutcome } from "@/features/cart/lib/types";
 import {
   CART_QUERY_KEY,
   paymentQueryKey,
   useCart,
   usePayment,
-} from "@/features/cart/lib/use-cart"
-import { parseAmount } from "@/features/cart/lib/validation"
-import { Badge } from "@/features/shared/components/ui/badge"
-import { Button } from "@/features/shared/components/ui/button"
+} from "@/features/cart/lib/use-cart";
+import { parseAmount } from "@/features/cart/lib/validation";
+import { Badge } from "@/features/shared/components/ui/badge";
+import { Button } from "@/features/shared/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card"
+} from "@/features/shared/components/ui/card";
 
 /**
  * EVENTHUB-235: the view that carries out the simulated payment of a whole
@@ -54,33 +54,33 @@ import {
  * never leave the browser.
  */
 export function CartPaymentView({ paymentId }: { paymentId: string }) {
-  const queryClient = useQueryClient()
-  const paymentQuery = usePayment(paymentId)
+  const queryClient = useQueryClient();
+  const paymentQuery = usePayment(paymentId);
   // The cart keeps the items added after this checkout; they are reported
   // here because they cannot join this payment.
-  const cartQuery = useCart()
-  const [message, setMessage] = useState<string>()
-  const [now, setNow] = useState(() => Date.now())
-  const [isPending, startTransition] = useTransition()
+  const cartQuery = useCart();
+  const [message, setMessage] = useState<string>();
+  const [now, setNow] = useState(() => Date.now());
+  const [isPending, startTransition] = useTransition();
   const [selectedMethod, setSelectedMethod] =
-    useState<FormPaymentMethod>("card")
-  const [method, setMethod] = useState<FormPaymentMethod | "paypal">()
-  const card = useCardDetails()
-  const sepa = useSepaDetails()
+    useState<FormPaymentMethod>("card");
+  const [method, setMethod] = useState<FormPaymentMethod | "paypal">();
+  const card = useCardDetails();
+  const sepa = useSepaDetails();
 
-  const payment = paymentQuery.data
-  const isPendingPayment = payment?.status === "pending"
+  const payment = paymentQuery.data;
+  const isPendingPayment = payment?.status === "pending";
 
   // Ticks the remaining reservation time while the payment is open.
   useEffect(() => {
     if (!isPendingPayment) {
-      return
+      return;
     }
 
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => setNow(Date.now()), 1000);
 
-    return () => clearInterval(timer)
-  }, [isPendingPayment])
+    return () => clearInterval(timer);
+  }, [isPendingPayment]);
 
   // The payment process is being loaded; nothing to show yet.
   if (paymentQuery.isPending) {
@@ -91,7 +91,7 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
           Zahlungsvorgang wird geladen …
         </CardContent>
       </Card>
-    )
+    );
   }
 
   if (paymentQuery.isError || !payment) {
@@ -123,7 +123,7 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   // AK3: the stored result of the completed payment.
@@ -132,55 +132,55 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
       <div className="max-w-xl">
         <PaymentResult payment={payment} />
       </div>
-    )
+    );
   }
 
   // AK4: what gets confirmed is the stored amount — read from the server's
   // response, not from anything the user could mistype. The backend rejects
   // any deviation from the amount it stored at checkout (422).
-  const storedAmount = parseAmount(payment.amount)
+  const storedAmount = parseAmount(payment.amount);
 
-  const expiresAt = payment.expiresAt
-  const deadline = expiresAt ? Date.parse(expiresAt) : null
-  const deadlineKnown = deadline !== null && Number.isFinite(deadline)
-  const remaining = deadlineKnown ? formatRemaining(expiresAt, now) : null
-  const expired = deadlineKnown && deadline <= now
+  const expiresAt = payment.expiresAt;
+  const deadline = expiresAt ? Date.parse(expiresAt) : null;
+  const deadlineKnown = deadline !== null && Number.isFinite(deadline);
+  const remaining = deadlineKnown ? formatRemaining(expiresAt, now) : null;
+  const expired = deadlineKnown && deadline <= now;
 
-  const canComplete = storedAmount !== null && !expired && !isPending
-  const selectedValid = selectedMethod === "card" ? card.valid : sepa.valid
-  const canPayWithSelected = canComplete && selectedValid
+  const canComplete = storedAmount !== null && !expired && !isPending;
+  const selectedValid = selectedMethod === "card" ? card.valid : sepa.valid;
+  const canPayWithSelected = canComplete && selectedValid;
 
   function complete(
     outcome: SimulatedPaymentOutcome,
-    via: FormPaymentMethod | "paypal" = selectedMethod
+    via: FormPaymentMethod | "paypal" = selectedMethod,
   ) {
     if (storedAmount === null) {
-      return
+      return;
     }
 
-    setMessage(undefined)
-    setMethod(via)
+    setMessage(undefined);
+    setMethod(via);
 
     startTransition(async () => {
       const result = await completePaymentAction(
         paymentId,
         outcome,
-        storedAmount
-      )
+        storedAmount,
+      );
 
       if (result.payment) {
         // The stored result replaces the open payment; the cart emptied
         // into it (or the items were released after a failure), so the
         // badge must not keep counting them.
-        queryClient.setQueryData(paymentQueryKey(paymentId), result.payment)
-        queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY })
+        queryClient.setQueryData(paymentQueryKey(paymentId), result.payment);
+        queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });
       } else {
         setMessage(
           result.message ??
-            "Die Zahlung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
-        )
+            "Die Zahlung konnte nicht abgeschlossen werden. Bitte versuche es erneut.",
+        );
       }
-    })
+    });
   }
 
   // AK2: the view that carries out and simulates the payment process.
@@ -190,7 +190,9 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
         <OrderSummary items={payment.items} />
       </div>
 
-      <div className="lg:col-start-1 lg:row-span-3 lg:row-start-1">
+      {/* On small screens the wrapper dissolves into the grid so the back
+          link still comes last, after the payment process. */}
+      <div className="contents lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-4">
         <PaymentMethods
           method={selectedMethod}
           onMethodChange={setSelectedMethod}
@@ -200,6 +202,17 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
           onPayPal={() => complete("success", "paypal")}
           payPalPending={isPending && method === "paypal"}
         />
+        <div className="order-last lg:order-none">
+          <Button
+            render={<Link href="/cart" />}
+            nativeButton={false}
+            variant="ghost"
+            size="sm"
+          >
+            <ArrowLeftIcon />
+            Zurück zum Warenkorb
+          </Button>
+        </div>
       </div>
 
       <Card className="lg:col-start-2 lg:row-start-2">
@@ -305,24 +318,11 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
           )}
 
           <p className="text-xs text-muted-foreground">
-            Alle Items werden zusammen abgeschlossen — oder gar nicht. Nicht
-            bezahlte Reservierungen laufen automatisch ab und die Tickets werden
-            wieder freigegeben.
+            Nicht bezahlte Reservierungen laufen ab und Tickets werden wieder
+            freigegeben.
           </p>
         </CardContent>
       </Card>
-
-      <div className="lg:col-start-2 lg:row-start-3">
-        <Button
-          render={<Link href="/cart" />}
-          nativeButton={false}
-          variant="ghost"
-          size="sm"
-        >
-          <ArrowLeftIcon />
-          Zurück zum Warenkorb
-        </Button>
-      </div>
     </div>
-  )
+  );
 }
