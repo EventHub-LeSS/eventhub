@@ -172,21 +172,7 @@ export function CartView() {
 
   if (items.length === 0 && openPayment === null) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-start gap-3">
-          <p className="text-sm text-muted-foreground">
-            Dein Warenkorb ist leer. Reservierte Tickets erscheinen hier — ihre
-            Plätze bleiben 15 Minuten für dich reserviert.
-          </p>
-          <Button
-            render={<Link href="/" />}
-            nativeButton={false}
-            variant="outline"
-          >
-            Veranstaltungen entdecken
-          </Button>
-        </CardContent>
-      </Card>
+      <EmptyCartCard hint="Tickets im Warenkorb bleiben 15 Minuten für dich reserviert." />
     )
   }
 
@@ -195,22 +181,9 @@ export function CartView() {
       {openPayment && <OpenCheckoutCard payment={openPayment} now={now} />}
 
       {items.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-start gap-3">
-            <p className="text-sm text-muted-foreground">
-              Dein Warenkorb ist leer. Artikel, die du jetzt hinzufügst, bleiben
-              reserviert und können ausgecheckt werden, sobald die offene
-              Zahlung abgeschlossen ist.
-            </p>
-            <Button
-              render={<Link href="/" />}
-              nativeButton={false}
-              variant="outline"
-            >
-              Veranstaltungen entdecken
-            </Button>
-          </CardContent>
-        </Card>
+        // The banner above already explains how new items relate to the
+        // open checkout, so the card only states that none are waiting.
+        <EmptyCartCard />
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((item) => (
@@ -310,6 +283,36 @@ function isExpired(item: CartItem, now: number): boolean {
   const deadline = Date.parse(item.expiresAt)
 
   return Number.isFinite(deadline) && deadline <= now
+}
+
+/**
+ * The empty cart, as a quiet centered hint instead of item rows, like the
+ * empty states of the event list and the notifications. The hint explains
+ * what happens to tickets once they are added; it is omitted while a
+ * checkout is open, because the banner above already explains how new
+ * items relate to it.
+ */
+function EmptyCartCard({ hint }: { hint?: string }) {
+  return (
+    <Card className="border border-dashed border-border py-8 ring-0">
+      <CardContent className="flex flex-col items-center gap-2 text-center">
+        <ShoppingCartIcon className="size-6 text-muted-foreground" />
+        <p className="text-sm font-medium text-foreground">
+          Dein Warenkorb ist leer
+        </p>
+        {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+        <Button
+          className="mt-2"
+          render={<Link href="/" />}
+          nativeButton={false}
+          variant="outline"
+          size="sm"
+        >
+          Veranstaltungen entdecken
+        </Button>
+      </CardContent>
+    </Card>
+  )
 }
 
 /**
