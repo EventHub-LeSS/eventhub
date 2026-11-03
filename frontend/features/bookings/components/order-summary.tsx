@@ -1,24 +1,24 @@
-import { ArrowRightIcon } from "lucide-react";
-import Link from "next/link";
+import { ArrowRightIcon } from "lucide-react"
+import Link from "next/link"
 
-import type { CheckoutEvent } from "@/features/bookings/lib/checkout-state";
+import type { CheckoutEvent } from "@/features/bookings/lib/checkout-state"
 import {
   formatAmount,
   formatEventPeriod,
   formatTicketCount,
-} from "@/features/bookings/lib/format";
-import { Button } from "@/features/shared/components/ui/button";
+} from "@/features/bookings/lib/format"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card";
+} from "@/features/shared/components/ui/card"
 
 interface OrderSummaryProps {
-  event: CheckoutEvent | null;
-  eventId: string | null;
-  numberOfTickets: number;
+  event: CheckoutEvent | null
+  eventId: string | null
+  numberOfTickets: number
 }
 
 export function OrderSummary({
@@ -86,5 +86,5 @@ export function OrderSummary({
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }

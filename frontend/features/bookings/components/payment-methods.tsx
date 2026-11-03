@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import { CreditCardIcon, LandmarkIcon, LoaderCircleIcon } from "lucide-react";
-import { useState } from "react";
+import { CreditCardIcon, LandmarkIcon, LoaderCircleIcon } from "lucide-react"
+import { useState } from "react"
 
 import {
   accountHolderError,
@@ -12,23 +12,23 @@ import {
   formatCardExpiry,
   formatIban,
   ibanError,
-} from "@/features/bookings/lib/validation";
-import { Button } from "@/features/shared/components/ui/button";
+} from "@/features/bookings/lib/validation"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card";
-import { Input } from "@/features/shared/components/ui/input";
-import { cn } from "@/features/shared/lib/utils";
+} from "@/features/shared/components/ui/card"
+import { Input } from "@/features/shared/components/ui/input"
+import { cn } from "@/features/shared/lib/utils"
 
 /** The payment methods that need data entered before paying; PayPal Express does not. */
-export type FormPaymentMethod = "card" | "sepa";
+export type FormPaymentMethod = "card" | "sepa"
 
-export type CardDetails = ReturnType<typeof useCardDetails>;
-export type SepaDetails = ReturnType<typeof useSepaDetails>;
+export type CardDetails = ReturnType<typeof useCardDetails>
+export type SepaDetails = ReturnType<typeof useSepaDetails>
 
 /**
  * AK4: the card data of the simulated payment, validated live before the
@@ -36,20 +36,20 @@ export type SepaDetails = ReturnType<typeof useSepaDetails>;
  * stay silent; completing the payment simply stays disabled.
  */
 export function useCardDetails() {
-  const [cardholder, setCardholder] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
+  const [cardholder, setCardholder] = useState("")
+  const [cardNumber, setCardNumber] = useState("")
+  const [cardExpiry, setCardExpiry] = useState("")
+  const [cardCvc, setCardCvc] = useState("")
 
-  const holderError = cardholderError(cardholder);
-  const numberError = cardNumberError(cardNumber);
-  const expiryError = cardExpiryError(cardExpiry);
-  const cvcError = cardCvcError(cardCvc);
+  const holderError = cardholderError(cardholder)
+  const numberError = cardNumberError(cardNumber)
+  const expiryError = cardExpiryError(cardExpiry)
+  const cvcError = cardCvcError(cardCvc)
   const filled =
     cardholder.trim() !== "" &&
     cardNumber.trim() !== "" &&
     cardExpiry.trim() !== "" &&
-    cardCvc.trim() !== "";
+    cardCvc.trim() !== ""
 
   return {
     cardholder,
@@ -65,17 +65,17 @@ export function useCardDetails() {
     expiryError,
     cvcError,
     valid: filled && !holderError && !numberError && !expiryError && !cvcError,
-  };
+  }
 }
 
 /** The direct debit data of the simulated payment; like the card data it never leaves the browser. */
 export function useSepaDetails() {
-  const [accountHolder, setAccountHolder] = useState("");
-  const [iban, setIban] = useState("");
+  const [accountHolder, setAccountHolder] = useState("")
+  const [iban, setIban] = useState("")
 
-  const holderError = accountHolderError(accountHolder);
-  const ibanFieldError = ibanError(iban);
-  const filled = accountHolder.trim() !== "" && iban.trim() !== "";
+  const holderError = accountHolderError(accountHolder)
+  const ibanFieldError = ibanError(iban)
+  const filled = accountHolder.trim() !== "" && iban.trim() !== ""
 
   return {
     accountHolder,
@@ -85,26 +85,26 @@ export function useSepaDetails() {
     holderError,
     ibanError: ibanFieldError,
     valid: filled && !holderError && !ibanFieldError,
-  };
+  }
 }
 
 const methodOptions: {
-  value: FormPaymentMethod;
-  label: string;
-  icon: typeof CreditCardIcon;
+  value: FormPaymentMethod
+  label: string
+  icon: typeof CreditCardIcon
 }[] = [
   { value: "card", label: "Kredit- oder Debitkarte", icon: CreditCardIcon },
   { value: "sepa", label: "SEPA-Lastschrift", icon: LandmarkIcon },
-];
+]
 
 interface PaymentMethodsProps {
-  method: FormPaymentMethod;
-  onMethodChange: (method: FormPaymentMethod) => void;
-  card: CardDetails;
-  sepa: SepaDetails;
-  disabled: boolean;
-  onPayPal: () => void;
-  payPalPending: boolean;
+  method: FormPaymentMethod
+  onMethodChange: (method: FormPaymentMethod) => void
+  card: CardDetails
+  sepa: SepaDetails
+  disabled: boolean
+  onPayPal: () => void
+  payPalPending: boolean
 }
 
 export function PaymentMethods({
@@ -134,7 +134,7 @@ export function PaymentMethods({
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-lg border border-border p-3 text-sm font-medium transition-colors hover:bg-muted/60",
                   "has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-2 has-focus-visible:ring-ring/50",
-                  disabled && "cursor-not-allowed opacity-50",
+                  disabled && "cursor-not-allowed opacity-50"
                 )}
               >
                 <input
@@ -322,5 +322,5 @@ export function PaymentMethods({
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
