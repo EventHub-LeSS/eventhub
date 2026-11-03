@@ -48,6 +48,7 @@ export function OrganizationOverview({
   const canViewMembers = isAdmin
   const canViewEvents = hasRight("event_manager")
   const canViewAuditLog = hasRight("org_admin")
+  const canEditOrganization = hasRight("org_admin")
 
   const membersQuery = useOrganizationMembers(alias, canViewMembers)
 
@@ -155,17 +156,18 @@ export function OrganizationOverview({
           <Card>
             <CardHeader className="flex items-center justify-between gap-4">
               <CardTitle>Organisationsdetails</CardTitle>
-              {isEditing ? (
-                <Button onClick={handleSaveClick}>
-                  <CheckIcon />
-                  Änderungen speichern
-                </Button>
-              ) : (
-                <Button variant="outline" onClick={handleEditClick}>
-                  <PencilIcon />
-                  Bearbeiten
-                </Button>
-              )}
+              {canEditOrganization &&
+                (isEditing ? (
+                  <Button onClick={handleSaveClick}>
+                    <CheckIcon />
+                    Änderungen speichern
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={handleEditClick}>
+                    <PencilIcon />
+                    Bearbeiten
+                  </Button>
+                ))}
             </CardHeader>
             <CardContent className="flex flex-col divide-y divide-border">
               <SettingsRow
