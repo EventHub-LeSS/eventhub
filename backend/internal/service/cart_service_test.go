@@ -347,6 +347,80 @@ func TestGetCart_ShowsCurrentPricesAvailabilityAndBookability(t *testing.T) {
 	}
 }
 
+func TestGetCart_ShowsTheOpenCheckout(t *testing.T) {
+	f := newPaymentFixture(t, 20, "20")
+	ctx := context.Background()
+
+	// Two items, one checkout: the items leave the cart together.
+	other := seedEventFor(t, f.db, 10, model.EventStatusPublished, "5", f.userID)
+	f.addToCart(t, f.userID, 2)
+	if _, err := f.carts.AddToCart(ctx, f.userID, other, 1); err != nil {
+		t.Fatal(err)
+	}
+	pending := f.checkout(t)
+
+	// The items left the cart with the checkout; the open payment takes their place with the
+	// stored sums, so a return from the payment view does not look like lost items.
+	cart, err := f.carts.GetCart(ctx, f.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cart.Items) != 0 {
+		t.Fatalf("checked-out items must leave the cart: %+v", cart.Items)
+	}
+	if cart.OpenPayment == nil {
+		t.Fatal("the open checkout must be reported")
+	}
+	if cart.OpenPayment.PaymentID != pending.PaymentID || !cart.OpenPayment.Amount.Equal(pending.Amount) ||
+		cart.OpenPayment.TotalTickets != 3 {
+		t.Fatalf("unexpected open payment: %+v, want payment %s (%s, 3 tickets)", cart.OpenPayment, pending.PaymentID, pending.Amount)
+	}
+	if !cart.OpenPayment.ExpiresAt.After(time.Now().Add(14 * time.Minute)) {
+		t.Errorf("the shared deadline must be about 15 minutes ahead, got %v", cart.OpenPayment.ExpiresAt)
+	}
+
+	// New items coexist with the open checkout; it stays unchanged.
+	f.addToCart(t, f.userID, 1)
+	if cart, err = f.carts.GetCart(ctx, f.userID); err != nil {
+		t.Fatal(err)
+	}
+	if len(cart.Items) != 1 || cart.OpenPayment == nil || cart.OpenPayment.PaymentID != pending.PaymentID {
+		t.Fatalf("the open checkout must stay while items coexist: %+v", cart)
+	}
+
+	// The checkout of one user never shows in the cart of another.
+	stranger, err := f.carts.GetCart(ctx, f.seedUser(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stranger.OpenPayment != nil {
+		t.Fatalf("a foreign checkout must not show: %+v", stranger.OpenPayment)
+	}
+
+	// Once the payment completes, the checkout is no longer open.
+	if _, err := f.payments.SimulatePayment(ctx, pending.PaymentID, f.userID, model.SimulatedPaymentSuccess, pending.Amount); err != nil {
+		t.Fatal(err)
+	}
+	if cart, err = f.carts.GetCart(ctx, f.userID); err != nil {
+		t.Fatal(err)
+	}
+	if cart.OpenPayment != nil {
+		t.Fatalf("a completed payment must not show as open: %+v", cart.OpenPayment)
+	}
+
+	// An expired reservation holds no seats; its payment is no longer the open checkout.
+	expired := f.checkout(t)
+	if err := f.db.Exec("UPDATE bookings SET expires_at = NOW() - interval '1 minute' WHERE payment_id = ?", expired.PaymentID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if cart, err = f.carts.GetCart(ctx, f.userID); err != nil {
+		t.Fatal(err)
+	}
+	if cart.OpenPayment != nil {
+		t.Fatalf("an expired checkout holds no seats: %+v", cart.OpenPayment)
+	}
+}
+
 func TestUpdateQuantity(t *testing.T) {
 	db := testdb.Open(t)
 	eventID, userID := seedEvent(t, db, 3, model.EventStatusPublished)

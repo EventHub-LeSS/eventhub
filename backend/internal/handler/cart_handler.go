@@ -34,7 +34,7 @@ func NewCartHandler(cartService *service.CartService, userRepo repository.UserRe
 
 // GetCartHandler godoc
 // @Summary      Warenkorb abrufen
-// @Description  Liefert den Warenkorb des Aufrufers: jede lebende Reservierung ohne Zahlung mit der aktuellen Verfügbarkeit und den aktuellen Preisen ihres Events. Reservierungen halten ihre Plätze bis expiresAt; danach sind sie nicht mehr Teil des Warenkorb. totalAmount ist die Summe der aktuellen Zeilenbeträge — der Checkout berechnet und speichert den zu zahlenden Betrag selbst. checkoutReady ist nur true, wenn der Warenkorb Items hat und alle Events noch veröffentlicht sind.
+// @Description  Liefert den Warenkorb des Aufrufers: jede lebende Reservierung ohne Zahlung mit der aktuellen Verfügbarkeit und den aktuellen Preisen ihres Events. Reservierungen halten ihre Plätze bis expiresAt; danach sind sie nicht mehr Teil des Warenkorb. totalAmount ist die Summe der aktuellen Zeilenbeträge — der Checkout berechnet und speichert den zu zahlenden Betrag selbst. checkoutReady ist nur true, wenn der Warenkorb Items hat und alle Events noch veröffentlicht sind. openPayment nennt den offenen Zahlungsvorgang des Aufrufers, falls einer existiert: Dessen Items haben den Warenkorb verlassen und warten auf ihre Zahlung — sie halten ihre Plätze bis expiresAt — und neue Items können erst ausgecheckt werden, wenn der Vorgang abgeschlossen ist.
 // @Tags         cart
 // @Produce      json
 // @Success      200 {object} model.CartResponse

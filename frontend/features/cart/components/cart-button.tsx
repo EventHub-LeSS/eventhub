@@ -8,13 +8,15 @@ import { Button } from "@/features/shared/components/ui/button"
 
 /**
  * The cart in the navbar: shows how many reserved tickets are waiting to
- * be paid. It counts the live reservations of the cart query, which every
- * cart change keeps current.
+ * be paid. It counts the live reservations of the cart query plus the
+ * tickets of the open checkout — both hold seats for the visitor — which
+ * every cart change keeps current.
  */
 export function CartButton() {
   const { data } = useCart()
 
-  const totalTickets = data?.totalTickets ?? 0
+  const totalTickets =
+    (data?.totalTickets ?? 0) + (data?.openPayment?.totalTickets ?? 0)
 
   return (
     <Button

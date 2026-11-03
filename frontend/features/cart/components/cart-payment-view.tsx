@@ -22,6 +22,7 @@ import type { SimulatedPaymentOutcome } from "@/features/cart/lib/types"
 import {
   CART_QUERY_KEY,
   paymentQueryKey,
+  useCart,
   usePayment,
 } from "@/features/cart/lib/use-cart"
 import {
@@ -54,6 +55,9 @@ import { Input } from "@/features/shared/components/ui/input"
 export function CartPaymentView({ paymentId }: { paymentId: string }) {
   const queryClient = useQueryClient()
   const paymentQuery = usePayment(paymentId)
+  // The cart keeps the items added after this checkout; they are reported
+  // here because they cannot join this payment.
+  const cartQuery = useCart()
   const [message, setMessage] = useState<string>()
   const [cardholder, setCardholder] = useState("")
   const [cardNumber, setCardNumber] = useState("")
@@ -224,6 +228,15 @@ export function CartPaymentView({ paymentId }: { paymentId: string }) {
             </li>
           ))}
         </ul>
+
+        {cartQuery.data && cartQuery.data.items.length > 0 && (
+          <p className="text-sm text-muted-foreground" role="note">
+            Dein Warenkorb enthält weitere Artikel (
+            {formatTicketCount(cartQuery.data.totalTickets)}). Sie bleiben
+            reserviert und können erst ausgecheckt werden, wenn diese Zahlung
+            abgeschlossen ist.
+          </p>
+        )}
 
         {/* AK1: the amount stored by the backend, shown before completion. */}
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/40 p-4">
