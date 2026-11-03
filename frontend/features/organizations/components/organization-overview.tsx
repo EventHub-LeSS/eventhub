@@ -1,5 +1,6 @@
 "use client"
 
+import { CheckIcon, PencilIcon } from "lucide-react"
 import { useState } from "react"
 
 import { ActivityChart } from "@/features/organizations/components/activity-chart"
@@ -57,11 +58,11 @@ export function OrganizationOverview({
   function handleTabChange(value: unknown) {
     setActiveTab(value as string)
     setIsEditing(false)
+    setDraft({ name: alias, alias })
   }
 
   function handleEditClick() {
     setDraft({ name: alias, alias })
-    setActiveTab("settings")
     setIsEditing(true)
   }
 
@@ -73,12 +74,7 @@ export function OrganizationOverview({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
-      <OrganizationHeader
-        alias={alias}
-        isEditing={isEditing}
-        onEditClick={handleEditClick}
-        onSaveClick={handleSaveClick}
-      />
+      <OrganizationHeader alias={alias} />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabsList>
@@ -157,8 +153,19 @@ export function OrganizationOverview({
 
         <TabsContent value="settings">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between gap-4">
               <CardTitle>Organisationsdetails</CardTitle>
+              {isEditing ? (
+                <Button onClick={handleSaveClick}>
+                  <CheckIcon />
+                  Änderungen speichern
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={handleEditClick}>
+                  <PencilIcon />
+                  Bearbeiten
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="flex flex-col divide-y divide-border">
               <SettingsRow
