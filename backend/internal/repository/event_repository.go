@@ -146,8 +146,12 @@ func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter)
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").
 		Where("events.status = ?", model.EventStatusPublished)
 	if filter.Date != nil {
+		// Match every event that takes place during the selected calendar day, not only
+		// on its start day: an event overlaps the day when it starts before the day ends
+		// and ends after the day begins. This keeps multi-day events visible on every
+		// day they span (EVENTHUB-269).
 		// Calendar days can be 23 or 25 hours across DST transitions.
-		query = query.Where("events.start_time >= ? AND events.start_time < ?", *filter.Date, filter.Date.AddDate(0, 0, 1))
+		query = query.Where("events.start_time < ? AND events.end_time > ?", filter.Date.AddDate(0, 0, 1), *filter.Date)
 	}
 	if filter.CategoryID != nil {
 		query = query.Where("events.category_id = ?", *filter.CategoryID)

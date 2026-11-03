@@ -444,9 +444,9 @@ func (h *EventHandler) getEventStatistics(c *gin.Context) (*model.EventStatistic
 // ListPublishedEventsHandler handles EVENTHUB-206, EVENTHUB-207, EVENTHUB-208 and EVENTHUB-210.
 // @Param location query string false "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally."
 // @Param categoryId query string false "Exact category UUID; trimmed, empty means no category filter. Combined with location using AND."
-// @Param date query string false "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter."
+// @Param date query string false "Date in YYYY-MM-DD format, interpreted in Europe/Berlin. Events taking place during this calendar day are returned, including multi-day events that span it. Empty means no date filter."
 // @Summary List published events
-// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
+// @Description Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.
 // @Tags events
 // @Produce json
 // @Success 200 {array} model.PublishedEventResponse

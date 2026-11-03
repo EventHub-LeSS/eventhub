@@ -100,12 +100,16 @@ func TestPublishedEventsDateDatabase(t *testing.T) {
 				name, date, city, cat string
 				want                  []uuid.UUID
 			}{
-				{"selected day", calendarDay, "", "", ids[1:3]},
-				{"all filters", calendarDay, "Bonn", category.String(), ids[1:3]},
+				// Events overlapping the day are matched (EVENTHUB-269): ids[0] starts one
+				// microsecond before midnight and runs one hour into the day, ids[2] starts
+				// one microsecond before the end of the day.
+				{"selected day", calendarDay, "", "", ids[:3]},
+				{"all filters", calendarDay, "Bonn", category.String(), ids[:3]},
 				{"other city", calendarDay, "Berlin", "", nil},
 				{"other category", calendarDay, "", uuid.NewString(), nil},
 				{"no results", "2020-01-01", "", "", nil},
-				{"change day", next.Format(time.DateOnly), "", "", ids[3:]},
+				// ids[2] starts one microsecond before the next day and runs into it.
+				{"change day", next.Format(time.DateOnly), "", "", ids[2:]},
 				{"reset", "", "", "", ids},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -128,6 +132,78 @@ func TestPublishedEventsDateDatabase(t *testing.T) {
 						}
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestPublishedEventsDateMultiDay(t *testing.T) {
+	location, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := testdb.Open(t)
+	day, err := time.ParseInLocation(time.DateOnly, "2030-06-10", location)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := day.AddDate(0, 0, -1)
+	after := day.AddDate(0, 0, 1)
+	afterAfter := day.AddDate(0, 0, 2)
+
+	single := seedEventForOrg(t, db, "multiday", model.EventStatusPublished)
+	spanning := seedEventForOrg(t, db, "multiday", model.EventStatusPublished)
+	// Ends exactly at the start of the selected day: the half-open interval
+	// [start, end) means its last moment is on the day before, so it is not
+	// matched on the selected day.
+	endsAtMidnight := seedEventForOrg(t, db, "multiday", model.EventStatusPublished)
+	startsNextMidnight := seedEventForOrg(t, db, "multiday", model.EventStatusPublished)
+	for _, u := range []struct {
+		id         uuid.UUID
+		start, end time.Time
+	}{
+		{single.eventID, day.Add(10 * time.Hour), day.Add(12 * time.Hour)},
+		{spanning.eventID, before.Add(8 * time.Hour), after.Add(18 * time.Hour)},
+		{endsAtMidnight.eventID, before.AddDate(0, 0, -1), day},
+		{startsNextMidnight.eventID, after, afterAfter},
+	} {
+		if err := db.Exec("UPDATE events SET start_time = ?, end_time = ? WHERE event_id = ?",
+			u.start.UTC(), u.end.UTC(), u.id).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	router := newEventRouter(db, nil)
+	for _, tc := range []struct {
+		date string
+		want []uuid.UUID
+	}{
+		{day.AddDate(0, 0, -3).Format(time.DateOnly), nil},
+		// endsAtMidnight starts exactly at midnight of this day, so it takes place here.
+		{day.AddDate(0, 0, -2).Format(time.DateOnly), []uuid.UUID{endsAtMidnight.eventID}},
+		// endsAtMidnight runs until the start of the selected day, spanning covers it.
+		{before.Format(time.DateOnly), []uuid.UUID{endsAtMidnight.eventID, spanning.eventID}},
+		// A multi-day event must be found on every day it spans, not only its start day.
+		{day.Format(time.DateOnly), []uuid.UUID{spanning.eventID, single.eventID}},
+		{after.Format(time.DateOnly), []uuid.UUID{spanning.eventID, startsNextMidnight.eventID}},
+		{afterAfter.Format(time.DateOnly), nil},
+	} {
+		t.Run(tc.date, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?date="+url.QueryEscape(tc.date), nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var events []model.PublishedEventResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+				t.Fatal(err)
+			}
+			if events == nil || len(events) != len(tc.want) {
+				t.Fatalf("body=%s want=%v", rec.Body.String(), tc.want)
+			}
+			for i, event := range events {
+				if event.EventID != tc.want[i] || event.Status != model.EventStatusPublished {
+					t.Fatalf("unexpected event: %+v", event)
+				}
 			}
 		})
 	}
