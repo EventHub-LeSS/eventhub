@@ -1,13 +1,14 @@
 import { ArrowLeftIcon } from "lucide-react"
 import Link from "next/link"
 
-import { requireOrganizer } from "@/features/auth"
+import { getSession, requireOrganizer } from "@/features/auth"
 import { DraftForm, getEventCatalog } from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
 
 export default async function NewEventDraftPage() {
   const user = await requireOrganizer()
-  const catalog = await getEventCatalog()
+  const session = await getSession()
+  const catalog = await getEventCatalog(session?.accessToken ?? "")
 
   return (
     <div className="flex flex-1 justify-center p-6">
