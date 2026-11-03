@@ -514,6 +514,45 @@ func (h *EventHandler) GetPublishedEventDetailsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, details)
 }
 
+// EVENTHUB-241: Verkaufsdashboard anzeigen
+// @Summary Get organization sales dashboard
+// @Description Returns sales figures for events of the selected organization. Requires the finance_viewer role in that organization. The organization can be addressed by its local UUID, Keycloak ID or alias. Sold tickets count only confirmed bookings. Available seats are capacity minus confirmed tickets, with a minimum of zero. Returns an empty array if the organization has no events.
+// @Tags organizations
+// @Security BearerAuth
+// @Produce json
+// @Param organizationID path string true "Organization UUID, Keycloak ID or alias"
+// @Success 200 {array} model.SalesDashboardEventResponse
+// @Failure 401 {object} model.ErrorResponse
+// @Failure 403 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /organizations/{organizationID}/dashboard [get]
+func (h *EventHandler) GetSalesDashboardHandler(c *gin.Context) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		writeProblem(c, http.StatusUnauthorized, "authentication is required")
+		return
+	}
+
+	financeOrgIDs := principal.OrganizationIDsWithRole(
+		middleware.RoleFinanceViewer,
+	)
+	if len(financeOrgIDs) == 0 {
+		writeProblem(c, http.StatusForbidden, "missing organization role")
+		return
+	}
+
+	dashboard, err := h.eventService.GetSalesDashboard(
+		c.Param("organizationID"),
+		financeOrgIDs,
+	)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dashboard)
+}
+
 // EVENTHUB-242: Auslastung je Veranstaltung anzeigen
 // @Summary      Get Utilization Percentage
 // @Description  Returns the share of the capacity taken by confirmed bookings, in percent with two decimals and capped at 100; 0 if the capacity is 0. Reserved and cancelled bookings are not counted. Requires the event_manager role in the organization that owns the event or the global admin role.

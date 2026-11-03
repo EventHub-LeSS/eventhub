@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession, requireSession } from "@/features/auth";
 import {
   KeycloakAdminError,
-  getOrganizationByAlias,
+  resolveOrganizationId,
   removeOrganizationMemberByUsername,
 } from "@/features/organizations";
 
@@ -31,10 +31,10 @@ export async function DELETE(
   }
 
   try {
-    const organization = await getOrganizationByAlias(session.accessToken, alias);
+    const organizationId = await resolveOrganizationId(session.accessToken, alias);
     await removeOrganizationMemberByUsername(
       session.accessToken,
-      organization.id,
+      organizationId,
       username,
     );
     return new NextResponse(null, { status: 204 });

@@ -16,6 +16,16 @@ const (
 	BookingStatusExpired   BookingStatus = "expired"
 )
 
+// IsValidBookingStatus reports whether status is one of the booking statuses of the booking_status enum.
+// EVENTHUB-236: validates the status filter of the booking history.
+func IsValidBookingStatus(status BookingStatus) bool {
+	switch status {
+	case BookingStatusReserved, BookingStatusConfirmed, BookingStatusCancelled, BookingStatusFailed, BookingStatusExpired:
+		return true
+	}
+	return false
+}
+
 type BookingModel struct {
 	BookingID       uuid.UUID     `json:"bookingId" gorm:"column:booking_id;type:uuid;primaryKey"`
 	UserID          *uuid.UUID    `json:"userId" gorm:"column:user_id;type:uuid"`

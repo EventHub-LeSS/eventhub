@@ -114,7 +114,7 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 	if event.Category.CategoryID != published.categoryID || event.Category.Category != "cat-"+published.categoryID.String() ||
 		event.Location.LocationID != published.locationID || event.Location.Name != "loc-"+published.locationID.String() ||
 		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil ||
-		event.Alias != "alias-listing" {
+		event.Alias != "alias-listing" || event.OrganizerID != published.ownerOrgID {
 		t.Fatalf("wrong display data: %+v", event)
 	}
 	for _, column := range []string{"category_id", "location_id", "organizer_id"} {

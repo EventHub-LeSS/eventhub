@@ -55,12 +55,24 @@ export function ticketCountError(
   }
 
   if (availableSeats !== null && count > availableSeats) {
-    const unit = availableSeats === 1 ? "Ticket" : "Tickets"
-
-    return `Nur noch ${availableSeats} ${unit} verfügbar.`
+    return seatsExceededMessage(availableSeats)
   }
 
   return undefined
+}
+
+/**
+ * EVENTHUB-91 / AK4: the same message whether the form or the backend (409,
+ * capacity exceeded) notices that the count exceeds the remaining seats.
+ */
+export function seatsExceededMessage(availableSeats: number): string {
+  if (availableSeats < 1) {
+    return "Derzeit sind keine Tickets verfügbar."
+  }
+
+  const unit = availableSeats === 1 ? "Ticket" : "Tickets"
+
+  return `Nur noch ${availableSeats} ${unit} verfügbar.`
 }
 
 /**
@@ -179,4 +191,15 @@ export function cardCvcError(raw: string): string | undefined {
   }
 
   return undefined
+}
+
+export const MAX_RATING_TEXT_LENGTH = 2000
+
+export function isRatingScore(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 5
+  )
 }

@@ -1,5 +1,6 @@
 import type {
   BookingStatus,
+  OwnBookingLocation,
   PaymentFailureReason,
   PaymentStatus,
 } from "@/features/bookings/lib/types"
@@ -33,6 +34,16 @@ export function formatAmount(amount: string | number | null): string {
   return currencyFormat.format(value)
 }
 
+const timeFormat = new Intl.DateTimeFormat("de-DE", {
+  timeStyle: "short",
+  timeZone: "Europe/Berlin",
+})
+
+const dayFormat = new Intl.DateTimeFormat("de-DE", {
+  dateStyle: "short",
+  timeZone: "Europe/Berlin",
+})
+
 /** "2 Tickets" / "1 Ticket". */
 export function formatTicketCount(count: number): string {
   return `${count} ${count === 1 ? "Ticket" : "Tickets"}`
@@ -48,6 +59,38 @@ export function formatDateTime(timestamp: string | null | undefined): string {
   return Number.isNaN(date.getTime())
     ? EMPTY_VALUE
     : dateTimeFormat.format(date)
+}
+
+export function formatEventPeriod(startTime: string, endTime: string): string {
+  const start = new Date(startTime)
+  const end = new Date(endTime)
+
+  if (Number.isNaN(start.getTime())) {
+    return EMPTY_VALUE
+  }
+
+  if (Number.isNaN(end.getTime())) {
+    return dateTimeFormat.format(start)
+  }
+
+  const sameDay = dayFormat.format(start) === dayFormat.format(end)
+
+  return `${dateTimeFormat.format(start)} – ${
+    sameDay ? timeFormat.format(end) : dateTimeFormat.format(end)
+  }`
+}
+
+export function formatLocation(location: OwnBookingLocation | null): string {
+  if (!location) {
+    return EMPTY_VALUE
+  }
+
+  const street = [location.street, location.houseNumber]
+    .filter(Boolean)
+    .join(" ")
+  const city = [location.postalCode, location.city].filter(Boolean).join(" ")
+
+  return [location.name, street, city].filter(Boolean).join(", ")
 }
 
 /**
@@ -94,4 +137,23 @@ export const failureReasonLabels: Record<PaymentFailureReason, string> = {
   declined: "Zahlung abgelehnt",
   reservation_expired: "Reservierung abgelaufen",
   event_unavailable: "Veranstaltung nicht mehr verfügbar",
+}
+
+export function splitTicketsByEnd<
+  T extends { event: { endTime: string } | null },
+>(tickets: T[], now: number): { upcoming: T[]; past: T[] } {
+  const upcoming: T[] = []
+  const past: T[] = []
+
+  for (const ticket of tickets) {
+    const end = ticket.event ? Date.parse(ticket.event.endTime) : Number.NaN
+
+    if (!Number.isNaN(end) && end >= now) {
+      upcoming.push(ticket)
+    } else {
+      past.push(ticket)
+    }
+  }
+
+  return { upcoming, past }
 }

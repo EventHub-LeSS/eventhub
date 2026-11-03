@@ -62,3 +62,37 @@ export interface Payment {
   createdAt: string
   updatedAt: string
 }
+
+export interface OwnBookingLocation {
+  locationId: string
+  name: string
+  city: string
+  postalCode: string
+  street: string
+  houseNumber: string | null
+}
+
+export interface OwnBookingEvent {
+  eventId: string
+  title: string
+  startTime: string
+  endTime: string
+  status: string
+  location: OwnBookingLocation | null
+}
+
+export interface OwnBooking {
+  bookingId: string
+  numberOfTickets: number
+  bookingStatus: BookingStatus
+  paymentStatus: PaymentStatus | null
+  failureReason?: PaymentFailureReason
+  amount: string | null
+  refundAmount: string | null
+  ticketsValid: boolean
+  ratingScore: number | null
+  message?: string
+  bookedAt: string
+  expiresAt?: string
+  event: OwnBookingEvent | null
+}

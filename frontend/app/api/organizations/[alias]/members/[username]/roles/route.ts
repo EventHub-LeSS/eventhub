@@ -29,7 +29,7 @@ export async function PUT(
   const payload = (await request.json()) as { roles: OrganizationRight[] };
 
   const response = await fetch(
-    `${process.env.BACKEND_API_URL}/organizations/${alias}/members/${username}/roles`,
+    `${process.env.API_BASE_URL}/organizations/${alias}/members/${username}/roles`,
     {
       method: "PUT",
       headers: {

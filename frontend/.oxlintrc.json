@@ -50,6 +50,30 @@
   },
   "overrides": [
     {
+      "files": ["features/moderation/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/moderation/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["features/**/index.ts"],
       "rules": {
         "no-restricted-imports": "off"
@@ -191,6 +215,30 @@
                   "@/features/*/**",
                   "!@/features/shared/**",
                   "!@/features/bookings/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["features/notifications/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/notifications/**"
                 ],
                 "message": "Import other features through their public \"index.ts\"."
               }

@@ -1,8 +1,12 @@
-import type {
-  EventStatus,
-  OrganizationEvent,
-} from "@/features/organizations/lib/mock-data"
-import { Badge } from "@/features/shared/components/ui/badge"
+import Link from "next/link"
+
+import {
+  EMPTY_VALUE,
+  EventStatusBadge,
+  formatEventDateTime,
+  formatSoldTickets,
+  type OrganizerEvent,
+} from "@/features/events"
 import {
   Table,
   TableBody,
@@ -12,28 +16,36 @@ import {
   TableRow,
 } from "@/features/shared/components/ui/table"
 
-const statusVariant: Record<EventStatus, "default" | "secondary" | "outline"> =
-  {
-    upcoming: "default",
-    draft: "outline",
-    past: "secondary",
+/** Booked seats are capacity minus available seats; unknown when those couldn't be loaded. */
+function formatBookedSeats(event: OrganizerEvent) {
+  if (event.availableSeats === null) {
+    return EMPTY_VALUE
   }
 
-const statusLabel: Record<EventStatus, string> = {
-  upcoming: "Bevorstehend",
-  draft: "Entwurf",
-  past: "Vergangen",
+  return formatSoldTickets(
+    Math.max(0, event.capacity - event.availableSeats),
+    event.capacity
+  )
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("de-DE", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-}
+export function EventsTable({ events }: { events: OrganizerEvent[] | null }) {
+  if (!events) {
+    return (
+      <p className="py-6 text-center text-sm text-destructive">
+        Die Veranstaltungen können gerade nicht geladen werden. Bitte versuche
+        es später erneut
+      </p>
+    )
+  }
 
-export function EventsTable({ events }: { events: OrganizationEvent[] }) {
+  if (events.length === 0) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        Deine Organisation hat noch keine Veranstaltungen.
+      </p>
+    )
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -46,27 +58,28 @@ export function EventsTable({ events }: { events: OrganizationEvent[] }) {
       </TableHeader>
       <TableBody>
         {events.map((event) => (
-          <TableRow key={event.id}>
+          <TableRow key={event.eventId}>
             <TableCell>
               <div className="flex flex-col">
-                <span className="font-medium text-foreground">
-                  {event.name}
-                </span>
+                <Link
+                  href={`/organizer/events/${event.eventId}`}
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  {event.title}
+                </Link>
                 <span className="text-xs text-muted-foreground">
-                  {event.location}
+                  {event.location?.name ?? EMPTY_VALUE}
                 </span>
               </div>
             </TableCell>
             <TableCell>
-              <Badge variant={statusVariant[event.status]}>
-                {statusLabel[event.status]}
-              </Badge>
+              <EventStatusBadge status={event.status} />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {formatDate(event.date)}
+              {formatEventDateTime(event.startTime)}
             </TableCell>
             <TableCell className="text-right font-mono text-foreground tabular-nums">
-              {event.ticketsSold} / {event.capacity}
+              {formatBookedSeats(event)}
             </TableCell>
           </TableRow>
         ))}

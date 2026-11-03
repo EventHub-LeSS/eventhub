@@ -1,19 +1,10 @@
 "use client"
 
-import {
-  CheckIcon,
-  GlobeIcon,
-  PencilIcon,
-  ShieldCheckIcon,
-  ShieldOffIcon,
-  UserPlusIcon,
-} from "lucide-react"
+import { CheckIcon, PencilIcon, UserPlusIcon } from "lucide-react"
 import { useState } from "react"
 
 import { useInviteMember } from "@/features/organizations/lib/api"
-import type { Organization } from "@/features/organizations/lib/types"
 import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
-import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
 import { Card, CardContent } from "@/features/shared/components/ui/card"
 import {
@@ -26,7 +17,6 @@ import {
 } from "@/features/shared/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/features/shared/components/ui/field"
 import { Input } from "@/features/shared/components/ui/input"
-import { Separator } from "@/features/shared/components/ui/separator"
 import { toast } from "@/features/shared/components/ui/toast"
 import { cn } from "@/features/shared/lib/utils"
 
@@ -35,7 +25,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function initials(name: string) {
   return (
     name
-      .split(/\s+/)
+      .split(/[\s_-]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0])
@@ -45,13 +35,11 @@ function initials(name: string) {
 }
 
 export function OrganizationHeader({
-  organization,
   alias,
   isEditing = false,
   onEditClick,
   onSaveClick,
 }: {
-  organization: Organization
   alias: string
   isEditing?: boolean
   onEditClick?: () => void
@@ -61,21 +49,10 @@ export function OrganizationHeader({
     <Card className="h-fit">
       <CardContent className="flex flex-col gap-4">
         <Avatar size="lg" className="size-28">
-          <AvatarFallback className="text-2xl">
-            {initials(organization.name)}
-          </AvatarFallback>
+          <AvatarFallback className="text-2xl">{initials(alias)}</AvatarFallback>
         </Avatar>
 
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold">{organization.name}</h1>
-          <p className="text-sm text-muted-foreground">@{organization.alias}</p>
-        </div>
-
-        {organization.description && (
-          <p className="text-sm text-muted-foreground">
-            {organization.description}
-          </p>
-        )}
+        <h1 className="text-xl font-semibold break-words">{alias}</h1>
 
         <div className="flex flex-col gap-2">
           <InviteMemberDialog alias={alias} />
@@ -99,33 +76,6 @@ export function OrganizationHeader({
             </Button>
           )}
         </div>
-
-        <Separator />
-
-        <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-          <li className="flex items-center gap-2">
-            {organization.enabled ? (
-              <ShieldCheckIcon className="size-4 shrink-0" />
-            ) : (
-              <ShieldOffIcon className="size-4 shrink-0" />
-            )}
-            {organization.enabled ? "Aktiviert" : "Deaktiviert"}
-          </li>
-          {organization.domains.map((domain) => (
-            <li key={domain.name} className="flex items-center gap-2">
-              <GlobeIcon className="size-4 shrink-0" />
-              <span className="truncate">{domain.name}</span>
-              {!domain.verified && (
-                <Badge
-                  variant="outline"
-                  className="h-4 shrink-0 px-1.5 text-[10px]"
-                >
-                  Nicht verifiziert
-                </Badge>
-              )}
-            </li>
-          ))}
-        </ul>
       </CardContent>
     </Card>
   )

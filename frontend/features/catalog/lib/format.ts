@@ -11,14 +11,19 @@ const currencyFormatter = new Intl.NumberFormat("de-DE", {
   currency: "EUR",
 })
 
-export function formatEventDate(startTime: string) {
-  const date = new Date(startTime)
+export function formatEventDate(startTime: string, endTime: string) {
+  const start = new Date(startTime)
+  const end = new Date(endTime)
 
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(start.getTime())) {
     return startTime
   }
 
-  return dateFormatter.format(date)
+  if (Number.isNaN(end.getTime())) {
+    return dateFormatter.format(start)
+  }
+
+  return dateFormatter.formatRange(start, end)
 }
 
 export function formatEventPrice(price: string) {

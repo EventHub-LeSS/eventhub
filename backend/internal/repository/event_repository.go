@@ -140,7 +140,7 @@ func (r *eventRepository) HasBookings(eventID uuid.UUID) (bool, error) {
 func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter) ([]model.PublishedEventResponse, error) {
 	events := make([]model.PublishedEventResponse, 0)
 	query := r.db.Table("events").
-		Select("events.event_id, events.title, events.start_time, events.end_time, events.status, events.price, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number, organizations.alias AS organizer_alias").
+		Select("events.event_id, events.title, events.start_time, events.end_time, events.status, events.price, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number, organizations.organization_id AS organizer_id, organizations.alias AS organizer_alias").
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").
@@ -175,7 +175,7 @@ func (r *eventRepository) GetPublishedEventDetails(eventID uuid.UUID) (*model.Pu
 		Select("COALESCE(SUM(number_of_tickets), 0)").
 		Where("event_id = events.event_id AND status = ?", model.BookingStatusConfirmed)
 	result := r.db.Table("events").
-		Select("events.event_id, events.title, events.description, events.start_time, events.end_time, events.status, events.price, events.capacity, (?) AS sold_tickets, GREATEST(events.capacity - (?), 0) AS available_seats, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number, organizations.alias AS organizer_alias", confirmed, occupied).
+		Select("events.event_id, events.title, events.description, events.start_time, events.end_time, events.status, events.price, events.capacity, (?) AS sold_tickets, GREATEST(events.capacity - (?), 0) AS available_seats, categories.category_id AS category_id, categories.category AS category_name, locations.location_id AS location_id, locations.name AS location_name, locations.city AS location_city, locations.postal_code AS location_postal_code, locations.street AS location_street, locations.house_number AS location_house_number, organizations.organization_id AS organizer_id, organizations.alias AS organizer_alias", confirmed, occupied).
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").

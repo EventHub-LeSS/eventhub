@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession, requireSession } from "@/features/auth";
 import {
   KeycloakAdminError,
-  getOrganizationByAlias,
+  resolveOrganizationId,
   getOrganizationMembersWithRights,
   inviteOrganizationMember,
 } from "@/features/organizations";
@@ -32,10 +32,10 @@ export async function GET(
   }
 
   try {
-    const organization = await getOrganizationByAlias(session.accessToken, alias);
+    const organizationId = await resolveOrganizationId(session.accessToken, alias);
     const members = await getOrganizationMembersWithRights(
       session.accessToken,
-      organization.id,
+      organizationId,
     );
     return NextResponse.json(members);
   } catch (error) {
@@ -83,10 +83,10 @@ export async function POST(
   }
 
   try {
-    const organization = await getOrganizationByAlias(session.accessToken, alias);
+    const organizationId = await resolveOrganizationId(session.accessToken, alias);
     await inviteOrganizationMember(
       session.accessToken,
-      organization.id,
+      organizationId,
       email,
       payload.name,
     );

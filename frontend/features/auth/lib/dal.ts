@@ -7,11 +7,11 @@ import { readSession, type Session } from "@/features/auth/lib/session"
 import {
   isAdminFromAccessToken,
   isModeratorFromAccessToken,
+  organizationRolesFromAccessToken,
   roleFor,
   type SessionUser,
 } from "@/features/auth/lib/user"
 
-/** Cached per request so several components can ask for the session without re-decrypting it. */
 export const getSession = cache(async (): Promise<Session | null> => {
   return readSession()
 })
@@ -23,14 +23,20 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     return null
   }
 
+  const activeOrganization = await readActiveOrganization(session.organizations)
+
   return {
     name: session.name,
     email: session.email,
     organizations: session.organizations,
-    activeOrganization: await readActiveOrganization(session.organizations),
+    activeOrganization,
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
     isModerator: isModeratorFromAccessToken(session.accessToken),
+    organizationRoles: organizationRolesFromAccessToken(
+      session.accessToken,
+      activeOrganization
+    ),
   }
 }
 

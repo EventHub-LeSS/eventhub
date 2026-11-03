@@ -1,10 +1,15 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import type { OrganizationPayload } from "@/features/organizations/lib/organization";
 import type {
-  Organization,
+  AuditLogPage,
   OrganizationMember,
   OrganizationRight,
 } from "@/features/organizations/lib/types";
@@ -72,29 +77,12 @@ function errorMessage(body: unknown, status: number): string {
   return `Anfrage fehlgeschlagen (${status}).`;
 }
 
-export function useOrganization(alias: string) {
-  return useQuery<Organization, Error>({
-    queryKey: ["organization", alias],
-    queryFn: () => fetchOrganization(alias),
-  });
-}
-
-export function useOrganizationMembers(alias: string) {
+export function useOrganizationMembers(alias: string, enabled = true) {
   return useQuery<OrganizationMember[], Error>({
     queryKey: ["organization", alias, "members"],
     queryFn: () => fetchOrganizationMembers(alias),
+    enabled,
   });
-}
-
-async function fetchOrganization(alias: string): Promise<Organization> {
-  const response = await fetch(`/api/organizations/${alias}`);
-  const body = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
-  }
-
-  return body as Organization;
 }
 
 async function fetchOrganizationMembers(
@@ -108,6 +96,37 @@ async function fetchOrganizationMembers(
   }
 
   return body as OrganizationMember[];
+}
+
+export function useOrganizationAuditLog(alias: string, enabled = true) {
+  return useInfiniteQuery<
+    AuditLogPage,
+    Error,
+    { pages: AuditLogPage[] },
+    string[],
+    string | null
+  >({
+    queryKey: ["organization", alias, "audit-log"],
+    queryFn: ({ pageParam }) => fetchOrganizationAuditLog(alias, pageParam),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled,
+  });
+}
+
+async function fetchOrganizationAuditLog(
+  alias: string,
+  cursor: string | null,
+): Promise<AuditLogPage> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const response = await fetch(`/api/organizations/${alias}/audit-logs${query}`);
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status));
+  }
+
+  return body as AuditLogPage;
 }
 
 export interface UpdateMemberRolesVariables {
@@ -132,9 +151,12 @@ export function useUpdateMemberRoles(alias: string) {
   >({
     mutationFn: ({ username, roles }) =>
       updateMemberRoles(alias, username, roles),
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["organization", alias, "members"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["organization", alias, "audit-log"],
       });
     },
   });

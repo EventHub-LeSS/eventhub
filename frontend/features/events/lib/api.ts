@@ -84,6 +84,22 @@ export async function getOwnEvent(
   return events.find((event) => event.eventId === eventId)
 }
 
+/** confirmed tickets sold for one of the caller's own events. */
+export interface SoldTicketsResponse {
+  eventId: string
+  soldTickets: number
+}
+
+/** confirmed tickets sold for one of the caller's own events. */
+export async function getSoldTickets(
+  accessToken: string,
+  eventId: string
+): Promise<SoldTicketsResponse> {
+  return apiFetch<SoldTicketsResponse>(`/events/${eventId}/sold-tickets`, {
+    accessToken,
+  })
+}
+
 /** EVENTHUB-77 / AK1 */
 export async function createDraft(
   accessToken: string,
@@ -146,6 +162,20 @@ export async function withdrawEvent(
   await apiFetch<{ message: string }>(`/events/${eventId}/withdraw`, {
     accessToken,
     method: "POST",
+  })
+}
+
+/**
+ * EVENTHUB-256: irrevocably deletes a draft. The API refuses events that are no
+ * longer drafts (400) or already have bookings (409).
+ */
+export async function deleteEvent(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}`, {
+    accessToken,
+    method: "DELETE",
   })
 }
 

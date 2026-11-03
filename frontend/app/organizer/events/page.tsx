@@ -3,6 +3,7 @@ import Link from "next/link"
 
 import { getSession, requireOrganizer } from "@/features/auth"
 import {
+  DeleteDraftButton,
   type Event,
   EventApiError,
   listOwnEvents,
@@ -23,14 +24,19 @@ function formatTimeSpan(event: Event): string {
 }
 
 export default async function OrganizerDraftsPage() {
-  await requireOrganizer()
+  const user = await requireOrganizer()
   const session = await getSession()
+  // Drafts and creating events need the event_manager role, the API refuses
+  // other members. They still see every event in the list below.
+  const canManage = user.organizationRoles.includes("event_manager")
 
   let drafts: Event[] = []
   let loadError: string | undefined
 
   try {
-    drafts = await listOwnEvents(session?.accessToken ?? "", "draft")
+    if (canManage) {
+      drafts = await listOwnEvents(session?.accessToken ?? "", "draft")
+    }
   } catch (error) {
     if (!(error instanceof EventApiError)) {
       throw error
@@ -53,26 +59,28 @@ export default async function OrganizerDraftsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="font-medium">Entwürfe</h1>
-          <p className="text-sm text-muted-foreground">
-            Nur du und deine Organisation können diese sehen. Besucher finden
-            sie erst, wenn du sie veröffentlichst.
-          </p>
+      {canManage && (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h1 className="font-medium">Entwürfe</h1>
+            <p className="text-sm text-muted-foreground">
+              Nur du und deine Organisation können diese sehen. Besucher finden
+              sie erst, wenn du sie veröffentlichst.
+            </p>
+          </div>
+          <Button
+            render={<Link href="/organizer/events/new" />}
+            nativeButton={false}
+          >
+            <CirclePlusIcon />
+            Veranstaltung erstellen
+          </Button>
         </div>
-        <Button
-          render={<Link href="/organizer/events/new" />}
-          nativeButton={false}
-        >
-          <CirclePlusIcon />
-          Veranstaltung erstellen
-        </Button>
-      </div>
+      )}
 
       {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
-      {!loadError && drafts.length === 0 && (
+      {canManage && !loadError && drafts.length === 0 && (
         <p className="text-sm text-muted-foreground">
           Du hast noch keine Entwürfe.
         </p>
@@ -93,6 +101,10 @@ export default async function OrganizerDraftsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <DeleteDraftButton
+                  eventId={draft.eventId}
+                  eventTitle={draft.title}
+                />
                 <Button
                   render={
                     <Link href={`/organizer/events/${draft.eventId}/edit`} />

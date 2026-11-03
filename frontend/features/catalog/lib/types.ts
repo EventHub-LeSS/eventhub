@@ -1,7 +1,7 @@
 /** Mirrors `model.PublishedEventResponse` from `GET /events` on the backend
  * (see backend/internal/model/published_events.go). The repository joins
- * category and location, so both are always present on every item the
- * endpoint returns — events missing either are omitted server-side. */
+ * category, location and organizer, so all three are always present on every
+ * item the endpoint returns — events missing any are omitted server-side. */
 export interface PublishedEvent {
   eventId: string
   title: string
@@ -22,6 +22,10 @@ export interface PublishedEvent {
     street: string
     houseNumber: string | null
   }
+  /** Database UUID of the owning organization, for its rating summary. */
+  organizerId: string
+  /** Public name of the owning organization. */
+  organizerAlias: string
 }
 
 /** Mirrors `model.EventAvailability`: why an event can or cannot be booked right now. */

@@ -1,15 +1,13 @@
 "use client"
 
 import {
-  CalendarDaysIcon,
   ClipboardListIcon,
   CompassIcon,
   FlagIcon,
-  HeartIcon,
   LayoutDashboardIcon,
   MenuIcon,
+  ShieldCheckIcon,
   ShieldIcon,
-  TagsIcon,
   TicketIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -19,6 +17,7 @@ import { usePathname } from "next/navigation"
 import { Brand } from "@/features/app/components/navbar/brand"
 import { UserMenu } from "@/features/app/components/navbar/user-menu"
 import type { SessionUser, UserRole } from "@/features/auth"
+import { NotificationBell } from "@/features/notifications"
 import { Button } from "@/features/shared/components/ui/button"
 import { Separator } from "@/features/shared/components/ui/separator"
 import {
@@ -44,16 +43,11 @@ const visitorLinks: NavLink[] = [
   { label: "Entdecken", href: "/", icon: CompassIcon },
   { label: "Buchungen", href: "/bookings", icon: ClipboardListIcon },
   { label: "Meine Tickets", href: "/tickets", icon: TicketIcon },
-  { label: "Favoriten", href: "/favorites", icon: HeartIcon },
-  { label: "Kalender", href: "/calendar", icon: CalendarDaysIcon },
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
   // Anonymous users must sign in before they get visitor functions, so their nav stays minimal.
-  guest: [
-    { label: "Entdecken", href: "/", icon: CompassIcon },
-    { label: "Kategorien", href: "/categories", icon: TagsIcon },
-  ],
+  guest: [{ label: "Entdecken", href: "/", icon: CompassIcon }],
   visitor: visitorLinks,
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
   organizer: [
@@ -65,12 +59,13 @@ const navigationByRole: Record<UserRole, NavLink[]> = {
 // Admins and moderators are platform-wide flags independent of `role` (see SessionUser),
 // so their nav replaces the role-based links entirely instead of being keyed by UserRole.
 const adminLinks: NavLink[] = [
-  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Entdecken", href: "/", icon: CompassIcon },
   { label: "Administration", href: "/admin", icon: ShieldIcon },
+  { label: "Moderation", href: "/admin/moderation", icon: ShieldCheckIcon },
 ]
 
 const moderatorLinks: NavLink[] = [
-  { label: "Discover", href: "/", icon: CompassIcon },
+  { label: "Entdecken", href: "/", icon: CompassIcon },
   { label: "Moderation", href: "/moderation", icon: FlagIcon },
 ]
 
@@ -104,7 +99,7 @@ export function Navbar({ user }: NavbarProps) {
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background">
       <div className="mx-auto flex h-14 max-w-screen-xl items-center gap-4 px-4">
         <Brand user={user} />
-        <nav className="hidden flex-1 items-center justify-center gap-2 md:flex lg:gap-4">
+        <nav className="hidden flex-1 items-center justify-center gap-4 xl:flex">
           {links.map((link) => {
             const Icon = link.icon
 
@@ -128,7 +123,10 @@ export function Navbar({ user }: NavbarProps) {
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {user ? (
-            <UserMenu user={user} />
+            <>
+              <NotificationBell />
+              <UserMenu user={user} />
+            </>
           ) : (
             <div className="hidden items-center gap-1 md:flex">
               <form method="get" action="/api/auth/login">
@@ -144,7 +142,7 @@ export function Navbar({ user }: NavbarProps) {
           <Sheet>
             <SheetTrigger
               render={
-                <Button variant="ghost" size="icon-lg" className="md:hidden" />
+                <Button variant="ghost" size="icon-lg" className="xl:hidden" />
               }
               aria-label="Menü öffnen"
             >

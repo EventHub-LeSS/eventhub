@@ -1,20 +1,25 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { getSession } from "@/features/auth"
 import {
   BookingApiError,
   createBooking,
+  createEventRating,
   getPayment,
   simulatePayment,
   startPayment,
 } from "@/features/bookings/lib/api"
 import type { Payment } from "@/features/bookings/lib/types"
 import {
+  isRatingScore,
   isSimulatedOutcome,
   isUUID,
+  MAX_RATING_TEXT_LENGTH,
   MAX_TICKETS_PER_BOOKING,
+  seatsExceededMessage,
 } from "@/features/bookings/lib/validation"
 
 export interface CreateBookingResult {
@@ -26,6 +31,12 @@ export interface PaymentActionResult {
   /** The stored payment after the call. */
   payment?: Payment
   /** Set when the call failed. */
+  message?: string
+}
+
+export interface RatingActionResult {
+  rated?: boolean
+  score?: number
   message?: string
 }
 
@@ -60,6 +71,19 @@ async function storedPayment(
 }
 
 /**
+ * EVENTHUB-91 / AK4: seats taken since the page was loaded come back as a
+ * technical problem detail ("capacity exceeded: requested 3, available 1");
+ * the visitor gets the same message the form shows.
+ */
+function capacityExceededMessage(detail: string): string | undefined {
+  const match = /^capacity exceeded: requested \d+, available (\d+)$/.exec(
+    detail
+  )
+
+  return match ? seatsExceededMessage(Number(match[1])) : undefined
+}
+
+/**
  * Reserves tickets and sends the user to the payment view. The form already
  * validates the input, but a server action is a public endpoint, so the same
  * rules are enforced here again.
@@ -90,7 +114,9 @@ export async function createBookingAction(
     booking = await createBooking(accessToken, eventId, numberOfTickets)
   } catch (error) {
     if (error instanceof BookingApiError) {
-      return { message: error.message }
+      return {
+        message: capacityExceededMessage(error.message) ?? error.message,
+      }
     }
 
     throw error
@@ -169,5 +195,60 @@ export async function completePaymentAction(
     }
 
     throw error
+  }
+}
+
+export async function createEventRatingAction(
+  eventId: string,
+  score: number,
+  text: string
+): Promise<RatingActionResult> {
+  if (!isUUID(eventId)) {
+    return { message: "Ungültige Veranstaltung." }
+  }
+
+  if (!isRatingScore(score)) {
+    return { message: "Bitte vergib 1 bis 5 Sterne." }
+  }
+
+  if (typeof text !== "string" || text.length > MAX_RATING_TEXT_LENGTH) {
+    return {
+      message: `Der Text darf höchstens ${MAX_RATING_TEXT_LENGTH} Zeichen lang sein.`,
+    }
+  }
+
+  const accessToken = await authorize("/tickets")
+
+  try {
+    await createEventRating(accessToken, eventId, score, text.trim())
+    revalidatePath("/tickets")
+    return { rated: true, score }
+  } catch (error) {
+    if (error instanceof BookingApiError) {
+      if (error.status === 409 && /already been rated/.test(error.message)) {
+        revalidatePath("/tickets")
+        return {
+          rated: true,
+          message: "Du hast diese Veranstaltung bereits bewertet.",
+        }
+      }
+
+      return { message: ratingErrorMessage(error) }
+    }
+
+    throw error
+  }
+}
+
+function ratingErrorMessage(error: BookingApiError): string {
+  switch (error.status) {
+    case 403:
+      return "Nur Besucher mit bestätigter Buchung können diese Veranstaltung bewerten."
+    case 404:
+      return "Diese Veranstaltung gibt es nicht mehr."
+    case 409:
+      return "Bewerten kannst du eine Veranstaltung erst, wenn sie stattgefunden hat."
+    default:
+      return error.message
   }
 }
