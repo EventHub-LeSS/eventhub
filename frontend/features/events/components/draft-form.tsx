@@ -1,29 +1,29 @@
-"use client"
+"use client";
 
-import { useState, useTransition } from "react"
+import { useState, useTransition } from "react";
 
 import {
   saveDraftAction,
   updateDraftAction,
-} from "@/features/events/lib/actions"
+} from "@/features/events/lib/actions";
 import {
   type DraftErrors,
   type EventDraft,
   emptyDraft,
   toDraft,
-} from "@/features/events/lib/draft"
-import type { Event, EventCatalog } from "@/features/events/lib/types"
-import { Button } from "@/features/shared/components/ui/button"
+} from "@/features/events/lib/draft";
+import type { Event, EventCatalog } from "@/features/events/lib/types";
+import { Button } from "@/features/shared/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/features/shared/components/ui/select"
+} from "@/features/shared/components/ui/select";
 
 const fieldClass =
-  "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
+  "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive";
 
 function Field({
   id,
@@ -32,11 +32,11 @@ function Field({
   hint,
   children,
 }: {
-  id: string
-  label: string
-  error?: string
-  hint?: string
-  children: React.ReactNode
+  id: string;
+  label: string;
+  error?: string;
+  hint?: string;
+  children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -49,58 +49,58 @@ function Field({
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
-  )
+  );
 }
 
 interface DraftFormProps {
-  catalog: EventCatalog
+  catalog: EventCatalog;
   /** Present when an existing draft is edited instead of a new one created. */
-  event?: Event
+  event?: Event;
 }
 
 export function DraftForm({ catalog, event }: DraftFormProps) {
   const [draft, setDraft] = useState<EventDraft>(() =>
-    event ? toDraft(event) : emptyDraft
-  )
-  const [errors, setErrors] = useState<DraftErrors>({})
-  const [message, setMessage] = useState<string>()
-  const [isPending, startTransition] = useTransition()
+    event ? toDraft(event) : emptyDraft,
+  );
+  const [errors, setErrors] = useState<DraftErrors>({});
+  const [message, setMessage] = useState<string>();
+  const [isPending, startTransition] = useTransition();
 
   function update<K extends keyof EventDraft>(key: K, value: EventDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }))
-    setErrors((current) => ({ ...current, [key]: undefined }))
+    setDraft((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
   function handleSubmit(submitEvent: React.FormEvent<HTMLFormElement>) {
-    submitEvent.preventDefault()
-    setMessage(undefined)
+    submitEvent.preventDefault();
+    setMessage(undefined);
 
     startTransition(async () => {
       const result = event
         ? await updateDraftAction(event.eventId, draft)
-        : await saveDraftAction(draft)
+        : await saveDraftAction(draft);
 
-      setErrors(result.errors ?? {})
-      setMessage(result.message)
-    })
+      setErrors(result.errors ?? {});
+      setMessage(result.message);
+    });
   }
 
   const catalogMissing =
-    catalog.categories.length === 0 || catalog.locations.length === 0
+    catalog.categories.length === 0 || catalog.locations.length === 0;
 
   // The labels the selects show for their current value, like in the event filters.
   const categoryItems = Object.fromEntries(
     catalog.categories.map((category) => [
       category.categoryId,
       category.category,
-    ])
-  )
+    ]),
+  );
   const locationItems = Object.fromEntries(
     catalog.locations.map((location) => [
       location.locationId,
       `${location.name}, ${location.city}`,
-    ])
-  )
+    ]),
+  );
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -114,12 +114,7 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         />
       </Field>
 
-      <Field
-        id="description"
-        label="Beschreibung"
-        error={errors.description}
-        hint="Optional."
-      >
+      <Field id="description" label="Beschreibung" error={errors.description}>
         <textarea
           id="description"
           rows={4}
@@ -256,5 +251,5 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         </Button>
       </div>
     </form>
-  )
+  );
 }
