@@ -2,8 +2,8 @@ import { ArrowLeftIcon, StarIcon } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getCurrentUser } from "@/features/auth";
-import { BookingForm, formatAmount } from "@/features/bookings";
+import { getSession } from "@/features/auth";
+import { AddToCartForm, formatAmount } from "@/features/cart";
 import {
   getEventRatingSummary,
   getOrganizerRatingSummary,
@@ -43,17 +43,17 @@ function DetailRow({
 
 /**
  * Public detail page of a published event (EVENTHUB-211/212) and the entry
- * point of the booking flow (EVENTHUB-235): the amount to pay is calculated
- * from the ticket count and the price here, before anything is reserved.
- * The organizer is shown with its average rating (EVENTHUB-239), the event's
- * public rating summary (EVENTHUB-238) sits next to the category above the
- * title
+ * point of the cart flow (282): tickets are reserved into the cart here,
+ * the amount of this addition is calculated from ticket count and price.
+ * The organizer is shown with its average rating (EVENTHUB-239), the
+ * event's public rating summary (EVENTHUB-238) sits next to the category
+ * above the title
  */
 export default async function EventDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const [result, user, rating] = await Promise.all([
+  const [result, session, rating] = await Promise.all([
     getPublishedEventDetails(id),
-    getCurrentUser(),
+    getSession(),
     getEventRatingSummary(id),
   ]);
 
@@ -215,13 +215,13 @@ export default async function EventDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <BookingForm
+          <AddToCartForm
             eventId={event.eventId}
             price={event.price}
             availableSeats={event.availableSeats}
             capacity={event.capacity}
             bookable={event.bookable}
-            isAuthenticated={Boolean(user)}
+            isAuthenticated={Boolean(session)}
           />
         </div>
       </div>

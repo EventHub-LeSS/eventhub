@@ -131,6 +131,8 @@ export const config = {
     "/admin/:path*",
     "/api/moderation/:path*",
     "/tickets/:path*",
+    "/cart/:path*",
+    "/api/cart/:path*",
     "/favorites/:path*",
     "/organizer/:path*",
     "/organization/:path*",

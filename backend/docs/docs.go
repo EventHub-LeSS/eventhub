@@ -241,81 +241,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/bookings": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde. Bestätigt wird sie über den Zahlungsvorgang (POST /bookings/{bookingId}/payment).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bookings"
-                ],
-                "summary": "Buchung anlegen",
-                "parameters": [
-                    {
-                        "description": "Buchungsdaten",
-                        "name": "booking",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.CreateBookingRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/model.BookingModel"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Event nicht veröffentlicht oder Kapazität überschritten",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/bookings/{bookingId}/cancel": {
             "post": {
                 "security": [
@@ -323,14 +248,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Cancels the caller's reserved or confirmed booking and releases its tickets. Repeated cancellation succeeds without another refund. Pending payments fail; paid payments receive a full simulated refund of the stored payment amount in the same transaction.",
+                "description": "Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Wiederholtes Stornieren gelingt ohne weitere Erstattung.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "bookings"
                 ],
-                "summary": "Cancel a booking",
+                "summary": "Buchung stornieren",
                 "parameters": [
                     {
                         "type": "string",
@@ -372,245 +297,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/bookings/{bookingId}/payment": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Liefert den gespeicherten Zahlungsvorgang einer Buchung des Aufrufers: Betrag, Zahlungsstatus, Buchungsstatus und eine verständliche Meldung. ticketsValid ist nur bei bezahlter und bestätigter Buchung true, deren Event stattfindet oder stattgefunden hat. Buchung, Zahlung, Event-Status und Datenbankuhr stammen aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein Hintergrundjob jede Minute als fehlgeschlagen ab.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "payments"
-                ],
-                "summary": "Zahlungsvorgang abrufen",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Booking ID",
-                        "name": "bookingId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/model.PaymentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Buchung nicht gefunden oder kein Zahlungsvorgang gestartet",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Überführt eine Reservierung des Aufrufers in einen Zahlungsvorgang. Der Betrag ergibt sich aus Ticketanzahl mal Veranstaltungspreis, wird gespeichert und vor Abschluss angezeigt; Beträge vom Client werden ignoriert. Ein erneuter Aufruf liefert den offenen Zahlungsvorgang unverändert zurück (200). Die Zahlung muss vor expiresAt abgeschlossen werden. Ist die Reservierung abgelaufen oder das Event zurückgezogen, wird eine offene Zahlung dabei als fehlgeschlagen gespeichert und 409 geliefert. Buchungen anderer Nutzer liefern 404.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "payments"
-                ],
-                "summary": "Zahlungsvorgang starten",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Booking ID",
-                        "name": "bookingId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Offener Zahlungsvorgang existierte bereits",
-                        "schema": {
-                            "$ref": "#/definitions/model.PaymentResponse"
-                        }
-                    },
-                    "201": {
-                        "description": "Zahlungsvorgang angelegt",
-                        "schema": {
-                            "$ref": "#/definitions/model.PaymentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Buchung nicht reserviert, Reservierung abgelaufen, Event nicht mehr verfügbar oder Zahlung bereits abgeschlossen",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Betrag außerhalb des zulässigen Bereichs",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/bookings/{bookingId}/payment/simulate": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Schließt den offenen Zahlungsvorgang mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Betrag entsprechen, sonst wird nichts geändert (422). Bei success wird die Buchung verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder zurückgezogenem Event schlägt die Zahlung fehl (status failed, failureReason, message), die Buchung erhält keinen Ticketanspruch und die Tickets werden freigegeben. Das Ergebnis wird innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "payments"
-                ],
-                "summary": "Zahlung simulieren",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Booking ID",
-                        "name": "bookingId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Simuliertes Ergebnis und angezeigter Betrag",
-                        "name": "payment",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.SimulatePaymentRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Ergebnis des Zahlungsvorgangs, erfolgreich oder fehlgeschlagen",
-                        "schema": {
-                            "$ref": "#/definitions/model.PaymentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Buchung nicht gefunden oder kein Zahlungsvorgang gestartet",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Zahlung bereits abgeschlossen oder Buchung nicht reserviert",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "413": {
-                        "description": "Request Body größer als 4 KiB",
-                        "schema": {
-                            "$ref": "#/definitions/model.ErrorResponse"
-                        }
-                    },
-                    "422": {
-                        "description": "Betrag weicht vom gespeicherten Betrag ab",
+                        "description": "Buchung in diesem Status nicht stornierbar",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -700,6 +387,388 @@ const docTemplate = `{
                 }
             }
         },
+        "/cart": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert den Warenkorb des Aufrufers: jede lebende Reservierung ohne Zahlung mit der aktuellen Verfügbarkeit und den aktuellen Preisen ihres Events. Reservierungen halten ihre Plätze bis expiresAt; danach sind sie nicht mehr Teil des Warenkorb. totalAmount ist die Summe der aktuellen Zeilenbeträge — der Checkout berechnet und speichert den zu zahlenden Betrag selbst. checkoutReady ist nur true, wenn der Warenkorb Items hat und alle Events noch veröffentlicht sind. openPayment nennt den offenen Zahlungsvorgang des Aufrufers, falls einer existiert: Dessen Items haben den Warenkorb verlassen und warten auf ihre Zahlung — sie halten ihre Plätze bis expiresAt — und neue Items können erst ausgecheckt werden, wenn der Vorgang abgeschlossen ist.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Warenkorb abrufen",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.CartResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Entfernt alle Warenkorb-Items des Aufrufers und gibt deren Plätze sofort frei. Reservierungen mit offener Zahlung gehören nicht zum Warenkorb und bleiben unberührt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Warenkorb leeren",
+                "responses": {
+                    "200": {
+                        "description": "Leerer Warenkorb",
+                        "schema": {
+                            "$ref": "#/definitions/model.CartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cart/checkout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Überführt alle lebenden Reservierungen des Aufrufers in einen Zahlungsvorgang: ein Zahlung mit dem Summenbetrag und pro Item ein Betrag aus Ticketanzahl mal aktuellem Event-Preis, alles serverseitig berechnet und gespeichert; Beträge vom Client werden ignoriert. Alle Buchungen teilen sich eine erneuerte Reservierungsfrist (15 Minuten) — die Zahlung muss vor expiresAt abgeschlossen werden. Items mit abgelaufener Reservierung halten keine Plätze und werden ausgelassen; ist kein Item mehr lebend, liefert der Aufruf 409 bzw. 422 bei leerem Warenkorb. Ein Event, das nicht mehr veröffentlicht ist, lässt den gesamten Checkout scheitern (409), weil die Zahlung alle Items zusammen oder gar nicht abschließt. Existiert bereits ein offener Zahlungsvorgang, wird dieser unverändert zurückgegeben (200).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Warenkorb auschecken",
+                "responses": {
+                    "200": {
+                        "description": "Offener Zahlungsvorgang existierte bereits",
+                        "schema": {
+                            "$ref": "#/definitions/model.PaymentResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Zahlungsvorgang angelegt",
+                        "schema": {
+                            "$ref": "#/definitions/model.PaymentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Reservierungen abgelaufen oder Event nicht mehr verfügbar",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Warenkorb ist leer",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cart/items": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Reserviert Tickets eines veröffentlichten Events für den AufrufER und legt sie damit in den Warenkorb. Die Reservierung hält die Plätze bis expiresAt (15 Minuten) und verfällt danach. Existiert bereits ein Item für das Event, wächst dessen Anzahl (höchstens 10 pro Event) und die Reservierung wird erneuert; ein abgelaufenes Item wird ersetzt. Der Platz wird wie bei einer Buchung sofort gegen die Kapazität geprüft (409). Die Antwort ist der Warenkorb nach der Änderung.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Tickets in den Warenkorb legen",
+                "parameters": [
+                    {
+                        "description": "Event und Ticketanzahl",
+                        "name": "item",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.AddCartItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Warenkorb nach dem Hinzufügen",
+                        "schema": {
+                            "$ref": "#/definitions/model.CartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Event unbekannt",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Event nicht veröffentlicht oder Kapazität überschritten",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Mehr als 10 Tickets für ein Event",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/cart/items/{bookingId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Entfernt ein eigenes Warenkorb-Item (Reservierung ohne Zahlung) und gibt dessen Plätze sofort frei. Abgelaufene, ausgecheckte, stornierte oder fremde Items liefern 404. Die Antwort ist der Warenkorb nach der Änderung.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Item aus dem Warenkorb entfernen",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID der Reservierung hinter dem Item",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Warenkorb nach dem Entfernen",
+                        "schema": {
+                            "$ref": "#/definitions/model.CartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item unbekannt oder kein Warenkorb-Item",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Setzt die Ticketanzahl eines eigenen Warenkorb-Items (Reservierung ohne Zahlung). Das Item behält seine reservierten Plätze, mehr Tickets brauchen freie Plätze (409); die Reservierung wird erneuert. Abgelaufene, ausgecheckte, stornierte oder fremde Items liefern 404. Die Antwort ist der Warenkorb nach der Änderung.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cart"
+                ],
+                "summary": "Ticketanzahl eines Warenkorb-Items ändern",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID der Reservierung hinter dem Item",
+                        "name": "bookingId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Neue Ticketanzahl",
+                        "name": "item",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.UpdateCartItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Warenkorb nach der Änderung",
+                        "schema": {
+                            "$ref": "#/definitions/model.CartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item unbekannt oder kein Warenkorb-Item",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Reservierung abgelaufen oder Kapazität überschritten",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Anzahl außerhalb 1 bis 10",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/debug/token": {
             "post": {
                 "description": "TEST ONLY — accepts username/password and returns a Keycloak access token. Disabled in production (requires DEBUG_ENABLED=true).",
@@ -748,7 +817,7 @@ const docTemplate = `{
         },
         "/events": {
             "get": {
-                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects the start calendar day in Europe/Berlin (YYYY-MM-DD). All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
+                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -771,7 +840,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Start date in YYYY-MM-DD format, interpreted in Europe/Berlin. Empty means no date filter.",
+                        "description": "Date in YYYY-MM-DD format, interpreted in Europe/Berlin. Events taking place during this calendar day are returned, including multi-day events that span it. Empty means no date filter.",
                         "name": "date",
                         "in": "query"
                     }
@@ -1775,7 +1844,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId}. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.",
+                "description": "Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.",
                 "produces": [
                     "application/json"
                 ],
@@ -2438,6 +2507,164 @@ const docTemplate = `{
                 }
             }
         },
+        "/payments/{paymentId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Liefert den gespeicherten Zahlungsvorgang des Aufrufers: den Summenbetrag, den Zahlungsstatus und jedes Item mit Event, Ticketanzahl, Zeilenbetrag, Buchungsstatus und Ticketgültigkeit. Der Zahlungsvorgang deckt alle Buchungen eines Warenkorb-Checkouts ab und schließt sie zusammen ab. ticketsValid ist nur true, wenn die Zahlung bezahlt, alle Buchungen bestätigt sind und die Events stattfinden oder stattgefunden haben. Zahlung, Buchungen, Event-Status und Datenbankuhr stammen aus einer Abfrage. Offene Zahlungen abgelaufener Reservierungen schließt ein Hintergrundjob jede Minute als fehlgeschlagen ab. Zahlungsvorgänge anderer Nutzer liefern 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Zahlungsvorgang abrufen",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Payment ID",
+                        "name": "paymentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.PaymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Zahlungsvorgang nicht gefunden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/payments/{paymentId}/simulate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Schließt den offenen Zahlungsvorgang des Aufrufers mit einem simulierten Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss dem gespeicherten Summenbetrag entsprechen, sonst wird nichts geändert (422). Bei success werden alle Buchungen des Zahlungsvorgangs verbindlich bestätigt (bookingStatus confirmed, ticketsValid true). Bei failure, abgelaufener Reservierung oder nicht mehr verfügbarem Event schlägt die Zahlung fehl (status failed, failureReason, message), keine Buchung erhält einen Ticketanspruch und alle Tickets werden freigegeben — der Zahlungsvorgang gilt für alle Buchungen zusammen oder für keine. Das Ergebnis wird innerhalb der Transaktion aus dem gespeicherten Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "payments"
+                ],
+                "summary": "Zahlung simulieren",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Payment ID",
+                        "name": "paymentId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Simuliertes Ergebnis und angezeigter Betrag",
+                        "name": "payment",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.SimulatePaymentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ergebnis des Zahlungsvorgangs, erfolgreich oder fehlgeschlagen",
+                        "schema": {
+                            "$ref": "#/definitions/model.PaymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Zahlungsvorgang nicht gefunden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Zahlung bereits abgeschlossen oder Buchung nicht reserviert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Body größer als 4 KiB",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Betrag weicht vom gespeicherten Betrag ab",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/recommendations": {
             "get": {
                 "security": [
@@ -2526,18 +2753,18 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "handler.CreateBookingRequest": {
+        "handler.AddCartItemRequest": {
             "type": "object",
             "required": [
                 "eventId",
-                "numberOfTickets"
+                "quantity"
             ],
             "properties": {
                 "eventId": {
                     "type": "string",
                     "example": "550e8400-e29b-41d4-a716-446655440000"
                 },
-                "numberOfTickets": {
+                "quantity": {
                     "type": "integer",
                     "minimum": 1,
                     "example": 2
@@ -2650,6 +2877,19 @@ const docTemplate = `{
                         }
                     ],
                     "example": "success"
+                }
+            }
+        },
+        "handler.UpdateCartItemRequest": {
+            "type": "object",
+            "required": [
+                "quantity"
+            ],
+            "properties": {
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 3
                 }
             }
         },
@@ -2868,6 +3108,10 @@ const docTemplate = `{
                 "expiresAt": {
                     "type": "string"
                 },
+                "lineAmount": {
+                    "description": "LineAmount is what the booking costs within its payment: its tickets times the event\nprice at checkout time. Null while the reservation sits in the cart without a payment.",
+                    "type": "number"
+                },
                 "numberOfTickets": {
                     "type": "integer"
                 },
@@ -2901,6 +3145,86 @@ const docTemplate = `{
                 "BookingStatusFailed",
                 "BookingStatusExpired"
             ]
+        },
+        "model.CartItemResponse": {
+            "type": "object",
+            "properties": {
+                "availableSeats": {
+                    "description": "Seats free for others plus the seats this item holds: the most tickets the item can have.\nThe reservation itself always keeps its tickets until it expires.",
+                    "type": "integer"
+                },
+                "bookable": {
+                    "description": "False when the event is no longer published; such an item blocks the checkout.",
+                    "type": "boolean"
+                },
+                "bookingId": {
+                    "description": "ID of the reservation behind the item; used to change or remove it.",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "Time the item entered the cart.",
+                    "type": "string"
+                },
+                "event": {
+                    "description": "Null when the event no longer exists.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OwnBookingEvent"
+                        }
+                    ]
+                },
+                "expiresAt": {
+                    "description": "Deadline of the reservation; the tickets are released when it passes.",
+                    "type": "string"
+                },
+                "lineTotal": {
+                    "description": "Unit price times the number of tickets, from the current event data.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "numberOfTickets": {
+                    "description": "Reserved tickets of the item; set with PATCH, at most 10 per event.",
+                    "type": "integer",
+                    "example": 2
+                },
+                "unitPrice": {
+                    "description": "Price of one ticket, from the current event data; the checkout stores the charged line.",
+                    "type": "string",
+                    "example": "20"
+                }
+            }
+        },
+        "model.CartResponse": {
+            "type": "object",
+            "properties": {
+                "checkoutReady": {
+                    "description": "True when the cart has items and all of them belong to published events.",
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.CartItemResponse"
+                    }
+                },
+                "openPayment": {
+                    "description": "The caller's checkout that is still open, if any: its items left the cart and wait for\ntheir payment, so the cart reports the checkout instead of letting the items vanish.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OpenCartPayment"
+                        }
+                    ]
+                },
+                "totalAmount": {
+                    "description": "Sum of the line totals of the items, from the current event data. The checkout computes\nand stores the charged amount itself.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "totalTickets": {
+                    "description": "Total number of reserved tickets over all items.",
+                    "type": "integer"
+                }
+            }
         },
         "model.ConfigureOrgRolesRequest": {
             "type": "object",
@@ -3336,6 +3660,29 @@ const docTemplate = `{
                 }
             }
         },
+        "model.OpenCartPayment": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Stored sum of the line amounts: the amount completing the payment would charge.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "expiresAt": {
+                    "description": "Shared deadline of the payment's reservations; the payment must complete before it.",
+                    "type": "string"
+                },
+                "paymentId": {
+                    "description": "Identifies the payment; GET /payments/{paymentId} shows its items.",
+                    "type": "string"
+                },
+                "totalTickets": {
+                    "description": "Reserved tickets over all items of the payment.",
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
         "model.OrganizationRole": {
             "type": "string",
             "enum": [
@@ -3448,6 +3795,10 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "ratingScore": {
+                    "description": "Score the caller gave the event of this booking; null while it is not rated yet. The rating\ncounts per user and event, not per booking.",
+                    "type": "integer"
+                },
                 "refundAmount": {
                     "description": "Refunded amount of the payment; null without payment.",
                     "type": "string",
@@ -3474,24 +3825,47 @@ const docTemplate = `{
                 "PaymentFailureEventUnavailable"
             ]
         },
-        "model.PaymentResponse": {
+        "model.PaymentItemResponse": {
             "type": "object",
             "properties": {
-                "amount": {
-                    "description": "Number of tickets times the event price when the payment process was started.",
-                    "type": "string",
-                    "example": "40"
-                },
                 "bookingId": {
                     "type": "string"
                 },
                 "bookingStatus": {
                     "$ref": "#/definitions/model.BookingStatus"
                 },
-                "createdAt": {
-                    "type": "string"
+                "event": {
+                    "description": "Null when the event of the booking no longer exists.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.OwnBookingEvent"
+                        }
+                    ]
                 },
-                "eventId": {
+                "lineAmount": {
+                    "description": "Tickets times the event price at checkout time; the charged amount of this item.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "numberOfTickets": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "ticketsValid": {
+                    "description": "True only when the payment is paid, this booking is confirmed and the event takes place\nor took place.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "model.PaymentResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Sum of the line amounts of the items, computed and stored by the backend only.",
+                    "type": "string",
+                    "example": "40"
+                },
+                "createdAt": {
                     "type": "string"
                 },
                 "expiresAt": {
@@ -3501,14 +3875,16 @@ const docTemplate = `{
                 "failureReason": {
                     "$ref": "#/definitions/model.PaymentFailureReason"
                 },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.PaymentItemResponse"
+                    }
+                },
                 "message": {
                     "description": "Human readable result of the payment process.",
                     "type": "string",
-                    "example": "Payment successful. Your booking is confirmed."
-                },
-                "numberOfTickets": {
-                    "type": "integer",
-                    "example": 2
+                    "example": "Payment successful. Your tickets are confirmed."
                 },
                 "paymentId": {
                     "type": "string"
@@ -3517,7 +3893,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/model.PaymentStatus"
                 },
                 "ticketsValid": {
-                    "description": "True only when the payment is paid and the booking is confirmed.",
+                    "description": "True only when the payment is paid and every item holds valid tickets.",
                     "type": "boolean"
                 },
                 "updatedAt": {

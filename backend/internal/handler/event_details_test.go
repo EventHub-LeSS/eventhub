@@ -5,7 +5,6 @@ import (
 	"backend/internal/repository"
 	"backend/internal/service"
 	"backend/internal/testdb"
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -116,15 +115,12 @@ func TestPublishedEventDetailsDatabase(t *testing.T) {
 	if details.AvailableSeats != 70 || !details.Bookable {
 		t.Fatalf("availability: %+v", details)
 	}
-	bookingRepo := repository.NewBookingRepository(db)
-	if err := bookingRepo.InTransaction(context.Background(), func(tx repository.BookingTx) error {
-		occupied, err := tx.CountOccupiedTickets(event.eventID)
-		if err == nil && occupied != int64(details.Capacity)-details.AvailableSeats {
-			t.Fatalf("booking occupied=%d", occupied)
-		}
-		return err
-	}); err != nil {
+	occupied, err := repository.NewBookingRepository(db).CountOccupiedTickets(event.eventID)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if occupied != int64(details.Capacity)-details.AvailableSeats {
+		t.Fatalf("booking occupied=%d", occupied)
 	}
 	for _, capacity := range []int{30, 25} {
 		if err := db.Exec("UPDATE events SET capacity = ? WHERE event_id = ?", capacity, event.eventID).Error; err != nil {

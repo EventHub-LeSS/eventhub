@@ -133,8 +133,14 @@ Provadis Hochschule, Telekom, ACME Events, Stadthalle Bremen
 
 #### Mock-Geschäftsdaten
 
-6 Kategorien, 5 Locations, 12 Veranstaltungen (alle Status: draft/published/cancelled/completed),
-10 Zahlungen, 10 Buchungen, 4 Bewertungen, 5 Benachrichtigungen — alle referenziell konsistent.
+6 Kategorien, 5 Locations, 39 Veranstaltungen (alle Status: draft/published/cancelled/completed,
+davon 13 abgeschlossene historische Events für Empfehlungstests), 53 Zahlungen, 56 Buchungen,
+27 Bewertungen, 10 Benachrichtigungen — alle referenziell konsistent.
+
+3 der Buchungen sind Warenkorb-Items von `visitor@eventhub.de` (2× Stand-up Showcase Berlin,
+3× Frankfurt Wine Tasting, 1× München Marathon Expo): lebende Reservierungen ohne Zahlung,
+deren Plätze bis zum Ablauf der 15-Minuten-Reservierung gehalten werden — Demo-Daten für den
+Warenkorb-Flow.
 
 ### Frontend starten
 
@@ -176,69 +182,122 @@ PostgreSQL-Integrationstests benötigen `TEST_DATABASE_DSN` und sollten mit
 zurücksetzen. **Nur eine separate, wegwerfbare Testdatenbank verwenden:** Die
 Testvorbereitung migriert das Schema und leert Tabellen mit `TRUNCATE ... CASCADE`.
 
-### Zahlungsvorgang (EVENTHUB-235)
+### Warenkorb und Zahlungsvorgang (282, EVENTHUB-235)
 
-Eine Reservierung aus `POST /api/v1/bookings` wird über einen simulierten Zahlungsvorgang
-verbindlich. Es ist **kein echter Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt
-der Client.
+Besucher legen Tickets beliebig vieler Veranstaltungen in einen **Warenkorb** und bezahlen alles
+zusammen an der Kasse. Der Warenkorb ist keine eigene Tabelle: Er ist die Menge der **lebenden
+Reservierungen** des Aufrufers ohne Zahlung (`status: reserved`, ohne `payment_id`, `expires_at` in
+der Zukunft). Jede Reservierung hält ihre Plätze 15 Minuten; danach ist das Item wieder weg und die
+Plätze frei. Pro Veranstaltung liegen höchstens 10 Tickets im Warenkorb. Es ist **kein echter
+Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt der Client.
 
-1. `POST /api/v1/bookings/{bookingId}/payment` legt eine Zahlung mit Status `pending` an. Der Betrag
-   ist Ticketanzahl × Veranstaltungspreis, wird nur serverseitig berechnet und gespeichert; Beträge
-   im Request werden ignoriert. Antwort `201`, ein erneuter Aufruf liefert die offene Zahlung
-   unverändert mit `200` (spätere Preisänderungen ändern einen angezeigten Betrag nicht).
-2. Der Client zeigt `amount` an und schließt mit
-   `POST /api/v1/bookings/{bookingId}/payment/simulate` und `{"outcome": "success" | "failure", "amount": <angezeigter Betrag>}` ab.
-   Weicht `amount` vom gespeicherten Betrag ab, wird nichts geändert (`422`).
-3. `GET /api/v1/bookings/{bookingId}/payment` liefert jederzeit den gespeicherten Stand.
+| Endpunkt | Bedeutung |
+| --- | --- |
+| `GET /api/v1/cart` | Warenkorb des Aufrufers: jedes Item mit Event, Ticketanzahl, aktuellem Einzelpreis und Zeilenbetrag, Platzgrenze (`availableSeats` = freie Plätze **plus** eigene Tickets), `bookable` und `expiresAt`; dazu `totalTickets`, `totalAmount` (Summe der aktuellen Zeilenbeträge) und `checkoutReady`. `openPayment` nennt den offenen Zahlungsvorgang des Aufrufers (`paymentId`, gespeicherter Betrag, Ticketzahl, gemeinsame Ablauffrist), falls einer existiert: Dessen Items haben den Warenkorb verlassen und warten auf ihre Zahlung, und neue Items können erst ausgecheckt werden, wenn er abgeschlossen ist. |
+| `POST /api/v1/cart/items` | Reserviert Tickets eines veröffentlichten Events (`eventId`, `quantity`) und legt sie in den Warenkorb. Existiert bereits ein Item für das Event, wächst dessen Anzahl (max. 10) und die Reservierung wird erneuert; ein abgelaufenes Item ohne Zahlung wird in derselben Zeile ersetzt. Der Platz wird sofort gegen die Kapazität geprüft. Antwort `201` mit dem Warenkorb. |
+| `PATCH /api/v1/cart/items/{bookingId}` | Setzt die Ticketanzahl eines eigenen Items. Das Item behält seine reservierten Plätze, mehr Tickets brauchen freie Plätze; die Reservierung wird erneuert. |
+| `DELETE /api/v1/cart/items/{bookingId}` | Entfernt ein Item und gibt dessen Plätze sofort frei. |
+| `DELETE /api/v1/cart` | Leert den Warenkorb. Reservierungen mit offener Zahlung gehören nicht zum Warenkorb und bleiben unberührt. |
+| `POST /api/v1/cart/checkout` | Überführt alle lebenden Items in **einen** Zahlungsvorgang. `201` beim Anlegen, `200` wenn bereits ein offener existiert (dann unverändert, spätere Preisänderungen ändern einen angezeigten Betrag nicht). |
+| `GET /api/v1/payments/{paymentId}` | Gespeicherter Zahlungsvorgang: Summenbetrag, Status, Items mit Zeilenbetrag, Buchungsstatus und Ticketgültigkeit. |
+| `POST /api/v1/payments/{paymentId}/simulate` | Schließt die offene Zahlung mit dem simulierten Ergebnis ab: `{"outcome": "success" \| "failure", "amount": <angezeigter Betrag>}`. |
+| `POST /api/v1/bookings/{bookingId}/cancel` | Storniert eine Buchung des Aufrufers (siehe unten). |
 
-Alle drei Endpunkte antworten mit `PaymentResponse` aus den gespeicherten Daten: `amount`, `status`
-(`pending`/`paid`/`failed`), `failureReason`, `bookingStatus`, `ticketsValid` und eine lesbare
-`message`. `ticketsValid` ist nur bei `paid` **und** `confirmed` `true` und nur, solange das Event
-veröffentlicht oder abgeschlossen ist; Tickets abgesagter oder gelöschter Events sind ungültig.
+Die direkte Buchung `POST /api/v1/bookings` und die alten Zahlungs-Endpunkte
+`POST/GET /api/v1/bookings/{bookingId}/payment` sowie
+`POST /api/v1/bookings/{bookingId}/payment/simulate` sind ersatzlos entfernt.
 
-| Ergebnis | Zahlung | Buchung | `failureReason` |
+**Checkout:** Jede Buchung des Zahlungsvorgangs speichert ihren **Zeilenbetrag** — Ticketanzahl ×
+aktueller Veranstaltungspreis —, der Zahlungsbetrag ist die Summe aller Zeilenbeträge. Beides
+berechnet und speichert nur das Backend; Beträge im Request werden ignoriert. Alle Buchungen teilen
+sich **eine** erneuerte Reservierungsfrist von 15 Minuten, bezahlt wird vor `expiresAt`. Items mit
+abgelaufener Reservierung halten keine Plätze und werden ausgelassen; ist kein Item mehr lebend,
+antwortet der Checkout `409`, bei leerem Warenkorb `422`. Ein nicht mehr veröffentlichtes Event
+lässt den gesamten Checkout scheitern (`409`): Der Zahlungsvorgang gilt für alle Buchungen zusammen
+oder für keine. Ein Nutzer hat höchstens einen offenen Zahlungsvorgang; Items, die danach in den
+Warenkorb gelegt werden, koexistieren, können aber erst ausgecheckt werden, wenn er abgeschlossen
+ist. Der offene Vorgang ist über `openPayment` in `GET /cart` sichtbar, sodass die ausgecheckten
+Artikel nicht wie verloren wirken: Wer von der Zahlung zurückkehrt, findet den Vorgang im
+Warenkorb und kann ihn fortsetzen.
+
+**Ergebnisse:** Alle drei Zahlungsendpunkte antworten mit `PaymentResponse` aus den gespeicherten
+Daten: `amount` (Summe), `items` (je `bookingId`, `event`, `numberOfTickets`, `lineAmount`,
+`bookingStatus`, `ticketsValid`), `status` (`pending`/`paid`/`failed`/`refunded`), `failureReason`
+und eine lesbare `message`. `ticketsValid` ist nur bei `paid` und bestätigten Buchungen `true` und
+nur, solange die Events veröffentlicht oder abgeschlossen sind.
+
+| Ergebnis | Zahlung | Buchungen | `failureReason` |
 | --- | --- | --- | --- |
-| `success` | `paid` | `confirmed` | – |
-| `failure` | `failed` | `failed` | `declined` |
-| Reservierung inzwischen abgelaufen | `failed` | `expired` | `reservation_expired` |
+| `success` | `paid` | alle `confirmed` | – |
+| `failure` | `failed` | alle `failed` | `declined` |
+| Reservierung inzwischen abgelaufen | `failed` | abgelaufene `expired` | `reservation_expired` |
 | Event inzwischen zurückgezogen | `failed` | `failed` | `event_unavailable` |
+| Buchung vor Abschluss storniert | `failed` | stornierte `cancelled` | `booking_cancelled` |
 
 Fehlgeschlagene Buchungen geben ihre Tickets sofort frei und zählen nicht als verkauft; für einen
-neuen Versuch ist eine neue Buchung nötig. Die Zahlung muss vor `expiresAt` der Reservierung
-abgeschlossen werden.
+neuen Versuch werden die Tickets erneut in den Warenkorb gelegt.
 
-**Keine dauerhaft offenen Zahlungen:** Stellt ein erneuter Start fest, dass die Reservierung abgelaufen
-oder das Event zurückgezogen ist, speichert er die offene Zahlung in derselben Transaktion als
-fehlgeschlagen und antwortet mit `409`. Zusätzlich schließt die API jede Minute alle offenen Zahlungen
-abgelaufener Reservierungen als fehlgeschlagen ab (`PaymentService.RunPaymentCleanup`). Gerade
-gesperrte Buchungen, etwa ein laufender Abschluss, überspringt der Job (`SKIP LOCKED`).
+**Stornierung (`POST /bookings/{bookingId}/cancel`):** Eine Reservierung ohne Zahlung ist ein
+Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem **ganzen**
+Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es
+wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung
+rückerstattet; der Zahlungsvorgang gilt als `refunded`, sobald die Erstattung den vollen Betrag
+erreicht. Wiederholtes Stornieren gelingt ohne weitere Erstattung idempotent.
 
-**Fehler:** `400` ungültige ID oder ungültiger Body (fehlendes/negatives `amount`, unbekanntes
-`outcome`), `401` ohne Token, `413` Body von `simulate` größer als 4 KiB, `403` Nutzer nicht synchronisiert, `404` Buchung unbekannt, gehört
-einem anderen Nutzer oder hat noch keinen Zahlungsvorgang, `409` Buchung nicht reserviert,
-Reservierung abgelaufen, Event nicht mehr veröffentlicht oder Zahlung bereits abgeschlossen, `422`
-manipulierter Betrag oder Betrag außerhalb von `NUMERIC(12,2)`.
+**Keine dauerhaft offenen Zahlungen:** Zusätzlich schließt die API jede Minute offene Zahlungen
+ab, von denen mindestens eine Reservierung abgelaufen ist, als fehlgeschlagen ab
+(`PaymentService.RunPaymentCleanup`): ein Durchlauf pro Minute mit `FOR UPDATE SKIP LOCKED` und
+höchstens 500 Zahlungen pro Durchlauf, gerade gesperrte Buchungen werden übersprungen. Ein
+zurückgezogenes Event allein macht eine Zahlung nicht stale — der Abschluss entscheidet selbst.
 
-**Garantien:** Start und Abschluss laufen in Transaktionen mit Zeilensperren (`repository.Transactor`);
-eine Buchung bekommt höchstens eine Zahlung und eine Zahlung wird genau einmal abgeschlossen. Die
-Antwort wird noch in der Transaktion gelesen, ein Fehler nach dem Commit ist damit ausgeschlossen.
-`GET` liest Buchung, Zahlung, Event-Status und Datenbankuhr in einer einzigen Abfrage. Der Abschluss sperrt wie
-`ReserveTickets` zuerst das Event und prüft den Ablauf der Reservierung mit der Datenbankuhr, so wird
-eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu vergeben wurden. Die Kapazität
-eines Events lässt sich nicht unter die verkauften und aktiv reservierten Tickets senken
-(`PUT /api/v1/events/{id}` antwortet dann mit `409`); so kann ein Abschluss nie mehr Tickets
-bestätigen, als das Event hat. Migration
-`000008` ergänzt `payments.failure_reason` und erzwingt nicht-negative Beträge sowie höchstens eine
-Buchung je Zahlung; bestehende negative Beträge oder doppelt verwendete Zahlungen lassen die
-Migration bewusst scheitern. Beträge mit extremem Exponenten (z. B. `1e2000000000`) lehnt die
-Validierung mit `400` ab, bevor sie umgerechnet werden; das gilt auch für `price` der Events.
+**Fehler:** `400` ungültige ID oder ungültiger Body (z. B. `quantity` unter 1), `401` ohne Token,
+`403` Nutzer nicht synchronisiert, `404` Event, Item, Buchung oder Zahlung unbekannt oder einem
+anderen Nutzer gehörend (Cart-Items verhalten sich bewusst wie unbekannte Ressourcen, sobald sie
+abgelaufen, ausgecheckt oder storniert sind), `409` Kapazität überschritten, Reservierung
+abgelaufen, Event nicht mehr verfügbar oder Zahlung bereits abgeschlossen, `413` Body von
+`simulate` größer als 4 KiB, `422` manipulierter Betrag, Betrag außerhalb von `NUMERIC(12,2)`,
+mehr als 10 Tickets pro Event oder leerer Warenkorb beim Checkout.
 
-**Getestet:** Automatisch über `TestStartPayment_*`, `TestSimulatePayment_*`, `TestGetPayment_*` und
-`TestPayment_*` sowie `TestExpireStalePayments_*` in `backend/internal/service` und
-`backend/internal/handler` (Betragsberechnung, manipulierte Beträge, Body-Limit, Erfolg, Ablehnung,
-abgelaufene Reservierung, zurückgezogenes Event, Cleanup offener Zahlungen, fremde
-Buchungen, parallele Starts und Abschlüsse ohne Deadlock oder Überbuchung). Zusätzlich manuell mit
-dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
+**Garantien:** Reservieren, Ändern, Entfernen, Auschecken und Abschließen laufen in Transaktionen
+mit Zeilensperren (`repository.Transactor`) in der festen Reihenfolge events → bookings →
+payments, sodass es zu keinen Deadlocks kommt. Jede Buchung gehört zu höchstens einer Zahlung und
+eine Zahlung wird genau einmal abgeschlossen; konkurrierende Checkouts erzeugen genau einen
+Zahlungsvorgang. Die Antwort wird noch in der Transaktion gelesen, ein Fehler nach dem Commit ist
+damit ausgeschlossen. `GET /payments/{paymentId}` liest Zahlung, Buchungen, Event-Status und
+Datenbankuhr in einer einzigen Abfrage. Der Abschluss prüft den Ablauf der Reservierung mit der
+Datenbankuhr, so wird eine abgelaufene Reservierung nie bestätigt, nachdem ihre Plätze neu
+vergeben wurden. Die Kapazität eines Events lässt sich nicht unter die verkauften und aktiv
+reservierten Tickets senken (`PUT /api/v1/events/{id}` antwortet dann mit `409`). Beträge mit
+extremem Exponenten (z. B. `1e2000000000`) lehnt die Validierung mit `400` ab, bevor sie
+umgerechnet werden.
+
+**Migration 000012:** Mehrere Buchungen dürfen eine Zahlung teilen — `bookings.payment_id` verliert
+deshalb seine Eindeutigkeit (Unique-Constraint `bookings_payment_id_key` fällt, Index
+`idx_bookings_payment` kommt hinzu) — und `bookings.line_amount` speichert den Zeilenbetrag
+(`NUMERIC(12,2)`, nicht-negativ, mit Zahlung immer gesetzt). Bestehende Zeilen erben den Betrag
+ihrer Zahlung; Reservierungen ohne Zahlung (Warenkorb-Items) bleiben `NULL`.
+
+**Frontend:** Die Eventseite legt Tickets mit einem Stepper in den Warenkorb (Gesamt der
+**Hinzufügung** aus Anzahl × Preis, Kapazitätsgrenze im Stepper); anonyme Besucher parken ihre
+Eingabe für den Login-Roundtrip und der Warenkorb wird direkt nach der Anmeldung befüllt. Die
+Navigation zeigt einen Warenkorb-Button mit der Anzahl reservierter Tickets — Warenkorb plus
+offenem Checkout (geteilter TanStack-Query über die BFF-Route `/api/cart`, Refetch alle 60
+Sekunden). Die Seite `/cart` verwaltet Mengen, zeigt Ablauffristen pro Item und checkt an der
+Kasse aus; während ein Zahlungsvorgang offen ist, zeigt sie einen Hinweis mit Fortsetzen-Link und
+sperrt die Kasse für neue Artikel. `/cart/payment/{paymentId}` führt die simulierte Zahlung über
+Kartendaten, die nur im Browser validiert werden, zeigt das Ergebnis aller Items und weist auf
+Warenkorb-Artikel hin, die erst nach dieser Zahlung ausgecheckt werden können. `/cart` ist wie
+`/tickets` über den Proxy (`proxy.ts`) geschützt.
+
+**Getestet:** Automatisch über `TestAddToCart_*`, `TestGetCart_*`, `TestUpdateQuantity_*`,
+`TestRemoveCartItem_*`, `TestClearCart*`, `TestCheckout_*`, `TestGetPayment_*`,
+`TestSimulatePayment_*`, `TestExpireStalePayments_*` und `TestCancelBooking_*` in
+`backend/internal/service` und `backend/internal/handler` (Merge-Verhalten und Limit, Ablauf und
+Ersetzung, Kapazitätsmathematik, parallele Requests ohne Überbuchung, Summenbildung freier und
+mehrere Events betreffender Warenkörbe, idempotenter Checkout, manipulierte Beträge, Erfolge und
+Ablehnungen je Item, abgelaufene Reservierung und zurückgezogenes Event für den ganzen Checkout,
+Stornierung mit und ohne Erstattung, Cleanup in Batches und neben laufenden Abschlüssen). Zusätzlich
+manuell mit dem lokalen Stack (`core/docker-compose.yml`) und den Mock-Daten.
 
 ### Meine Tickets und Buchungshistorie (EVENTHUB-236)
 
@@ -260,7 +319,7 @@ ergibt `location: null`, ein gelöschtes Event `event: null`.
 
 **Gültigkeitsregel:** `ticketsValid` ist nur `true`, wenn die Zahlung `paid`, die Buchung `confirmed`
 und das Event `published` oder `completed` ist. Es ist dieselbe Funktion wie bei
-`GET /api/v1/bookings/{bookingId}/payment` (`hasValidTickets` in
+`GET /api/v1/payments/{paymentId}` (`hasValidTickets` in
 `backend/internal/service/payment_service.go`), und `message` ist derselbe Text wie dort. Stornierte,
 fehlgeschlagene und abgelaufene Buchungen sowie Tickets zurückgezogener oder gelöschter Events sind
 ungültig: Sie fehlen in der Ticketliste und erscheinen in Historie und Details mit
@@ -268,10 +327,11 @@ ungültig: Sie fehlen in der Ticketliste und erscheinen in Historie und Details 
 
 **Angezeigter Status:** `bookingStatus` ist der gespeicherte Status. Nur eine Reservierung, deren
 `expiresAt` nach der Datenbankuhr verstrichen ist, wird als `expired` angezeigt, auch wenn sie noch als
-`reserved` gespeichert ist; `?status=expired` findet beide Fälle. `GET /bookings/{bookingId}/payment`
-zeigt dagegen den gespeicherten Status `reserved`: mit offener Zahlung höchstens bis zum Cleanup der
-Zahlungen nach etwa einer Minute, ohne Zahlung liefert es ohnehin `404`. `ticketsValid`,
-`paymentStatus`, `failureReason` und `message` stimmen in beiden Endpunkten immer überein.
+`reserved` gespeichert ist; `?status=expired` findet beide Fälle. `GET /payments/{paymentId}` zeigt
+dagegen den gespeicherten Status `reserved`: mit offener Zahlung höchstens bis zum Cleanup der
+Zahlungen nach etwa einer Minute, und ohne Zahlung existiert kein Zahlungsvorgang — die Reservierung
+ist dann ein Warenkorb-Item. `ticketsValid`, `paymentStatus`, `failureReason` und `message` stimmen
+in beiden Endpunkten immer überein.
 
 **Berechtigung:** Jeder angemeldete Nutzer mit Eintrag in der API-Datenbank. Der Nutzer stammt immer
 aus dem Token, nie aus Pfad, Query oder Body; jede Abfrage filtert im Repository auf
@@ -305,7 +365,7 @@ die Regel nur einmal gibt.
 `TestGetOwnBooking_*`, `TestOwnBookings_*` und `TestOwnBookingHandlers_*` in
 `backend/internal/handler` (reservieren, bezahlen und Ticket sehen über die API, abgelehnte Zahlung,
 Stornierung mit Erstattung, zurückgezogenes Event, fremde Buchungen, Gegenprobe mit
-`GET /bookings/{bookingId}/payment`, gleiche Darstellung in allen drei Sichten, abgelaufene
+`GET /payments/{paymentId}`, gleiche Darstellung in allen drei Sichten, abgelaufene
 Reservierung und Statusfilter, Reihenfolge, gelöschter Ort und gelöschtes Event, leere Listen,
 Statuscodes).
 
