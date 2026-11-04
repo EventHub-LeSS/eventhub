@@ -195,3 +195,86 @@ export function cardCvcError(raw: string): string | undefined {
 
   return undefined
 }
+
+/** IBAN length per country of the SEPA area. */
+const IBAN_LENGTHS: Record<string, number> = {
+  AD: 24,
+  AT: 20,
+  BE: 16,
+  BG: 22,
+  CH: 21,
+  CY: 28,
+  CZ: 24,
+  DE: 22,
+  DK: 18,
+  EE: 20,
+  ES: 24,
+  FI: 18,
+  FR: 27,
+  GB: 22,
+  GI: 23,
+  GR: 27,
+  HR: 21,
+  HU: 28,
+  IE: 22,
+  IS: 26,
+  IT: 27,
+  LI: 21,
+  LT: 20,
+  LU: 20,
+  LV: 21,
+  MC: 27,
+  MT: 31,
+  NL: 18,
+  NO: 15,
+  PL: 28,
+  PT: 25,
+  RO: 24,
+  SE: 24,
+  SI: 19,
+  SK: 24,
+  SM: 27,
+  VA: 22,
+}
+
+export function ibanError(raw: string): string | undefined {
+  const iban = raw.replace(/\s/g, "").toUpperCase()
+
+  if (iban === "") {
+    return undefined
+  }
+
+  const expectedLength = IBAN_LENGTHS[iban.slice(0, 2)]
+
+  if (expectedLength === undefined) {
+    return "Bitte gib eine IBAN aus dem SEPA-Raum an (z. B. DE…)."
+  }
+
+  if (!/^[A-Z0-9]+$/.test(iban) || iban.length !== expectedLength) {
+    return `Eine IBAN aus ${iban.slice(0, 2)} hat ${expectedLength} Zeichen.`
+  }
+
+  return undefined
+}
+
+export function formatIban(raw: string): string {
+  return raw
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase()
+    .slice(0, 34)
+    .replace(/(.{4})(?=.)/g, "$1 ")
+}
+
+export function accountHolderError(raw: string): string | undefined {
+  const trimmed = raw.trim()
+
+  if (trimmed === "") {
+    return undefined
+  }
+
+  if (trimmed.length < 2) {
+    return "Bitte gib den Namen des Kontoinhabers an."
+  }
+
+  return undefined
+}
