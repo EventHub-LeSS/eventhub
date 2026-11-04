@@ -47,7 +47,7 @@ func NewOrganizationService(keycloak *KeycloakService, orgRepo repository.Organi
 //
 // Effective changes are written to the audit log (audit.Meta from ctx is required): a "started"
 // entry before the first change and a result entry afterwards, sharing one operation ID. A
-// no-op — the requested name is already current — writes no entries.
+// no-op — the requested name is current in both systems — writes no entries.
 func (s *OrganizationService) UpdateOrganizationName(ctx context.Context, keycloakOrgID, name string, actor OrgRoleActor) (change *OrgNameChange, err error) {
 	parentCtx := ctx
 	meta, err := audit.MetaFromContext(ctx, audit.OrganizationUpdated)
@@ -91,8 +91,20 @@ func (s *OrganizationService) UpdateOrganizationName(ctx context.Context, keyclo
 	if row == nil {
 		return nil, ErrOrganizationNotInDatabase
 	}
+	// Keycloak's PUT replaces organization fields. Read its full representation under the
+	// lock so the update preserves the alias, enabled state, domains and other settings.
+	org, err := s.keycloak.client.GetOrganizationByID(ctx, token, s.keycloak.cfg.UserRealm, keycloakOrgID)
+	if err != nil {
+		if isKeycloakNotFound(err) {
+			return nil, ErrOrganizationNotFound
+		}
+		return nil, fmt.Errorf("failed to load organization in Keycloak: %w", err)
+	}
+	if org == nil || org.ID == nil || org.Alias == nil || org.Name == nil {
+		return nil, errors.New("incomplete organization representation from Keycloak")
+	}
 	change = &OrgNameChange{OrganizationID: keycloakOrgID, Alias: row.Alias, Name: name}
-	if row.Name == name {
+	if row.Name == name && *org.Name == name {
 		return change, nil
 	}
 
@@ -103,8 +115,9 @@ func (s *OrganizationService) UpdateOrganizationName(ctx context.Context, keyclo
 		resourceType: audit.ResourceOrganization,
 		resourceID:   keycloakOrgID,
 		details: model.AuditChanges{
-			"nameBefore": row.Name,
-			"nameAfter":  name,
+			"nameBefore":         row.Name,
+			"keycloakNameBefore": *org.Name,
+			"nameAfter":          name,
 		},
 	}
 	if err := trail.record(audit.PhaseStarted, nil); err != nil {
@@ -114,13 +127,18 @@ func (s *OrganizationService) UpdateOrganizationName(ctx context.Context, keyclo
 	// Keycloak cannot take part in a database transaction. If a step fails after another one
 	// already applied, the result is recorded as incomplete and the request stays idempotent and
 	// safe to retry: every step sets the requested state, whatever the others did before.
-	if err := s.keycloak.updateOrganizationName(ctx, keycloakOrgID, name); err != nil {
-		stepErr := fmt.Errorf("failed to set the organization name, the request is safe to retry: %w", err)
-		return change, trail.conclude(parentCtx, nameResult(change), "keycloak_update", "", stepErr)
+	if *org.Name != name {
+		org.Name = &name
+		if err := s.keycloak.client.UpdateOrganization(ctx, token, s.keycloak.cfg.UserRealm, *org); err != nil {
+			stepErr := fmt.Errorf("failed to set the organization name, the request is safe to retry: %w", err)
+			return change, trail.conclude(parentCtx, nameResult(change), "keycloak_update", "", stepErr)
+		}
 	}
-	if err := s.orgRepo.UpdateName(row.OrganizationID, name); err != nil {
-		stepErr := fmt.Errorf("failed to update the organization row, the request is safe to retry: %w", err)
-		return change, trail.conclude(parentCtx, nameResult(change), "database_update", "", stepErr)
+	if row.Name != name {
+		if err := s.orgRepo.UpdateName(row.OrganizationID, name); err != nil {
+			stepErr := fmt.Errorf("failed to update the organization row, the request is safe to retry: %w", err)
+			return change, trail.conclude(parentCtx, nameResult(change), "database_update", "", stepErr)
+		}
 	}
 	return change, trail.conclude(parentCtx, nameResult(change), "", "", nil)
 }

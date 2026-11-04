@@ -25,6 +25,7 @@ type Fake struct {
 	OrgGroups    map[string]map[string]string // org id -> group name -> group id
 	OrgAliases   map[string]string            // org alias -> org id
 	OrgNames     map[string]string            // org id -> stored name
+	OrgDetails   map[string]map[string]any    // org id -> additional Keycloak fields
 	OrgMembers   map[string]map[string]bool   // org id -> member user ids
 	GroupMembers map[string]map[string]bool   // group id -> member user ids
 
@@ -60,7 +61,8 @@ func New() *Fake {
 		OrgAliases: map[string]string{
 			"alias-1": "org-1",
 		},
-		OrgNames: map[string]string{},
+		OrgNames:   map[string]string{},
+		OrgDetails: map[string]map[string]any{},
 		OrgMembers: map[string]map[string]bool{
 			"org-1": {"u-alice": true, "u-bob": true},
 		},
@@ -142,7 +144,10 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		org := map[string]any{"id": orgID}
+		org := map[string]any{"id": orgID, "name": "Acme", "enabled": true}
+		for key, value := range f.OrgDetails[orgID] {
+			org[key] = value
+		}
 		if name, ok := f.OrgNames[orgID]; ok {
 			org["name"] = name
 		}
@@ -170,9 +175,23 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if name, ok := org["name"].(string); ok {
-			f.OrgNames[orgID] = name
+		name, nameOK := org["name"].(string)
+		alias, aliasOK := org["alias"].(string)
+		if !nameOK || name == "" || !aliasOK || alias == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
+		for oldAlias, id := range f.OrgAliases {
+			if id == orgID {
+				delete(f.OrgAliases, oldAlias)
+			}
+		}
+		f.OrgAliases[alias] = orgID
+		f.OrgNames[orgID] = name
+		delete(org, "id")
+		delete(org, "name")
+		delete(org, "alias")
+		f.OrgDetails[orgID] = org
 		w.WriteHeader(http.StatusNoContent)
 	}))
 

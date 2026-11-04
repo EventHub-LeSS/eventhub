@@ -734,23 +734,6 @@ func (k *KeycloakService) rollbackOrganization(ctx context.Context, accessToken,
 	}
 }
 
-// updateOrganizationName sets the display name of an organization in Keycloak with the backend
-// service account. The organization ID and the alias are the Keycloak-owned identity columns and
-// are deliberately not touched: the token claim carries the alias, so changing it would break
-// every member's token.
-func (k *KeycloakService) updateOrganizationName(ctx context.Context, keycloakOrgID, name string) (err error) {
-	token, adminErr := k.adminToken(ctx)
-	if adminErr != nil {
-		return fmt.Errorf("fetch admin token: %w", adminErr)
-	}
-	defer func() { k.dropAdminTokenIfRejected(err) }()
-	representation := gocloak.OrganizationRepresentation{ID: &keycloakOrgID, Name: &name}
-	if err := k.client.UpdateOrganization(ctx, token, k.cfg.UserRealm, representation); err != nil {
-		return fmt.Errorf("failed to update organization %q in Keycloak: %w", keycloakOrgID, err)
-	}
-	return nil
-}
-
 func (k *KeycloakService) GetOrganizationIDBySlug(ctx context.Context, accessToken, slug string) (string, error) {
 	pageSize := 50
 	page := 0

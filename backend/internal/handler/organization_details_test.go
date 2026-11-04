@@ -52,6 +52,9 @@ func (r *detailsOrgRepo) UpdateName(organizationID uuid.UUID, name string) error
 	}
 	r.updatedIDs = append(r.updatedIDs, organizationID)
 	r.updatedNames = append(r.updatedNames, name)
+	row := *r.row
+	row.Name = name
+	r.row = &row
 	return nil
 }
 
@@ -263,6 +266,50 @@ func TestUpdateOrganization_UnchangedNameWritesNoEntry(t *testing.T) {
 	}
 	if entries := fake.Audit.Snapshot(); len(entries) != 0 {
 		t.Errorf("audit entries = %d, want none for a no-op", len(entries))
+	}
+}
+
+func TestUpdateOrganization_PreservesKeycloakSettings(t *testing.T) {
+	repo := &detailsOrgRepo{row: orgDetailsRow}
+	router, fake := newOrgDetailsRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin), repo)
+	fake.OrgDetails["org-1"] = map[string]any{
+		"enabled":     false,
+		"description": "Original description",
+		"redirectUrl": "https://example.com/",
+		"attributes":  map[string]any{"department": []string{"events"}},
+		"domains":     []any{map[string]any{"name": "example.com", "verified": true}},
+	}
+
+	rec := patchOrgDetails(t, router, "org-1", `{"name":"Acme Corporation"}`)
+	assertDetailsStatus(t, rec, http.StatusOK)
+	details := fake.OrgDetails["org-1"]
+	if fake.OrgAliases["alias-1"] != "org-1" || details["enabled"] != false ||
+		details["description"] != "Original description" || details["redirectUrl"] != "https://example.com/" {
+		t.Fatalf("organization settings changed: alias=%v details=%v", fake.OrgAliases, details)
+	}
+	actual, _ := json.Marshal(details["domains"])
+	if string(actual) != `[{"name":"example.com","verified":true}]` {
+		t.Errorf("domains changed: %s", actual)
+	}
+	actual, _ = json.Marshal(details["attributes"])
+	if string(actual) != `{"department":["events"]}` {
+		t.Errorf("attributes changed: %s", actual)
+	}
+}
+
+func TestUpdateOrganization_ReconcilesKeycloakWhenDatabaseAlreadyMatches(t *testing.T) {
+	repo := &detailsOrgRepo{row: orgDetailsRow}
+	router, fake := newOrgDetailsRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin), repo)
+	fake.OrgNames["org-1"] = "Acme Corporation"
+
+	rec := patchOrgDetails(t, router, "org-1", `{"name":"Acme"}`)
+	assertDetailsStatus(t, rec, http.StatusOK)
+	if fake.OrgNames["org-1"] != "Acme" || repo.updated() {
+		t.Fatalf("expected Keycloak to be repaired without updating database: name=%q dbUpdated=%v", fake.OrgNames["org-1"], repo.updated())
+	}
+	entries := fake.Audit.Snapshot()
+	if len(entries) != 2 || entries[0].Changes["keycloakNameBefore"] != "Acme Corporation" || entries[1].Phase != audit.PhaseSucceeded {
+		t.Fatalf("repair not audited: %+v", entries)
 	}
 }
 
@@ -486,6 +533,13 @@ func TestUpdateOrganization_FailedStepsConverge(t *testing.T) {
 				if repo.updated() {
 					t.Error("database name was updated although the update failed")
 				}
+			}
+			fake.FailAdminRequest = nil
+			repo.updateErr = nil
+			retry := patchOrgDetails(t, router, "org-1", `{"name": "Acme Corporation"}`)
+			assertDetailsStatus(t, retry, http.StatusOK)
+			if fake.OrgNames["org-1"] != "Acme Corporation" || repo.row.Name != "Acme Corporation" {
+				t.Fatalf("retry did not converge: Keycloak=%q database=%q", fake.OrgNames["org-1"], repo.row.Name)
 			}
 		})
 	}
