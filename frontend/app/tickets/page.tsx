@@ -52,7 +52,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold tracking-tight">Meine Tickets</h1>
       <p className="text-sm text-muted-foreground" role="alert">
         Deine Tickets können aktuell nicht geladen werden. Bitte versuche es

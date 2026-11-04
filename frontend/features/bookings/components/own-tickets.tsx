@@ -175,72 +175,58 @@ export function OwnTickets({
     <Tabs.Root
       value={view}
       onValueChange={(next) => handleViewChange(next as TicketView)}
-      orientation="vertical"
-      className="flex flex-1 flex-col md:flex-row"
+      className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6"
     >
-      <aside className="flex flex-col gap-6 border-b bg-muted/50 px-6 py-8 md:w-72 md:shrink-0 md:border-r md:border-b-0 md:px-6 md:py-12 lg:w-80 lg:px-8">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Meine Tickets
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Alle deine Buchungen an einem Ort.
-          </p>
-        </div>
-
-        <Tabs.List
-          aria-label="Ticketkategorien"
-          className="-mx-2 flex gap-1 overflow-x-auto px-2 pb-1 md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0"
-        >
-          {(Object.keys(VIEWS) as TicketView[]).map((value) => {
-            const { label, icon: Icon } = VIEWS[value]
-
-            return (
-              <Tabs.Tab
-                key={value}
-                value={value}
-                className={cn(
-                  "group flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-background/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 md:w-full",
-                  "data-active:bg-background data-active:text-foreground data-active:shadow-sm data-active:ring-1 data-active:ring-foreground/10"
-                )}
-              >
-                <Icon className="size-4 shrink-0" />
-                {label}
-                <span className="ml-auto rounded-md bg-foreground/5 px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums group-data-active:bg-foreground group-data-active:text-background">
-                  {tickets[value].length}
-                </span>
-              </Tabs.Tab>
-            )
-          })}
-        </Tabs.List>
-
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Meine Tickets</h1>
         <Button
           render={<Link href="/" />}
           nativeButton={false}
           variant="outline"
-          className="mt-auto hidden self-start md:inline-flex"
+          className="hidden sm:inline-flex"
         >
           <CompassIcon data-icon="inline-start" />
           Veranstaltungen entdecken
         </Button>
-      </aside>
+      </div>
+
+      <Tabs.List
+        aria-label="Ticketkategorien"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5"
+      >
+        {(Object.keys(VIEWS) as TicketView[]).map((value) => {
+          const { label, icon: Icon } = VIEWS[value]
+
+          return (
+            <Tabs.Tab
+              key={value}
+              value={value}
+              className={cn(
+                "group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                "data-active:bg-muted data-active:text-foreground"
+              )}
+            >
+              <Icon className="size-4 shrink-0" />
+              {label}
+              <span className="ml-1 rounded-md bg-foreground/5 px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums group-data-active:bg-foreground group-data-active:text-background">
+                {tickets[value].length}
+              </span>
+            </Tabs.Tab>
+          )
+        })}
+      </Tabs.List>
 
       {(Object.keys(VIEWS) as TicketView[]).map((value) => {
-        const { label, description, empty, icon: Icon } = VIEWS[value]
+        const { description, empty, icon: Icon } = VIEWS[value]
         const list = tickets[value]
 
         return (
           <Tabs.Panel
             key={value}
             value={value}
-            className="flex flex-1 flex-col gap-8 px-6 py-8 outline-none md:px-10 md:py-12 lg:px-16"
+            className="flex flex-1 flex-col gap-4 outline-none"
           >
-            <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-semibold tracking-tight lg:text-3xl">
-                {label}
-              </h2>
-              <p className="max-w-prose text-muted-foreground">{description}</p>
-            </div>
+            <p className="text-sm text-muted-foreground">{description}</p>
 
             {list.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed p-10 text-center">
