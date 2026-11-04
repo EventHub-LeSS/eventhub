@@ -43,3 +43,10 @@ type BookingModel struct {
 }
 
 func (BookingModel) TableName() string { return "bookings" }
+
+// TicketHolder is a user with the summed tickets of their confirmed bookings of one event.
+// EVENTHUB-291: ticket holders are notified when the event is withdrawn.
+type TicketHolder struct {
+	UserID  uuid.UUID `gorm:"column:user_id"`
+	Tickets int64     `gorm:"column:tickets"`
+}

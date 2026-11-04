@@ -21,6 +21,7 @@ import { cn } from "@/features/shared/lib/utils"
 
 const occasionLabels: Record<string, string> = {
   event_reminder: "Erinnerung",
+  event_cancelled: "Absage",
   general: "Allgemein",
 }
 
@@ -83,7 +84,7 @@ export function NotificationBell() {
             <p className="font-medium text-foreground">
               Keine Benachrichtigungen
             </p>
-            <p>Erinnerungen zu deinen Buchungen erscheinen hier.</p>
+            <p>Erinnerungen und Absagen zu deinen Buchungen erscheinen hier.</p>
           </div>
         ) : (
           <DropdownMenuGroup className="max-h-96 overflow-y-auto">
@@ -143,14 +144,16 @@ function NotificationItem({
       <p className="text-xs whitespace-pre-line text-muted-foreground">
         {notification.content}
       </p>
-      {notification.scheduledAt && (
-        <p className="text-xs text-muted-foreground">
-          Geplant für{" "}
-          <time dateTime={notification.scheduledAt}>
-            {formatDateTime(notification.scheduledAt)}
-          </time>
-        </p>
-      )}
+      {/* A cancellation's scheduledAt is just the time of the withdrawal. */}
+      {notification.scheduledAt &&
+        notification.occasion !== "event_cancelled" && (
+          <p className="text-xs text-muted-foreground">
+            Geplant für{" "}
+            <time dateTime={notification.scheduledAt}>
+              {formatDateTime(notification.scheduledAt)}
+            </time>
+          </p>
+        )}
     </DropdownMenuItem>
   )
 }

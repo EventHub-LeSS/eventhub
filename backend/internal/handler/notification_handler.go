@@ -32,7 +32,7 @@ func (h *NotificationHandler) user(c *gin.Context) (*model.UserModel, bool) {
 
 // ListNotificationsHandler handles EVENTHUB-240.
 // @Summary List own notifications
-// @Description Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent.
+// @Description Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent. Cancellation notices (occasion event_cancelled, EVENTHUB-291) are created when an upcoming event with own confirmed bookings is withdrawn; they reference the event via eventId, their scheduledAt is the time of the withdrawal and they are not refreshed.
 // @Tags notifications
 // @Produce json
 // @Security BearerAuth

@@ -554,6 +554,12 @@ definitions:
       message:
         example: event withdrawn
         type: string
+      notifiedUsers:
+        description: |-
+          Number of users with confirmed bookings who received a cancellation notice (EVENTHUB-291);
+          0 if the event had already begun.
+        example: 3
+        type: integer
     type: object
   model.HealthcheckModel:
     properties:
@@ -609,6 +615,8 @@ definitions:
       content:
         type: string
       createdAt:
+        type: string
+      eventId:
         type: string
       notificationId:
         type: string
@@ -2060,6 +2068,13 @@ paths:
       description: Withdraws a published event so that it is no longer bookable. Requires
         the event_manager role in the organization that owns the event. Only events
         in status published can be withdrawn; the event status becomes cancelled.
+        If the event has not begun yet, every user with a confirmed booking receives
+        one in-app notification (occasion event_cancelled, eventId set, bookingId
+        null) covering all of their confirmed bookings of the event, and the reminders
+        of the event are deleted. notifiedUsers counts the notified users. Bookings
+        and payments stay unchanged; the notification tells the users that the organizer
+        will contact them about the refund. The status change, notifications and audit
+        entry are saved together or not at all.
       parameters:
       - description: Event ID
         in: path
@@ -2492,7 +2507,10 @@ paths:
         []. readAt is null for unread notifications. Simulated reminder content and
         scheduledAt are refreshed from current event and location data before display;
         changed reminders become unread. Simulation is immediately visible, even before
-        scheduledAt; no email is sent.'
+        scheduledAt; no email is sent. Cancellation notices (occasion event_cancelled,
+        EVENTHUB-291) are created when an upcoming event with own confirmed bookings
+        is withdrawn; they reference the event via eventId, their scheduledAt is the
+        time of the withdrawal and they are not refreshed.'
       parameters:
       - default: 1
         description: Page number (1-indexed)

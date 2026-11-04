@@ -184,8 +184,9 @@ func (h *EventHandler) PublishEventHandler(c *gin.Context) {
 }
 
 // EVENTHUB-82: Veranstaltung zurückziehen
+// EVENTHUB-291: Ticketinhaber über die Absage benachrichtigen
 // @Summary      Withdraw event
-// @Description  Withdraws a published event so that it is no longer bookable. Requires the event_manager role in the organization that owns the event. Only events in status published can be withdrawn; the event status becomes cancelled.
+// @Description  Withdraws a published event so that it is no longer bookable. Requires the event_manager role in the organization that owns the event. Only events in status published can be withdrawn; the event status becomes cancelled. If the event has not begun yet, every user with a confirmed booking receives one in-app notification (occasion event_cancelled, eventId set, bookingId null) covering all of their confirmed bookings of the event, and the reminders of the event are deleted. notifiedUsers counts the notified users. Bookings and payments stay unchanged; the notification tells the users that the organizer will contact them about the refund. The status change, notifications and audit entry are saved together or not at all.
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -209,12 +210,13 @@ func (h *EventHandler) WithdrawEventHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.eventService.WithdrawEvent(c.Request.Context(), eventID, managedOrgIDs); err != nil {
+	notified, err := h.eventService.WithdrawEvent(c.Request.Context(), eventID, managedOrgIDs)
+	if err != nil {
 		writeEventActionError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, model.EventWithdrawnResponse{Message: "event withdrawn"})
+	c.JSON(http.StatusOK, model.EventWithdrawnResponse{Message: "event withdrawn", NotifiedUsers: notified})
 }
 
 // EVENTHUB-256: Veranstaltungsentwurf löschen
