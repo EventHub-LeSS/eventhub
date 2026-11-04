@@ -15,7 +15,10 @@ import { Brand } from "@/features/app/components/navbar/brand"
 import { UserMenu } from "@/features/app/components/navbar/user-menu"
 import type { SessionUser, UserRole } from "@/features/auth"
 import { CartButton } from "@/features/cart"
-import { NotificationBell } from "@/features/notifications"
+import {
+  CancellationNoticeDialog,
+  NotificationBell,
+} from "@/features/notifications"
 import { Button } from "@/features/shared/components/ui/button"
 import { Separator } from "@/features/shared/components/ui/separator"
 import {
@@ -114,6 +117,7 @@ export function Navbar({ user }: NavbarProps) {
             <>
               <CartButton />
               <NotificationBell />
+              <CancellationNoticeDialog />
               <UserMenu user={user} />
             </>
           ) : (
