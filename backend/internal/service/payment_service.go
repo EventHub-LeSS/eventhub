@@ -36,8 +36,10 @@ var stalePaymentBatch = 500
 var maxPaymentAmount = decimal.RequireFromString("9999999999.99")
 
 // PaymentService runs the payment process of a cart checkout. No real payment provider is
-// connected: the caller chooses the outcome of the simulated payment (EVENTHUB-235). One
-// payment covers the bookings of a whole checkout and completes them together, or not at all.
+// connected: the caller chooses the outcome of the simulated payment (EVENTHUB-235) and pays by
+// credit card, SEPA direct debit or PayPal with the simulated payment provider of
+// payment_simulation.go. One payment covers the bookings of a whole checkout and completes them
+// together, or not at all.
 type PaymentService struct {
 	tx       repository.Transactor
 	bookings repository.BookingRepository
@@ -48,15 +50,31 @@ func NewPaymentService(tx repository.Transactor, bookings repository.BookingRepo
 	return &PaymentService{tx: tx, bookings: bookings, payments: payments}
 }
 
-// SimulatePayment completes the pending payment of the user's checkout with the outcome of the
-// simulated payment provider. confirmedAmount is the amount shown to the user: unless it equals
-// the stored amount, nothing changes. A successful payment confirms every booking of the
-// payment. A failed payment leaves no ticket claim: the bookings fail or expire and their
-// tickets are released. The payment fails as well, whatever the outcome, when an event was
-// withdrawn or a reservation expired meanwhile.
+// SimulatePayment completes the pending payment like SimulatePaymentWithMethod, without a payment
+// method: the outcome alone decides and no payment method is recorded.
 func (s *PaymentService) SimulatePayment(ctx context.Context, paymentID, userID uuid.UUID, outcome model.SimulatedPaymentOutcome, confirmedAmount decimal.Decimal) (*model.PaymentResponse, error) {
+	return s.SimulatePaymentWithMethod(ctx, paymentID, userID, outcome, confirmedAmount, nil)
+}
+
+// SimulatePaymentWithMethod completes the pending payment of the user's checkout with the
+// simulated payment provider. confirmedAmount is the amount shown to the user: unless it equals
+// the stored amount, nothing changes. method is the payment method with its details; invalid
+// details are rejected before anything changes. The provider declines the payment when the
+// outcome is failure or the details are its declining test data, and charges it otherwise; either
+// way the payment records the method, the masked account and the provider's reference. Without a
+// method the outcome alone decides and no method is recorded.
+//
+// A successful payment confirms every booking of the payment. A failed payment leaves no ticket
+// claim: the bookings fail or expire and their tickets are released. The payment fails as well,
+// whatever the outcome and without asking the provider, when an event was withdrawn or a
+// reservation expired meanwhile.
+func (s *PaymentService) SimulatePaymentWithMethod(ctx context.Context, paymentID, userID uuid.UUID, outcome model.SimulatedPaymentOutcome, confirmedAmount decimal.Decimal, method *model.PaymentMethodInput) (*model.PaymentResponse, error) {
 	if outcome != model.SimulatedPaymentSuccess && outcome != model.SimulatedPaymentFailure {
 		return nil, ErrInvalidPaymentOutcome
+	}
+	charge, err := prepareCharge(method, outcome, time.Now())
+	if err != nil {
+		return nil, err
 	}
 
 	// The payment is read without a lock to learn its events and bookings, which never change.
@@ -115,8 +133,16 @@ func (s *PaymentService) SimulatePayment(ctx context.Context, paymentID, userID 
 			return err
 		}
 		reason := unpayableReason(eventByID, bookings, now)
-		if reason == "" && outcome == model.SimulatedPaymentFailure {
-			reason = model.PaymentFailureDeclined
+		if reason == "" {
+			// Only a payable checkout reaches the payment provider.
+			declined := outcome == model.SimulatedPaymentFailure
+			if charge != nil {
+				declined = charge.declines(outcome)
+				charge.record(payment)
+			}
+			if declined {
+				reason = model.PaymentFailureDeclined
+			}
 		}
 		if reason != "" {
 			err = failPaymentBookings(tx, payment, bookings, reason, now)
@@ -431,14 +457,18 @@ func hasValidTickets(view *repository.BookingPayment) bool {
 func paymentResponse(view *repository.PaymentView) *model.PaymentResponse {
 	payment := view.Payment
 	resp := &model.PaymentResponse{
-		PaymentID:     payment.PaymentID,
-		Amount:        payment.Amount,
-		Items:         make([]model.PaymentItemResponse, 0, len(view.Items)),
-		Status:        payment.Status,
-		FailureReason: payment.FailureReason,
-		TicketsValid:  len(view.Items) > 0,
-		CreatedAt:     payment.CreatedAt,
-		UpdatedAt:     payment.UpdatedAt,
+		PaymentID:      payment.PaymentID,
+		Amount:         payment.Amount,
+		Items:          make([]model.PaymentItemResponse, 0, len(view.Items)),
+		Status:         payment.Status,
+		FailureReason:  payment.FailureReason,
+		PaymentMethod:  payment.PaymentMethod,
+		PaymentAccount: payment.PaymentAccount,
+		CardBrand:      payment.CardBrand,
+		TransactionID:  payment.TransactionID,
+		TicketsValid:   len(view.Items) > 0,
+		CreatedAt:      payment.CreatedAt,
+		UpdatedAt:      payment.UpdatedAt,
 	}
 	for _, item := range view.Items {
 		booking := item.Booking
@@ -516,7 +546,7 @@ func paymentMessage(view *repository.PaymentView, ticketsValid bool) string {
 	case model.PaymentFailureBookingCancelled:
 		return "Your booking was cancelled. No tickets were booked and nothing was charged."
 	case model.PaymentFailureDeclined:
-		return "The payment was declined. No tickets were booked; please put the tickets in the cart again."
+		return declinedMessage(payment.PaymentMethod)
 	case model.PaymentFailureReservationExpired:
 		return "Your reservation expired before the payment was completed. No tickets were booked; please put the tickets in the cart again."
 	case model.PaymentFailureEventUnavailable:
@@ -524,6 +554,23 @@ func paymentMessage(view *repository.PaymentView, ticketsValid bool) string {
 	default:
 		return "The payment failed. No tickets were booked; please put the tickets in the cart again."
 	}
+}
+
+// declinedMessage words a payment the simulated payment provider declined, by payment method.
+func declinedMessage(method *model.PaymentMethod) string {
+	const retry = " No tickets were booked; please put the tickets in the cart again."
+	if method == nil {
+		return "The payment was declined." + retry
+	}
+	switch *method {
+	case model.PaymentMethodCreditCard:
+		return "Your credit card was declined." + retry
+	case model.PaymentMethodDirectDebit:
+		return "Your bank rejected the direct debit." + retry
+	case model.PaymentMethodPayPal:
+		return "PayPal declined the payment." + retry
+	}
+	return "The payment was declined." + retry
 }
 
 // bookingMessage words the result for one booking of a payment, the message of the own-booking

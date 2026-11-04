@@ -20,6 +20,9 @@ type OwnBookingResponse struct {
 	// Null while no payment process has been started.
 	PaymentStatus *PaymentStatus        `json:"paymentStatus"`
 	FailureReason *PaymentFailureReason `json:"failureReason,omitempty"`
+	// Payment method of the payment, like paymentMethod of GET /payments/{paymentId}; omitted
+	// while none is known.
+	PaymentMethod *PaymentMethod `json:"paymentMethod,omitempty" enums:"credit_card,direct_debit,paypal" example:"credit_card"`
 	// Stored amount of the payment; null without payment.
 	Amount *decimal.Decimal `json:"amount" swaggertype:"string" example:"40"`
 	// Refunded amount of the payment; null without payment.

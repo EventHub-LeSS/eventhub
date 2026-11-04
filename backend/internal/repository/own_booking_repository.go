@@ -51,6 +51,7 @@ const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS
 	SELECT b.*,
 	    p.amount AS payment_amount, p.status AS payment_status, p.failure_reason AS payment_failure_reason,
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
+	    p.payment_method AS payment_method,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
 	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
 	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
@@ -74,6 +75,7 @@ type ownBookingRow struct {
 	PaymentRefundAmount  decimal.NullDecimal         `gorm:"column:payment_refund_amount"`
 	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
 	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
+	PaymentMethod        *model.PaymentMethod        `gorm:"column:payment_method"`
 	EventStatus          *model.EventStatus          `gorm:"column:event_status"`
 	EventTitle           *string                     `gorm:"column:event_title"`
 	EventStartTime       *time.Time                  `gorm:"column:event_start_time"`
@@ -130,6 +132,7 @@ func (row *ownBookingRow) ownBooking() *OwnBooking {
 			Status:        *row.PaymentStatus,
 			FailureReason: row.PaymentFailureReason,
 			RefundAmount:  row.PaymentRefundAmount.Decimal,
+			PaymentMethod: row.PaymentMethod,
 			CreatedAt:     derefTime(row.PaymentCreatedAt),
 			UpdatedAt:     derefTime(row.PaymentUpdatedAt),
 		}

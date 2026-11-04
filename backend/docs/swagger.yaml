@@ -78,6 +78,15 @@ definitions:
         example: 40
         minimum: 0
         type: number
+      creditCard:
+        allOf:
+        - $ref: '#/definitions/model.CreditCardDetails'
+        description: Card data; required to pay with paymentMethod credit_card.
+      directDebit:
+        allOf:
+        - $ref: '#/definitions/model.DirectDebitDetails'
+        description: Account data and SEPA mandate; required to pay with paymentMethod
+          direct_debit.
       outcome:
         allOf:
         - $ref: '#/definitions/model.SimulatedPaymentOutcome'
@@ -87,6 +96,22 @@ definitions:
         - success
         - failure
         example: success
+      paymentMethod:
+        allOf:
+        - $ref: '#/definitions/model.PaymentMethod'
+        description: |-
+          Payment method of the simulated payment provider. Optional: without it the outcome alone
+          decides and no payment method is recorded.
+        enum:
+        - credit_card
+        - direct_debit
+        - paypal
+        example: credit_card
+      paypal:
+        allOf:
+        - $ref: '#/definitions/model.PayPalDetails'
+        description: PayPal account of PayPal Express; optional with paymentMethod
+          paypal.
     required:
     - amount
     - outcome
@@ -274,6 +299,16 @@ definitions:
     - BookingStatusCancelled
     - BookingStatusFailed
     - BookingStatusExpired
+  model.CardBrand:
+    enum:
+    - visa
+    - mastercard
+    - amex
+    type: string
+    x-enum-varnames:
+    - CardBrandVisa
+    - CardBrandMastercard
+    - CardBrandAmex
   model.CartItemResponse:
     properties:
       availableSeats:
@@ -442,6 +477,27 @@ definitions:
       name:
         type: string
     type: object
+  model.CreditCardDetails:
+    properties:
+      cardholder:
+        example: Max Mustermann
+        type: string
+      cvc:
+        description: 3 digits, 4 for American Express.
+        example: "123"
+        type: string
+      expiry:
+        description: Expiry date as MM/YY; the card is valid through the end of that
+          month.
+        example: 12/30
+        type: string
+      number:
+        description: |-
+          12 to 19 digits; spaces and dashes are ignored. Visa, Mastercard and American Express are
+          accepted, and the number must pass the Luhn check.
+        example: 4242 4242 4242 4242
+        type: string
+    type: object
   model.DebugTokenRequest:
     properties:
       password:
@@ -462,6 +518,23 @@ definitions:
         type: string
       token_type:
         type: string
+    type: object
+  model.DirectDebitDetails:
+    properties:
+      accountHolder:
+        example: Max Mustermann
+        type: string
+      iban:
+        description: IBAN of the SEPA area; spaces are ignored and the check digits
+          must be valid.
+        example: DE89 3704 0044 0532 0130 00
+        type: string
+      mandateAccepted:
+        description: |-
+          The account holder authorises EventHub to collect the amount by direct debit (SEPA
+          mandate); a direct debit without mandate is rejected.
+        example: true
+        type: boolean
     type: object
   model.ErrorResponse:
     properties:
@@ -732,6 +805,17 @@ definitions:
       numberOfTickets:
         example: 2
         type: integer
+      paymentMethod:
+        allOf:
+        - $ref: '#/definitions/model.PaymentMethod'
+        description: |-
+          Payment method of the payment, like paymentMethod of GET /payments/{paymentId}; omitted
+          while none is known.
+        enum:
+        - credit_card
+        - direct_debit
+        - paypal
+        example: credit_card
       paymentStatus:
         allOf:
         - $ref: '#/definitions/model.PaymentStatus'
@@ -750,6 +834,14 @@ definitions:
           True only when the payment is paid, the booking is confirmed and the event is published or
           completed, like ticketsValid of GET /bookings/{bookingId}/payment.
         type: boolean
+    type: object
+  model.PayPalDetails:
+    properties:
+      email:
+        description: E-mail address of the PayPal account the buyer approved the payment
+          with; optional.
+        example: max@example.com
+        type: string
     type: object
   model.PaymentFailureReason:
     enum:
@@ -787,6 +879,16 @@ definitions:
           or took place.
         type: boolean
     type: object
+  model.PaymentMethod:
+    enum:
+    - credit_card
+    - direct_debit
+    - paypal
+    type: string
+    x-enum-varnames:
+    - PaymentMethodCreditCard
+    - PaymentMethodDirectDebit
+    - PaymentMethodPayPal
   model.PaymentResponse:
     properties:
       amount:
@@ -794,6 +896,15 @@ definitions:
           the backend only.
         example: "40"
         type: string
+      cardBrand:
+        allOf:
+        - $ref: '#/definitions/model.CardBrand'
+        description: Card network of a credit card payment.
+        enum:
+        - visa
+        - mastercard
+        - amex
+        example: visa
       createdAt:
         type: string
       expiresAt:
@@ -810,14 +921,37 @@ definitions:
         description: Human readable result of the payment process.
         example: Payment successful. Your tickets are confirmed.
         type: string
+      paymentAccount:
+        description: |-
+          Masked account of the payment method: "**** 4242" for cards, "DE89 **** 3000" for IBANs,
+          "m***@example.com" for PayPal; omitted when unknown.
+        example: '**** 4242'
+        type: string
       paymentId:
         type: string
+      paymentMethod:
+        allOf:
+        - $ref: '#/definitions/model.PaymentMethod'
+        description: |-
+          Payment method the simulated payment provider charged or declined; omitted while the
+          payment is pending and when it was completed without a payment method.
+        enum:
+        - credit_card
+        - direct_debit
+        - paypal
+        example: credit_card
       status:
         $ref: '#/definitions/model.PaymentStatus'
       ticketsValid:
         description: True only when the payment is paid and every item holds valid
           tickets.
         type: boolean
+      transactionId:
+        description: |-
+          Reference of the simulated payment provider for this payment attempt; for direct debits
+          the SEPA mandate reference.
+        example: SIM-CC-4F2A9C1E7B3D
+        type: string
       updatedAt:
         type: string
     type: object
@@ -2874,7 +3008,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Schließt den offenen Zahlungsvorgang des Aufrufers mit einem simulierten
+      description: 'Schließt den offenen Zahlungsvorgang des Aufrufers mit einem simulierten
         Ergebnis ab; es ist kein echter Zahlungsdienstleister angebunden. amount muss
         dem gespeicherten Summenbetrag entsprechen, sonst wird nichts geändert (422).
         Bei success werden alle Buchungen des Zahlungsvorgangs verbindlich bestätigt
@@ -2883,14 +3017,28 @@ paths:
         failureReason, message), keine Buchung erhält einen Ticketanspruch und alle
         Tickets werden freigegeben — der Zahlungsvorgang gilt für alle Buchungen zusammen
         oder für keine. Das Ergebnis wird innerhalb der Transaktion aus dem gespeicherten
-        Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413).
+        Zahlungsstatus gelesen. Der Body darf höchstens 4 KiB groß sein (413). Zahlungsmethoden:
+        paymentMethod credit_card (creditCard mit cardholder, number, expiry MM/YY,
+        cvc; Visa, Mastercard, American Express; Luhn-Prüfung), direct_debit (directDebit
+        mit accountHolder, iban aus dem SEPA-Raum mit gültiger Prüfziffer, mandateAccepted
+        true) oder paypal (PayPal Express, paypal.email optional). Bei success sind
+        creditCard bzw. directDebit Pflicht, bei failure optional; nur die Daten der
+        gewählten Methode dürfen gesendet werden. Ungültige Zahlungsdaten liefern
+        400, ohne dass sich etwas ändert. Der simulierte Zahlungsanbieter lehnt seine
+        Testdaten ab (status failed, failureReason declined): Karte 4000 0000 0000
+        0002, IBAN DE62 3704 0044 0532 0130 01, PayPal paypal-declined@example.com;
+        alle anderen gültigen Daten werden belastet. Gespeichert werden nur paymentMethod,
+        das maskierte Konto (paymentAccount), cardBrand und die Referenz des Anbieters
+        (transactionId, bei Lastschrift die Mandatsreferenz) — nie Kartennummer, CVC
+        oder IBAN im Klartext. Ohne paymentMethod entscheidet allein outcome und es
+        wird keine Zahlungsmethode gespeichert.'
       parameters:
       - description: Payment ID
         in: path
         name: paymentId
         required: true
         type: string
-      - description: Simuliertes Ergebnis und angezeigter Betrag
+      - description: Simuliertes Ergebnis, angezeigter Betrag und Zahlungsmethode
         in: body
         name: payment
         required: true
@@ -2904,7 +3052,7 @@ paths:
           schema:
             $ref: '#/definitions/model.PaymentResponse'
         "400":
-          description: Bad Request
+          description: Ungültiger Request oder ungültige Zahlungsdaten
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "401":

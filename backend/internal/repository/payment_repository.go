@@ -137,6 +137,10 @@ type paymentViewRow struct {
 	PaymentRefundAmount  decimal.NullDecimal         `gorm:"column:payment_refund_amount"`
 	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
 	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
+	PaymentMethod        *model.PaymentMethod        `gorm:"column:payment_method"`
+	PaymentAccount       *string                     `gorm:"column:payment_account"`
+	PaymentCardBrand     *model.CardBrand            `gorm:"column:payment_card_brand"`
+	PaymentTransactionID *string                     `gorm:"column:payment_transaction_id"`
 	model.BookingModel
 	EventStatus         *model.EventStatus `gorm:"column:event_status"`
 	EventTitle          *string            `gorm:"column:event_title"`
@@ -156,6 +160,8 @@ type paymentViewRow struct {
 const paymentViewQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS database_now)
 	SELECT p.amount AS payment_amount, p.status AS payment_status, p.failure_reason AS payment_failure_reason,
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
+	    p.payment_method AS payment_method, p.payment_account AS payment_account, p.card_brand AS payment_card_brand,
+	    p.transaction_id AS payment_transaction_id,
 	    b.*,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
 	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
@@ -179,13 +185,17 @@ func (r *paymentRepository) GetPaymentView(paymentID uuid.UUID) (*PaymentView, e
 
 	view := &PaymentView{
 		Payment: &model.PaymentModel{
-			PaymentID:     paymentID,
-			Amount:        rows[0].PaymentAmount.Decimal,
-			Status:        *rows[0].PaymentStatus,
-			FailureReason: rows[0].PaymentFailureReason,
-			RefundAmount:  rows[0].PaymentRefundAmount.Decimal,
-			CreatedAt:     derefTime(rows[0].PaymentCreatedAt),
-			UpdatedAt:     derefTime(rows[0].PaymentUpdatedAt),
+			PaymentID:      paymentID,
+			Amount:         rows[0].PaymentAmount.Decimal,
+			Status:         *rows[0].PaymentStatus,
+			FailureReason:  rows[0].PaymentFailureReason,
+			RefundAmount:   rows[0].PaymentRefundAmount.Decimal,
+			PaymentMethod:  rows[0].PaymentMethod,
+			PaymentAccount: rows[0].PaymentAccount,
+			CardBrand:      rows[0].PaymentCardBrand,
+			TransactionID:  rows[0].PaymentTransactionID,
+			CreatedAt:      derefTime(rows[0].PaymentCreatedAt),
+			UpdatedAt:      derefTime(rows[0].PaymentUpdatedAt),
 		},
 		Items: make([]*PaymentItem, 0, len(rows)),
 		Now:   rows[0].DatabaseNow,

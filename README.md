@@ -200,7 +200,7 @@ Zahlungsdienstleister** angebunden; das Ergebnis der Zahlung wählt der Client.
 | `DELETE /api/v1/cart` | Leert den Warenkorb. Reservierungen mit offener Zahlung gehören nicht zum Warenkorb und bleiben unberührt. |
 | `POST /api/v1/cart/checkout` | Überführt alle lebenden Items in **einen** Zahlungsvorgang. `201` beim Anlegen, `200` wenn bereits ein offener existiert (dann unverändert, spätere Preisänderungen ändern einen angezeigten Betrag nicht). |
 | `GET /api/v1/payments/{paymentId}` | Gespeicherter Zahlungsvorgang: Summenbetrag, Status, Items mit Zeilenbetrag, Buchungsstatus und Ticketgültigkeit. |
-| `POST /api/v1/payments/{paymentId}/simulate` | Schließt die offene Zahlung mit dem simulierten Ergebnis ab: `{"outcome": "success" \| "failure", "amount": <angezeigter Betrag>}`. |
+| `POST /api/v1/payments/{paymentId}/simulate` | Schließt die offene Zahlung mit dem simulierten Ergebnis ab: `{"outcome": "success" \| "failure", "amount": <angezeigter Betrag>}`, optional mit Zahlungsmethode (siehe [Zahlungsmethoden](#zahlungsmethoden-kreditkarte-lastschrift-paypal)). |
 | `POST /api/v1/bookings/{bookingId}/cancel` | Storniert eine Buchung des Aufrufers (siehe unten). |
 
 Die direkte Buchung `POST /api/v1/bookings` und die alten Zahlungs-Endpunkte
@@ -236,6 +236,48 @@ nur, solange die Events veröffentlicht oder abgeschlossen sind.
 
 Fehlgeschlagene Buchungen geben ihre Tickets sofort frei und zählen nicht als verkauft; für einen
 neuen Versuch werden die Tickets erneut in den Warenkorb gelegt.
+
+#### Zahlungsmethoden: Kreditkarte, Lastschrift, PayPal
+
+`simulate` nimmt optional eine Zahlungsmethode mit ihren Daten entgegen. Ein simulierter
+Zahlungsanbieter (`backend/internal/service/payment_simulation.go`) prüft die Daten wie ein echter
+Anbieter, belastet gültige Daten und lehnt seine Testdaten ab:
+
+```json
+{
+  "outcome": "success",
+  "amount": "40",
+  "paymentMethod": "credit_card",
+  "creditCard": { "cardholder": "Max Mustermann", "number": "4242 4242 4242 4242", "expiry": "12/30", "cvc": "123" }
+}
+```
+
+| `paymentMethod` | Daten | Prüfung | Abgelehnte Testdaten |
+| --- | --- | --- | --- |
+| `credit_card` | `creditCard`: `cardholder`, `number`, `expiry` (`MM/YY`), `cvc` | Visa, Mastercard, American Express; Luhn-Prüfziffer; Karte bis Ende des Ablaufmonats gültig; CVC 3 Ziffern (Amex 4) | `4000 0000 0000 0002` |
+| `direct_debit` | `directDebit`: `accountHolder`, `iban`, `mandateAccepted` | IBAN aus dem SEPA-Raum mit Länge und Prüfziffer (Mod 97); SEPA-Mandat muss erteilt sein | `DE62 3704 0044 0532 0130 01` |
+| `paypal` | `paypal`: `email` (optional, PayPal Express) | gültige E-Mail-Adresse | `paypal-declined@example.com` |
+
+- Bei `outcome: success` sind `creditCard` bzw. `directDebit` Pflicht; `outcome: failure`
+  („Zahlung ablehnen") braucht keine Daten. Gesendete Daten werden immer geprüft, und nur die Daten
+  der gewählten Methode dürfen mitgeschickt werden.
+- **Ungültige Daten** (`400`) ändern nichts: Die Zahlung bleibt offen und kann mit korrigierten
+  Daten abgeschlossen werden. **Abgelehnte Testdaten** schließen die Zahlung dagegen wie
+  `outcome: failure` ab (`failed`, `failureReason: declined`, `message` nennt die Methode).
+- Gültige Testdaten zum Bezahlen: Karten `4242 4242 4242 4242` (Visa), `5555 5555 5555 4444`
+  (Mastercard), `3782 822463 10005` (Amex, CVC 4-stellig); IBAN `DE89 3704 0044 0532 0130 00`.
+- Gespeichert werden nur `paymentMethod`, das maskierte Konto `paymentAccount` (`**** 4242`,
+  `DE89 **** 3000`, `m***@example.com`), `cardBrand` und die Referenz des Anbieters `transactionId`
+  (`SIM-CC-…`, `SIM-DD-…` = Mandatsreferenz, `SIM-PP-…`) — nie Kartennummer, CVC oder IBAN im
+  Klartext. `PaymentResponse` liefert diese Felder, die eigenen Buchungen (`/me/bookings`)
+  `paymentMethod`. Ist ein Checkout nicht mehr bezahlbar (Reservierung abgelaufen, Event
+  zurückgezogen), wird der Anbieter nicht gefragt und keine Methode gespeichert.
+- Ohne `paymentMethod` verhält sich `simulate` wie bisher: `outcome` entscheidet allein, es wird
+  keine Methode gespeichert. Sobald das Frontend die Methode mitschickt, kann das Feld zur Pflicht
+  werden (`binding:"required,…"` in `SimulatePaymentRequest`).
+- **Migration 000013** ergänzt `payments.payment_method`, `payment_account`, `card_brand` und
+  `transaction_id` mit Check-Constraints (gültige Methode, Kartenmarke nur bei Kreditkarte, Details
+  nur mit Methode, keine Methode bei offener Zahlung).
 
 **Stornierung (`POST /bookings/{bookingId}/cancel`):** Eine Reservierung ohne Zahlung ist ein
 Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem **ganzen**
@@ -291,7 +333,8 @@ Warenkorb-Artikel hin, die erst nach dieser Zahlung ausgecheckt werden können. 
 
 **Getestet:** Automatisch über `TestAddToCart_*`, `TestGetCart_*`, `TestUpdateQuantity_*`,
 `TestRemoveCartItem_*`, `TestClearCart*`, `TestCheckout_*`, `TestGetPayment_*`,
-`TestSimulatePayment_*`, `TestExpireStalePayments_*` und `TestCancelBooking_*` in
+`TestSimulatePayment_*`, `TestSimulatePaymentWithMethod_*`, `TestPrepareCharge_*`,
+`TestPayment_*`, `TestExpireStalePayments_*` und `TestCancelBooking_*` in
 `backend/internal/service` und `backend/internal/handler` (Merge-Verhalten und Limit, Ablauf und
 Ersetzung, Kapazitätsmathematik, parallele Requests ohne Überbuchung, Summenbildung freier und
 mehrere Events betreffender Warenkörbe, idempotenter Checkout, manipulierte Beträge, Erfolge und

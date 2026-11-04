@@ -94,6 +94,7 @@ func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
 		}
 		resp.PaymentStatus = &payment.Status
 		resp.FailureReason = payment.FailureReason
+		resp.PaymentMethod = payment.PaymentMethod
 		resp.Amount = &amount
 		// A cancelled booking of a paid or refunded payment got its line amount back; the
 		// payment accumulates the refunds of all its cancelled bookings.
