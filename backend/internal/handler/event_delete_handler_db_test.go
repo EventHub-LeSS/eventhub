@@ -42,6 +42,7 @@ func wantEventStatus(t *testing.T, db *gorm.DB, eventID uuid.UUID, status model.
 }
 
 // seedBookingFor books the event for a new visitor, together with the payment of the booking.
+// A booking with a payment stores its line amount, like every checked out booking does.
 func seedBookingFor(t *testing.T, db *gorm.DB, eventID uuid.UUID, status model.BookingStatus) (bookingID, paymentID uuid.UUID) {
 	t.Helper()
 	userID := seedBookingUser(t, db, "kc-"+uuid.NewString())
@@ -49,8 +50,8 @@ func seedBookingFor(t *testing.T, db *gorm.DB, eventID uuid.UUID, status model.B
 	if err := db.Exec("INSERT INTO payments (payment_id, amount, status) VALUES (?, 40, 'paid')", paymentID).Error; err != nil {
 		t.Fatalf("seed payment: %v", err)
 	}
-	err := db.Exec(`INSERT INTO bookings (booking_id, user_id, event_id, payment_id, number_of_tickets, status, expires_at)
-		VALUES (?, ?, ?, ?, 2, ?, NOW() + interval '15 minutes')`, bookingID, userID, eventID, paymentID, string(status)).Error
+	err := db.Exec(`INSERT INTO bookings (booking_id, user_id, event_id, payment_id, number_of_tickets, status, line_amount, expires_at)
+		VALUES (?, ?, ?, ?, 2, ?, 40, NOW() + interval '15 minutes')`, bookingID, userID, eventID, paymentID, string(status)).Error
 	if err != nil {
 		t.Fatalf("seed booking: %v", err)
 	}

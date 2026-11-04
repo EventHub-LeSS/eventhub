@@ -73,6 +73,11 @@ export function formatEventPrice(price: string | null | undefined): string {
   return amount === 0 ? "Kostenlos" : eventPriceFormat.format(amount)
 }
 
+/** A bare count such as "1.250", for figures whose unit is in the label. */
+export function formatEventCount(count: number): string {
+  return eventCountFormat.format(count)
+}
+
 export function formatEventCapacity(capacity: number): string {
   const unit = capacity === 1 ? "Platz" : "Plätze"
 

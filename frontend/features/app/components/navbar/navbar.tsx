@@ -17,6 +17,7 @@ import { usePathname } from "next/navigation"
 import { Brand } from "@/features/app/components/navbar/brand"
 import { UserMenu } from "@/features/app/components/navbar/user-menu"
 import type { SessionUser, UserRole } from "@/features/auth"
+import { CartButton } from "@/features/cart"
 import { NotificationBell } from "@/features/notifications"
 import { Button } from "@/features/shared/components/ui/button"
 import { Separator } from "@/features/shared/components/ui/separator"
@@ -124,6 +125,7 @@ export function Navbar({ user }: NavbarProps) {
         <div className="ml-auto flex items-center gap-2">
           {user ? (
             <>
+              <CartButton />
               <NotificationBell />
               <UserMenu user={user} />
             </>

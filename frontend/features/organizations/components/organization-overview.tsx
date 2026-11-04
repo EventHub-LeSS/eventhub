@@ -1,107 +1,118 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 
-import { ActivityChart } from "@/features/organizations/components/activity-chart"
-import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
-import { MembersTable } from "@/features/organizations/components/members-table"
-import { OrganizationHeader } from "@/features/organizations/components/organization-header"
+import { ActivityChart } from "@/features/organizations/components/activity-chart";
+import { AuditLogTable } from "@/features/organizations/components/audit-log-table";
+import { MembersTable } from "@/features/organizations/components/members-table";
+import { OrganizationHeader } from "@/features/organizations/components/organization-header";
+import {
+  type ActivityEvent,
+  activityByMonth,
+} from "@/features/organizations/lib/activity";
 import {
   useOrganizationAuditLog,
   useOrganizationMembers,
-} from "@/features/organizations/lib/api"
-import type { ActivityPoint } from "@/features/organizations/lib/activity"
-import type { OrganizationRight } from "@/features/organizations/lib/types"
-import { Button } from "@/features/shared/components/ui/button"
+} from "@/features/organizations/lib/api";
+import type { OrganizationRight } from "@/features/organizations/lib/types";
+import { Button } from "@/features/shared/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card"
-import { Input } from "@/features/shared/components/ui/input"
+} from "@/features/shared/components/ui/card";
+import { Input } from "@/features/shared/components/ui/input";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/features/shared/components/ui/tabs"
+} from "@/features/shared/components/ui/tabs";
 
 export function OrganizationOverview({
   alias,
   rights,
   isAdmin = false,
-  eventCount,
-  activity,
-  eventsTable,
+  events,
 }: {
-  alias: string
-  eventCount: number | null
-  activity: ActivityPoint[] | null
-  eventsTable: React.ReactNode
-  rights: string[]
-  isAdmin?: boolean
+  alias: string;
+  /** Null when the events could not be loaded. */
+  events: ActivityEvent[] | null;
+  rights: string[];
+  isAdmin?: boolean;
 }) {
   const hasRight = (right: OrganizationRight) =>
-    isAdmin || rights.includes(right)
-  const canViewMembers = isAdmin
-  const canViewEvents = hasRight("event_manager")
-  const canViewAuditLog = hasRight("org_admin")
+    isAdmin || rights.includes(right);
+  const canViewMembers = isAdmin;
+  const canViewAuditLog = hasRight("org_admin");
 
-  const membersQuery = useOrganizationMembers(alias, canViewMembers)
+  const membersQuery = useOrganizationMembers(alias, canViewMembers);
 
-  const [activeTab, setActiveTab] = useState("overview")
-  const [isEditing, setIsEditing] = useState(false)
-  const [draft, setDraft] = useState({ name: alias, alias })
-
-  function handleTabChange(value: unknown) {
-    setActiveTab(value as string)
-    setIsEditing(false)
-  }
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState({ name: alias, alias });
 
   function handleEditClick() {
-    setDraft({ name: alias, alias })
-    setActiveTab("settings")
-    setIsEditing(true)
+    setDraft({ name: alias, alias });
+    setIsEditing(true);
   }
 
   function handleSaveClick() {
-    setIsEditing(false)
+    setIsEditing(false);
   }
 
-  const members = membersQuery.data ?? []
+  const members = membersQuery.data ?? [];
+  const activity = events ? activityByMonth(events, members) : null;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[296px_1fr]">
-      <OrganizationHeader
-        alias={alias}
-        isEditing={isEditing}
-        onEditClick={handleEditClick}
-        onSaveClick={handleSaveClick}
-      />
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="flex flex-col gap-6">
+        <OrganizationHeader
+          alias={alias}
+          isEditing={isEditing}
+          onEditClick={handleEditClick}
+          onSaveClick={handleSaveClick}
+        />
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="min-w-0">
+        <Card>
+          <CardHeader>
+            <CardTitle>Organisationsdetails</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col divide-y divide-border">
+            <SettingsRow
+              label="Name"
+              value={draft.name}
+              isEditing={isEditing}
+              onChange={(value) =>
+                setDraft((prev) => ({ ...prev, name: value }))
+              }
+            />
+            <SettingsRow
+              label="Alias"
+              value={draft.alias}
+              isEditing={isEditing}
+              onChange={(value) =>
+                setDraft((prev) => ({ ...prev, alias: value }))
+              }
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="overview" className="min-w-0">
         <TabsList>
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
-          {canViewMembers && (
-            <TabsTrigger value="members">
-              Mitglieder{membersQuery.data ? ` (${members.length})` : ""}
-            </TabsTrigger>
-          )}
-          {canViewEvents && (
-            <TabsTrigger value="events">
-              Veranstaltungen{eventCount !== null ? ` (${eventCount})` : ""}
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="settings">Einstellungen</TabsTrigger>
           {canViewAuditLog && (
             <TabsTrigger value="audit-log">Audit-Log</TabsTrigger>
           )}
         </TabsList>
 
-        <TabsContent value="overview" className="flex flex-col gap-4">
+        <TabsContent value="overview" className="flex flex-col gap-6">
           {activity ? (
-            <ActivityChart data={activity} />
+            <ActivityChart
+              data={activity}
+              showJoined={Boolean(membersQuery.data)}
+            />
           ) : (
             <Card>
               <CardContent className="py-6 text-center text-sm text-destructive">
@@ -110,13 +121,13 @@ export function OrganizationOverview({
               </CardContent>
             </Card>
           )}
-        </TabsContent>
 
-        {canViewMembers && (
-          <TabsContent value="members">
+          {canViewMembers && (
             <Card>
               <CardHeader>
-                <CardTitle>Mitglieder</CardTitle>
+                <CardTitle>
+                  Mitglieder{membersQuery.data ? ` (${members.length})` : ""}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {membersQuery.isLoading ? (
@@ -133,57 +144,22 @@ export function OrganizationOverview({
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-        )}
-
-        {canViewEvents && (
-          <TabsContent value="events">
-            <Card>
-              <CardHeader>
-                <CardTitle>Veranstaltungen</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {eventsTable}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
+          )}
+        </TabsContent>
 
         {canViewAuditLog && (
           <TabsContent value="audit-log">
             <AuditLogCard alias={alias} />
           </TabsContent>
         )}
-
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organisationsdetails</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col divide-y divide-border">
-              <SettingsRow
-                label="Name"
-                value={draft.name}
-                isEditing={isEditing}
-                onChange={(value) => setDraft((prev) => ({ ...prev, name: value }))}
-              />
-              <SettingsRow
-                label="Alias"
-                value={draft.alias}
-                isEditing={isEditing}
-                onChange={(value) => setDraft((prev) => ({ ...prev, alias: value }))}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
 
 function AuditLogCard({ alias }: { alias: string }) {
-  const auditLogQuery = useOrganizationAuditLog(alias)
-  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? []
+  const auditLogQuery = useOrganizationAuditLog(alias);
+  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <Card>
@@ -210,12 +186,14 @@ function AuditLogCard({ alias }: { alias: string }) {
             disabled={auditLogQuery.isFetchingNextPage}
             onClick={() => auditLogQuery.fetchNextPage()}
           >
-            {auditLogQuery.isFetchingNextPage ? "Wird geladen..." : "Mehr laden"}
+            {auditLogQuery.isFetchingNextPage
+              ? "Wird geladen..."
+              : "Mehr laden"}
           </Button>
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function SettingsRow({
@@ -224,23 +202,22 @@ function SettingsRow({
   isEditing,
   onChange,
 }: {
-  label: string
-  value: string
-  isEditing?: boolean
-  onChange?: (value: string) => void
+  label: string;
+  value: string;
+  isEditing?: boolean;
+  onChange?: (value: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+    <div className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
       <p className="text-sm font-medium text-foreground">{label}</p>
       {isEditing && onChange ? (
         <Input
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="max-w-xs"
         />
       ) : (
-        <p className="text-sm text-muted-foreground">{value}</p>
+        <p className="text-sm break-words text-muted-foreground">{value}</p>
       )}
     </div>
-  )
+  );
 }

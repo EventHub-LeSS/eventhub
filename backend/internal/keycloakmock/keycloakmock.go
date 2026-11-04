@@ -276,8 +276,10 @@ func (a *AuditLog) Append(entry *model.AuditLogModel) error {
 		return err
 	}
 	stored.AuditLogID = uuid.New()
-	// Strictly increasing, so that ordering by time is unambiguous in tests.
-	stored.OccurredAt = time.Now().UTC()
+	// Strictly increasing at the cursor's microsecond precision, so that ordering by time is
+	// unambiguous in tests: two entries never share an OccurredAt, which would make the
+	// pagination tie-break fall back to the random UUID order of the append.
+	stored.OccurredAt = time.Now().UTC().Truncate(time.Microsecond)
 	if n := len(a.Entries); n > 0 && !stored.OccurredAt.After(a.Entries[n-1].OccurredAt) {
 		stored.OccurredAt = a.Entries[n-1].OccurredAt.Add(time.Microsecond)
 	}
