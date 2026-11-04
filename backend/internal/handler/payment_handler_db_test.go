@@ -4,7 +4,6 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/repository"
-	"backend/internal/service"
 	"backend/internal/testdb"
 	"bytes"
 	"encoding/json"
@@ -14,35 +13,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
 )
 
-const otherBookingKeycloakUserID = "kc-other-booking-user"
-
-func newPaymentRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
-	gin.SetMode(gin.TestMode)
-	userRepo := repository.NewUserRepository(db)
-	bookingService := service.NewBookingService(repository.NewBookingRepository(db), 0)
-	paymentService := service.NewPaymentService(repository.NewTransactor(db), repository.NewBookingRepository(db), repository.NewPaymentRepository(db))
-	payments := NewPaymentHandler(paymentService, userRepo)
-
-	setPrincipal := func(c *gin.Context) {
-		if principal != nil {
-			middleware.SetPrincipalForRequest(c, principal)
-		}
-		c.Next()
-	}
-
-	r := gin.New()
-	r.POST("/api/v1/bookings", setPrincipal, CreateBookingHandler(bookingService, userRepo))
-	r.POST("/api/v1/bookings/:bookingId/payment", setPrincipal, payments.StartPaymentHandler)
-	r.GET("/api/v1/bookings/:bookingId/payment", setPrincipal, payments.GetPaymentHandler)
-	r.POST("/api/v1/bookings/:bookingId/payment/simulate", setPrincipal, payments.SimulatePaymentHandler)
-	return r
-}
+const (
+	otherBookingKeycloakUserID   = "kc-other-booking-user"
+	expiredBookingKeycloakUserID = "kc-expired-booking-user"
+)
 
 func doPaymentRequest(t *testing.T, router http.Handler, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
@@ -64,9 +42,9 @@ func doPaymentRequest(t *testing.T, router http.Handler, method, path string, bo
 	return rec
 }
 
-// paymentPath takes the booking ID as fmt.Stringer or string, so tests can pass malformed IDs.
-func paymentPath(bookingID any) string {
-	return fmt.Sprintf("/api/v1/bookings/%s/payment", bookingID)
+// paymentPath takes the payment ID as fmt.Stringer or string, so tests can pass malformed IDs.
+func paymentPath(paymentID any) string {
+	return fmt.Sprintf("/api/v1/payments/%s", paymentID)
 }
 
 func decodePayment(t *testing.T, rec *httptest.ResponseRecorder) model.PaymentResponse {
@@ -76,6 +54,16 @@ func decodePayment(t *testing.T, rec *httptest.ResponseRecorder) model.PaymentRe
 		t.Fatalf("decode payment: %v: %s", err, rec.Body.String())
 	}
 	return resp
+}
+
+// paymentItemOf finds the item of the booking in the payment response, or nil.
+func paymentItemOf(resp *model.PaymentResponse, bookingID uuid.UUID) *model.PaymentItemResponse {
+	for i := range resp.Items {
+		if resp.Items[i].BookingID == bookingID {
+			return &resp.Items[i]
+		}
+	}
+	return nil
 }
 
 func wantPaymentProblem(t *testing.T, rec *httptest.ResponseRecorder, status int) {
@@ -90,31 +78,19 @@ func wantPaymentProblem(t *testing.T, rec *httptest.ResponseRecorder, status int
 	}
 }
 
-// reserveViaAPI books tickets of the seeded event, which costs 20 per ticket.
-func reserveViaAPI(t *testing.T, router http.Handler, eventID uuid.UUID, tickets int) uuid.UUID {
-	t.Helper()
-	rec := doPaymentRequest(t, router, http.MethodPost, "/api/v1/bookings", map[string]any{"eventId": eventID, "numberOfTickets": tickets})
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create booking: %d %s", rec.Code, rec.Body.String())
-	}
-	var booking model.BookingModel
-	if err := json.Unmarshal(rec.Body.Bytes(), &booking); err != nil {
-		t.Fatalf("decode booking: %v", err)
-	}
-	return booking.BookingID
-}
-
+// The payment process of a checkout: the cart is checked out, the pending payment is shown and
+// completed, and the stored result is served afterwards. The events cost 20 per ticket.
 func TestPayment_SuccessfulFlow(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
-	router := newPaymentRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
-	bookingID := reserveViaAPI(t, router, event.eventID, 2)
+	router := newCartRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+	bookingID := addToCartViaAPI(t, router, event.eventID, 2)
 
 	// A client supplied amount is ignored: the server computes 2 x 20.
-	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID), map[string]any{"amount": "0.01", "status": "paid"})
+	rec := doPaymentRequest(t, router, http.MethodPost, "/api/v1/cart/checkout", map[string]any{"amount": "0.01"})
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("start payment: expected 201, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("checkout: expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 	started := decodePayment(t, rec)
 	if !started.Amount.Equal(decimal.NewFromInt(40)) || started.Status != model.PaymentStatusPending || started.TicketsValid {
@@ -123,31 +99,37 @@ func TestPayment_SuccessfulFlow(t *testing.T) {
 	if started.ExpiresAt == nil {
 		t.Error("a pending payment must show until when it can be completed")
 	}
+	if item := paymentItemOf(&started, bookingID); item == nil || item.BookingStatus != model.BookingStatusReserved || !item.LineAmount.Equal(decimal.NewFromInt(40)) {
+		t.Fatalf("expected the reserved item with its line amount, got %+v", item)
+	}
 
 	// The amount is shown before completion and stays the same when the client asks again.
-	rec = doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID), nil)
+	rec = doPaymentRequest(t, router, http.MethodPost, "/api/v1/cart/checkout", nil)
 	if rec.Code != http.StatusOK || decodePayment(t, rec).PaymentID != started.PaymentID {
-		t.Fatalf("start again: expected 200 with the same payment, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("checkout again: expected 200 with the same payment, got %d: %s", rec.Code, rec.Body.String())
 	}
-	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(bookingID), nil)
+	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(started.PaymentID), nil)
 	if rec.Code != http.StatusOK || !decodePayment(t, rec).Amount.Equal(started.Amount) {
 		t.Fatalf("get pending payment: %d %s", rec.Code, rec.Body.String())
 	}
 
-	rec = doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID)+"/simulate", map[string]any{"outcome": "success", "amount": "40"})
+	rec = doPaymentRequest(t, router, http.MethodPost, paymentPath(started.PaymentID)+"/simulate", map[string]any{"outcome": "success", "amount": "40"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("simulate: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	paid := decodePayment(t, rec)
-	if paid.Status != model.PaymentStatusPaid || paid.BookingStatus != model.BookingStatusConfirmed || !paid.TicketsValid {
-		t.Errorf("expected paid payment with confirmed booking and valid tickets, got %+v", paid)
+	if paid.Status != model.PaymentStatusPaid || !paid.TicketsValid {
+		t.Errorf("expected paid payment with valid tickets, got %+v", paid)
+	}
+	if item := paymentItemOf(&paid, bookingID); item == nil || item.BookingStatus != model.BookingStatusConfirmed || !item.TicketsValid {
+		t.Errorf("expected the confirmed item, got %+v", item)
 	}
 	if paid.Message == "" || paid.FailureReason != nil || paid.ExpiresAt != nil {
 		t.Errorf("expected a success message without failure reason or deadline, got %+v", paid)
 	}
 
 	// The result is the stored state.
-	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(bookingID), nil)
+	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(started.PaymentID), nil)
 	if got := decodePayment(t, rec); rec.Code != http.StatusOK || got.Status != model.PaymentStatusPaid || !got.TicketsValid {
 		t.Errorf("expected stored paid payment, got %d %+v", rec.Code, got)
 	}
@@ -164,31 +146,35 @@ func TestPayment_FailedFlowShowsReasonAndNoTicket(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
-	router := newPaymentRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
-	bookingID := reserveViaAPI(t, router, event.eventID, 1)
-	doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID), nil)
+	router := newCartRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+	addToCartViaAPI(t, router, event.eventID, 1)
+	pending := checkoutViaAPI(t, router)
 
 	// Amounts may be sent as JSON numbers as well.
-	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID)+"/simulate", `{"outcome":"failure","amount":20.00}`)
+	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(pending.PaymentID)+"/simulate", `{"outcome":"failure","amount":20.00}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("simulate: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	failed := decodePayment(t, rec)
-	if failed.Status != model.PaymentStatusFailed || failed.BookingStatus != model.BookingStatusFailed || failed.TicketsValid {
-		t.Errorf("expected failed payment and booking without valid tickets, got %+v", failed)
+	if failed.Status != model.PaymentStatusFailed || failed.TicketsValid {
+		t.Errorf("expected failed payment without valid tickets, got %+v", failed)
+	}
+	if item := paymentItemOf(&failed, pending.Items[0].BookingID); item == nil || item.BookingStatus != model.BookingStatusFailed || item.TicketsValid {
+		t.Errorf("expected the failed item, got %+v", item)
 	}
 	if failed.FailureReason == nil || *failed.FailureReason != model.PaymentFailureDeclined || failed.Message == "" {
 		t.Errorf("expected declined reason with message, got %+v", failed)
 	}
 
-	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(bookingID), nil)
+	rec = doPaymentRequest(t, router, http.MethodGet, paymentPath(pending.PaymentID), nil)
 	if got := decodePayment(t, rec); got.Status != model.PaymentStatusFailed || got.TicketsValid {
 		t.Errorf("expected stored failed payment, got %+v", got)
 	}
-	// Retrying a failed payment is no way to a ticket.
-	rec = doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID)+"/simulate", map[string]any{"outcome": "success", "amount": "20"})
-	wantPaymentProblem(t, rec, http.StatusConflict)
-	wantPaymentProblem(t, doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID), nil), http.StatusConflict)
+	// Retrying a failed payment is no way to a ticket, and the failed booking is no cart item.
+	wantPaymentProblem(t, doPaymentRequest(t, router, http.MethodPost, paymentPath(pending.PaymentID)+"/simulate", map[string]any{"outcome": "success", "amount": "20"}), http.StatusConflict)
+	wantPaymentProblem(t, doPaymentRequest(t, router, http.MethodPost, "/api/v1/cart/checkout", nil), http.StatusUnprocessableEntity)
+	// The tickets are free again: a new reservation succeeds.
+	addToCartViaAPI(t, router, event.eventID, 1)
 }
 
 func TestPayment_Rejections(t *testing.T) {
@@ -196,18 +182,18 @@ func TestPayment_Rejections(t *testing.T) {
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	seedBookingUser(t, db, otherBookingKeycloakUserID)
+	seedBookingUser(t, db, expiredBookingKeycloakUserID)
 	owner := &middleware.Principal{Subject: bookingKeycloakUserID}
 	other := &middleware.Principal{Subject: otherBookingKeycloakUserID}
-	ownerRouter := newPaymentRouter(db, owner)
+	expired := &middleware.Principal{Subject: expiredBookingKeycloakUserID}
+	ownerRouter := newCartRouter(db, owner)
 
-	started := reserveViaAPI(t, ownerRouter, event.eventID, 1)
-	if rec := doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started), nil); rec.Code != http.StatusCreated {
-		t.Fatalf("start payment: %d %s", rec.Code, rec.Body.String())
-	}
-	notStarted := reserveViaAPI(t, ownerRouter, event.eventID, 1)
-	expired := reserveViaAPI(t, ownerRouter, event.eventID, 1)
-	if err := db.Exec("UPDATE bookings SET expires_at = NOW() - interval '1 minute' WHERE booking_id = ?", expired).Error; err != nil {
-		t.Fatalf("expire reservation: %v", err)
+	// The owner has an open checkout; the expired user holds only an expired reservation.
+	addToCartViaAPI(t, ownerRouter, event.eventID, 1)
+	started := checkoutViaAPI(t, ownerRouter)
+	expiredItem := addToCartViaAPI(t, newCartRouter(db, expired), event.eventID, 1)
+	if err := db.Exec("UPDATE bookings SET expires_at = NOW() - interval '1 minute' WHERE booking_id = ?", expiredItem).Error; err != nil {
+		t.Fatal(err)
 	}
 
 	valid := map[string]any{"outcome": "success", "amount": "20"}
@@ -219,40 +205,39 @@ func TestPayment_Rejections(t *testing.T) {
 		body      any
 		want      int
 	}{
-		{"start without principal", nil, http.MethodPost, paymentPath(started), nil, http.StatusUnauthorized},
-		{"simulate without principal", nil, http.MethodPost, paymentPath(started) + "/simulate", valid, http.StatusUnauthorized},
-		{"get without principal", nil, http.MethodGet, paymentPath(started), nil, http.StatusUnauthorized},
-		{"user not synced", &middleware.Principal{Subject: "kc-unknown"}, http.MethodPost, paymentPath(started), nil, http.StatusForbidden},
-		{"invalid booking id", owner, http.MethodPost, paymentPath("not-a-uuid"), nil, http.StatusBadRequest},
-		{"invalid booking id on simulate", owner, http.MethodPost, paymentPath("not-a-uuid") + "/simulate", valid, http.StatusBadRequest},
-		{"unknown booking", owner, http.MethodPost, paymentPath(uuid.New()), nil, http.StatusNotFound},
-		{"start booking of another user", other, http.MethodPost, paymentPath(notStarted), nil, http.StatusNotFound},
-		{"simulate booking of another user", other, http.MethodPost, paymentPath(started) + "/simulate", valid, http.StatusNotFound},
-		{"get booking of another user", other, http.MethodGet, paymentPath(started), nil, http.StatusNotFound},
-		{"get payment not started", owner, http.MethodGet, paymentPath(notStarted), nil, http.StatusNotFound},
-		{"simulate payment not started", owner, http.MethodPost, paymentPath(notStarted) + "/simulate", valid, http.StatusNotFound},
-		{"start expired reservation", owner, http.MethodPost, paymentPath(expired), nil, http.StatusConflict},
-		{"missing body", owner, http.MethodPost, paymentPath(started) + "/simulate", nil, http.StatusBadRequest},
-		{"missing amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success"}, http.StatusBadRequest},
-		{"null amount", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":null}`, http.StatusBadRequest},
-		{"negative amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "-20"}, http.StatusBadRequest},
-		{"body larger than 4 KiB", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":"` + strings.Repeat("9", 5000) + `"}`, http.StatusRequestEntityTooLarge},
-		{"amount with huge exponent", owner, http.MethodPost, paymentPath(started) + "/simulate", `{"outcome":"success","amount":"1e2000000000"}`, http.StatusBadRequest},
-		{"amount not a number", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "twenty"}, http.StatusBadRequest},
-		{"missing outcome", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"amount": "20"}, http.StatusBadRequest},
-		{"unknown outcome", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "paid", "amount": "20"}, http.StatusBadRequest},
-		{"manipulated amount", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "0.01"}, http.StatusUnprocessableEntity},
-		{"amount with extra cent", owner, http.MethodPost, paymentPath(started) + "/simulate", map[string]any{"outcome": "success", "amount": "20.01"}, http.StatusUnprocessableEntity},
+		{"get without principal", nil, http.MethodGet, paymentPath(started.PaymentID), nil, http.StatusUnauthorized},
+		{"simulate without principal", nil, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", valid, http.StatusUnauthorized},
+		{"checkout without principal", nil, http.MethodPost, "/api/v1/cart/checkout", nil, http.StatusUnauthorized},
+		{"user not synced", &middleware.Principal{Subject: "kc-unknown"}, http.MethodGet, paymentPath(started.PaymentID), nil, http.StatusForbidden},
+		{"invalid payment id", owner, http.MethodGet, paymentPath("not-a-uuid"), nil, http.StatusBadRequest},
+		{"invalid payment id on simulate", owner, http.MethodPost, paymentPath("not-a-uuid") + "/simulate", valid, http.StatusBadRequest},
+		{"unknown payment", owner, http.MethodGet, paymentPath(uuid.New()), nil, http.StatusNotFound},
+		{"simulate unknown payment", owner, http.MethodPost, paymentPath(uuid.New()) + "/simulate", valid, http.StatusNotFound},
+		{"get payment of another user", other, http.MethodGet, paymentPath(started.PaymentID), nil, http.StatusNotFound},
+		{"simulate payment of another user", other, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", valid, http.StatusNotFound},
+		{"checkout with an empty cart", other, http.MethodPost, "/api/v1/cart/checkout", nil, http.StatusUnprocessableEntity},
+		{"checkout with only expired items", expired, http.MethodPost, "/api/v1/cart/checkout", nil, http.StatusConflict},
+		{"missing body", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", nil, http.StatusBadRequest},
+		{"missing amount", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "success"}, http.StatusBadRequest},
+		{"null amount", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", `{"outcome":"success","amount":null}`, http.StatusBadRequest},
+		{"negative amount", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "success", "amount": "-20"}, http.StatusBadRequest},
+		{"body larger than 4 KiB", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", `{"outcome":"success","amount":"` + strings.Repeat("9", 5000) + `"}`, http.StatusRequestEntityTooLarge},
+		{"amount with huge exponent", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", `{"outcome":"success","amount":"1e2000000000"}`, http.StatusBadRequest},
+		{"amount not a number", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "success", "amount": "twenty"}, http.StatusBadRequest},
+		{"missing outcome", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"amount": "20"}, http.StatusBadRequest},
+		{"unknown outcome", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "paid", "amount": "20"}, http.StatusBadRequest},
+		{"manipulated amount", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "success", "amount": "0.01"}, http.StatusUnprocessableEntity},
+		{"amount with extra cent", owner, http.MethodPost, paymentPath(started.PaymentID) + "/simulate", map[string]any{"outcome": "success", "amount": "20.01"}, http.StatusUnprocessableEntity},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			wantPaymentProblem(t, doPaymentRequest(t, newPaymentRouter(db, tc.principal), tc.method, tc.path, tc.body), tc.want)
+			wantPaymentProblem(t, doPaymentRequest(t, newCartRouter(db, tc.principal), tc.method, tc.path, tc.body), tc.want)
 		})
 	}
 
 	// None of the rejected requests changed the started payment or created another one.
-	rec := doPaymentRequest(t, ownerRouter, http.MethodGet, paymentPath(started), nil)
-	if got := decodePayment(t, rec); got.Status != model.PaymentStatusPending || got.BookingStatus != model.BookingStatusReserved {
+	rec := doPaymentRequest(t, ownerRouter, http.MethodGet, paymentPath(started.PaymentID), nil)
+	if got := decodePayment(t, rec); got.Status != model.PaymentStatusPending || got.Items[0].BookingStatus != model.BookingStatusReserved {
 		t.Errorf("rejected requests must not complete the payment, got %+v", got)
 	}
 	var payments int64
@@ -264,11 +249,12 @@ func TestPayment_Rejections(t *testing.T) {
 	}
 
 	// After the rejections the correct amount still completes the payment, exactly once.
-	if rec := doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started)+"/simulate", valid); rec.Code != http.StatusOK {
+	if rec := doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started.PaymentID)+"/simulate", valid); rec.Code != http.StatusOK {
 		t.Fatalf("simulate: %d %s", rec.Code, rec.Body.String())
 	}
-	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started)+"/simulate", valid), http.StatusConflict)
-	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started), nil), http.StatusConflict)
+	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, paymentPath(started.PaymentID)+"/simulate", valid), http.StatusConflict)
+	// The paid booking is not a reservation anymore, so the cart stays empty.
+	wantPaymentProblem(t, doPaymentRequest(t, ownerRouter, http.MethodPost, "/api/v1/cart/checkout", nil), http.StatusUnprocessableEntity)
 }
 
 // The organizer cannot lower the capacity below the tickets of a running checkout (review of PR #63).
@@ -276,20 +262,18 @@ func TestPayment_CapacityChangeDuringCheckout(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
-	visitor := newPaymentRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+	visitor := newCartRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 	organizer := newEventRouter(db, principalManaging("org-a"))
 
-	bookingID := reserveViaAPI(t, visitor, event.eventID, 2)
-	if rec := doPaymentRequest(t, visitor, http.MethodPost, paymentPath(bookingID), nil); rec.Code != http.StatusCreated {
-		t.Fatalf("start payment: %d %s", rec.Code, rec.Body.String())
-	}
+	addToCartViaAPI(t, visitor, event.eventID, 2)
+	pending := checkoutViaAPI(t, visitor)
 
 	wantPaymentProblem(t, putEvent(t, organizer, event.eventID.String(), with(validBody(event), "capacity", 1)), http.StatusConflict)
 	if rec := putEvent(t, organizer, event.eventID.String(), with(validBody(event), "capacity", 2)); rec.Code != http.StatusOK {
 		t.Fatalf("lowering to the reserved tickets: expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	rec := doPaymentRequest(t, visitor, http.MethodPost, paymentPath(bookingID)+"/simulate", map[string]any{"outcome": "success", "amount": "40"})
+	rec := doPaymentRequest(t, visitor, http.MethodPost, paymentPath(pending.PaymentID)+"/simulate", map[string]any{"outcome": "success", "amount": "40"})
 	if got := decodePayment(t, rec); rec.Code != http.StatusOK || got.Status != model.PaymentStatusPaid || !got.TicketsValid {
 		t.Fatalf("simulate: %d %s", rec.Code, rec.Body.String())
 	}

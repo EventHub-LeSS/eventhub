@@ -77,12 +77,14 @@ func main() {
 	bookingRepo := repository.NewBookingRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
+	cartRepo := repository.NewCartRepository(db)
 	tx := repository.NewTransactor(db)
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
-	bookingService := service.NewBookingService(bookingRepo, service.DefaultReservationTTL)
+	bookingService := service.NewBookingService(tx, bookingRepo, paymentRepo)
 	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
+	cartService := service.NewCartService(tx, bookingRepo, cartRepo, paymentRepo, service.DefaultReservationTTL)
 	ownBookingService := service.NewOwnBookingService(repository.NewOwnBookingRepository(db))
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
@@ -98,8 +100,8 @@ func main() {
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
-	bookingHandler := handler.CreateBookingHandler(bookingService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
+	cartHandler := handler.NewCartHandler(cartService, userRepo)
 	ownBookingHandler := handler.NewOwnBookingHandler(ownBookingService, userRepo)
 	recommendationsHandler := handler.NewRecommendationsHandler(recommendationsService, userRepo)
 	ratingHandler := handler.NewRatingHandler(ratingService, userRepo)
@@ -165,12 +167,25 @@ func main() {
 		}
 
 		// bookings
-		protected.POST("/bookings", bookingHandler)
 		protected.POST("/bookings/:bookingId/cancel", handler.CancelBooking(bookingService, userRepo))
-		// EVENTHUB-235: simulated payment process of a booking, no real payment provider
-		protected.POST("/bookings/:bookingId/payment", paymentHandler.StartPaymentHandler)
-		protected.GET("/bookings/:bookingId/payment", paymentHandler.GetPaymentHandler)
-		protected.POST("/bookings/:bookingId/payment/simulate", paymentHandler.SimulatePaymentHandler)
+
+		// 282: Warenkorb — Reservierungen ohne Zahlung, ein Checkout zahlt alle zusammen
+		cart := protected.Group("/cart")
+		{
+			cart.GET("", cartHandler.GetCartHandler)
+			cart.DELETE("", cartHandler.ClearCartHandler)
+			cart.POST("/items", cartHandler.AddCartItemHandler)
+			cart.PATCH("/items/:bookingId", cartHandler.UpdateCartItemHandler)
+			cart.DELETE("/items/:bookingId", cartHandler.RemoveCartItemHandler)
+			cart.POST("/checkout", cartHandler.CheckoutHandler)
+		}
+
+		// EVENTHUB-235: simulated payment process of a checkout, no real payment provider
+		payments := protected.Group("/payments")
+		{
+			payments.GET("/:paymentId", paymentHandler.GetPaymentHandler)
+			payments.POST("/:paymentId/simulate", paymentHandler.SimulatePaymentHandler)
+		}
 
 		// EVENTHUB-236: Meine Tickets und Buchungshistorie, always the bookings of the token user
 		me := protected.Group("/me")

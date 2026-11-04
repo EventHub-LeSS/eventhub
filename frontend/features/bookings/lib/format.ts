@@ -1,9 +1,4 @@
-import type {
-  BookingStatus,
-  OwnBookingLocation,
-  PaymentFailureReason,
-  PaymentStatus,
-} from "@/features/bookings/lib/types"
+import type { OwnBookingLocation } from "@/features/bookings/lib/types"
 
 /** Shown in place of a missing value, so no line renders as a blank gap. */
 export const EMPTY_VALUE = "—"
@@ -49,18 +44,6 @@ export function formatTicketCount(count: number): string {
   return `${count} ${count === 1 ? "Ticket" : "Tickets"}`
 }
 
-export function formatDateTime(timestamp: string | null | undefined): string {
-  if (!timestamp) {
-    return EMPTY_VALUE
-  }
-
-  const date = new Date(timestamp)
-
-  return Number.isNaN(date.getTime())
-    ? EMPTY_VALUE
-    : dateTimeFormat.format(date)
-}
-
 export function formatEventPeriod(startTime: string, endTime: string): string {
   const start = new Date(startTime)
   const end = new Date(endTime)
@@ -91,52 +74,6 @@ export function formatLocation(location: OwnBookingLocation | null): string {
   const city = [location.postalCode, location.city].filter(Boolean).join(" ")
 
   return [location.name, street, city].filter(Boolean).join(", ")
-}
-
-/**
- * The time left to complete a pending payment, as "14:32 Min". The clock of
- * the backend is what counts; this is a display that ticks along.
- */
-export function formatRemaining(
-  expiresAt: string | null | undefined,
-  now: number
-): string | null {
-  if (!expiresAt) {
-    return null
-  }
-
-  const deadline = Date.parse(expiresAt)
-
-  if (Number.isNaN(deadline)) {
-    return null
-  }
-
-  const remaining = Math.max(0, Math.ceil((deadline - now) / 1000))
-  const minutes = Math.floor(remaining / 60)
-  const seconds = remaining % 60
-
-  return `${minutes}:${String(seconds).padStart(2, "0")} Min`
-}
-
-export const paymentStatusLabels: Record<PaymentStatus, string> = {
-  pending: "Offen",
-  paid: "Bezahlt",
-  failed: "Fehlgeschlagen",
-  refunded: "Erstattet",
-}
-
-export const bookingStatusLabels: Record<BookingStatus, string> = {
-  reserved: "Reserviert",
-  confirmed: "Bestätigt",
-  cancelled: "Storniert",
-  failed: "Fehlgeschlagen",
-  expired: "Abgelaufen",
-}
-
-export const failureReasonLabels: Record<PaymentFailureReason, string> = {
-  declined: "Zahlung abgelehnt",
-  reservation_expired: "Reservierung abgelaufen",
-  event_unavailable: "Veranstaltung nicht mehr verfügbar",
 }
 
 export function splitTicketsByEnd<

@@ -246,6 +246,30 @@
           }
         ]
       }
+    },
+    {
+      "files": ["features/cart/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/cart/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

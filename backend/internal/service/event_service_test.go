@@ -88,6 +88,24 @@ func (f *fakeEventRepo) HasBookings(uuid.UUID) (bool, error) {
 func (f *fakeEventRepo) LockEvent(uuid.UUID) (*model.EventModel, error) {
 	return f.event, nil
 }
+
+// lockEvents returns the fake's event when it was asked for, like the real repository returns
+// every event it could lock.
+func (f *fakeEventRepo) lockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
+	if f.event == nil || !slices.Contains(eventIDs, f.event.EventID) {
+		return nil, nil
+	}
+	return []*model.EventModel{f.event}, nil
+}
+
+func (f *fakeEventRepo) LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
+	return f.lockEvents(eventIDs)
+}
+
+func (f *fakeEventRepo) TryLockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
+	return f.lockEvents(eventIDs)
+}
+
 func (f *fakeEventRepo) UpdateEvent(event *model.EventModel) error {
 	f.saved = event
 	return nil
