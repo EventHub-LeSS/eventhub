@@ -233,8 +233,9 @@ func main() {
 			me.GET("/organizer-applications", applicationHandler.ListOwnApplicationsHandler)
 		}
 	}
+	// Any signed-in user may request an organization. The row is inactive until an admin approves it.
 	orgs := v1.Group("/organizations")
-	orgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
+	orgs.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}

@@ -103,7 +103,7 @@ func TestRatingSummaryErrors(t *testing.T) {
 			t.Run(resource+"/"+stage, func(t *testing.T) {
 				id := uuid.NewString()
 				events := &ratingEventStub{event: &model.EventModel{Status: model.EventStatusPublished}}
-				orgs := &ratingOrgStub{org: &model.OrganizationModel{}}
+				orgs := &ratingOrgStub{org: &model.OrganizationModel{IsActive: true}}
 				ratings := &ratingRepoStub{}
 				status := http.StatusInternalServerError
 				switch stage {
@@ -129,7 +129,7 @@ func TestRatingSummaryErrors(t *testing.T) {
 func TestRatingSummaryEmptyJSON(t *testing.T) {
 	router := ratingRouter(service.NewRatingService(&ratingRepoStub{},
 		&ratingEventStub{event: &model.EventModel{Status: model.EventStatusPublished}},
-		&ratingOrgStub{org: &model.OrganizationModel{}}))
+		&ratingOrgStub{org: &model.OrganizationModel{IsActive: true}}))
 	for _, resource := range []string{"events", "organizations"} {
 		t.Run(resource, func(t *testing.T) {
 			rec := getRatingSummary(router, resource, uuid.NewString())

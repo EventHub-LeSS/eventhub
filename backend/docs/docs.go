@@ -5313,6 +5313,9 @@ const docTemplate = `{
                 "houseNumber": {
                     "type": "string"
                 },
+                "isActive": {
+                    "type": "boolean"
+                },
                 "keycloakOrgId": {
                     "type": "string"
                 },

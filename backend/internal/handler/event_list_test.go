@@ -57,7 +57,7 @@ func (r *listEventRepo) ListByOrganization(id uuid.UUID) ([]*model.EventModel, e
 
 func TestListOrganizationEventsHandler_Membership(t *testing.T) {
 	orgID := uuid.New()
-	org := &model.OrganizationModel{OrganizationID: orgID, KeycloakOrgID: "kc-org", Alias: "org-alias"}
+	org := &model.OrganizationModel{OrganizationID: orgID, KeycloakOrgID: "kc-org", Alias: "org-alias", IsActive: true}
 	event := &model.EventModel{EventID: uuid.New(), OrganizerID: &orgID}
 	tests := []struct {
 		name       string
