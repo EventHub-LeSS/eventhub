@@ -24,6 +24,7 @@ type Fake struct {
 	Users        map[string]string            // username -> keycloak user id
 	OrgGroups    map[string]map[string]string // org id -> group name -> group id
 	OrgAliases   map[string]string            // org alias -> org id
+	OrgNames     map[string]string            // org id -> stored name
 	OrgMembers   map[string]map[string]bool   // org id -> member user ids
 	GroupMembers map[string]map[string]bool   // group id -> member user ids
 
@@ -59,6 +60,7 @@ func New() *Fake {
 		OrgAliases: map[string]string{
 			"alias-1": "org-1",
 		},
+		OrgNames: map[string]string{},
 		OrgMembers: map[string]map[string]bool{
 			"org-1": {"u-alice": true, "u-bob": true},
 		},
@@ -141,6 +143,9 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 			return
 		}
 		org := map[string]any{"id": orgID}
+		if name, ok := f.OrgNames[orgID]; ok {
+			org["name"] = name
+		}
 		for alias, id := range f.OrgAliases {
 			if id == orgID {
 				org["alias"] = alias
@@ -148,6 +153,27 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(org)
+	}))
+
+	// PUT sets the stored fields of the organization, like Keycloak's update
+	// endpoint: the request body replaces the representation.
+	mux.HandleFunc("PUT /admin/realms/eventhub/organizations/{orgID}", admin(func(w http.ResponseWriter, r *http.Request) {
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		orgID := r.PathValue("orgID")
+		if _, ok := f.OrgGroups[orgID]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var org map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&org); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if name, ok := org["name"].(string); ok {
+			f.OrgNames[orgID] = name
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}))
 
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations", admin(func(w http.ResponseWriter, r *http.Request) {

@@ -23,6 +23,7 @@ const (
 	EventCancelled                Action = "event.cancelled"
 	EventDeleted                  Action = "event.deleted"
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
+	OrganizationUpdated           Action = "organization.updated"
 	RatingVisibilityChanged       Action = "rating.visibility_changed"
 )
 
@@ -30,6 +31,7 @@ const (
 const (
 	ResourceEvent              = "event"
 	ResourceOrganizationMember = "organization_member"
+	ResourceOrganization       = "organization"
 	ResourceRating             = "rating"
 )
 

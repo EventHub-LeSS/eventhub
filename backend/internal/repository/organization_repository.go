@@ -27,6 +27,10 @@ type OrganizationRepository interface {
 	// reconcile a row from an earlier Keycloak generation: the submitted request is the new
 	// truth for the row, including its contact columns.
 	UpdateOrganization(org *model.OrganizationModel) error
+	// UpdateName persists the display name of the organization. Keycloak owns the identity
+	// columns (its organization ID and the alias) and details changes only move the mirrored
+	// name, so the update is deliberately limited to that column.
+	UpdateName(organizationID uuid.UUID, name string) error
 	// ListByKeycloakOrgIDsOrAliases returns the organizations whose Keycloak ID or alias is in refs.
 	// Tokens identify organizations by alias when the claim carries no ID.
 	ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error)
@@ -99,6 +103,12 @@ func (r *organizationRepository) UpdateKeycloakRefs(organizationID uuid.UUID, ke
 
 func (r *organizationRepository) UpdateOrganization(org *model.OrganizationModel) error {
 	return r.db.Save(org).Error
+}
+
+func (r *organizationRepository) UpdateName(organizationID uuid.UUID, name string) error {
+	return r.db.Model(&model.OrganizationModel{}).
+		Where("organization_id = ?", organizationID).
+		Update("name", name).Error
 }
 
 func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error) {
