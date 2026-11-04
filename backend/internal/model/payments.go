@@ -51,22 +51,34 @@ const (
 	SimulatedPaymentFailure SimulatedPaymentOutcome = "failure"
 )
 
-// EVENTHUB-235: Zahlungsvorgang
-// PaymentResponse is the payment process of a booking, built from the stored payment and booking.
+// EVENTHUB-235: Zahlungsvorgang, 282: Zahlung im Warenkorb
+// PaymentItemResponse is one booking of a payment: the tickets of one event of the cart.
+type PaymentItemResponse struct {
+	BookingID uuid.UUID `json:"bookingId"`
+	// Null when the event of the booking no longer exists.
+	Event           *OwnBookingEvent `json:"event"`
+	NumberOfTickets int              `json:"numberOfTickets" example:"2"`
+	// Tickets times the event price at checkout time; the charged amount of this item.
+	LineAmount    decimal.Decimal `json:"lineAmount" swaggertype:"string" example:"40"`
+	BookingStatus BookingStatus   `json:"bookingStatus"`
+	// True only when the payment is paid, this booking is confirmed and the event takes place
+	// or took place.
+	TicketsValid bool `json:"ticketsValid"`
+}
+
+// PaymentResponse is the payment process of a cart checkout, built from the stored payment and
+// its bookings. The amount is the sum of the line amounts of all items.
 type PaymentResponse struct {
-	PaymentID       uuid.UUID  `json:"paymentId"`
-	BookingID       uuid.UUID  `json:"bookingId"`
-	EventID         *uuid.UUID `json:"eventId"`
-	NumberOfTickets int        `json:"numberOfTickets" example:"2"`
-	// Number of tickets times the event price when the payment process was started.
+	PaymentID uuid.UUID `json:"paymentId"`
+	// Sum of the line amounts of the items, computed and stored by the backend only.
 	Amount        decimal.Decimal       `json:"amount" swaggertype:"string" example:"40"`
+	Items         []PaymentItemResponse `json:"items"`
 	Status        PaymentStatus         `json:"status"`
 	FailureReason *PaymentFailureReason `json:"failureReason,omitempty"`
-	BookingStatus BookingStatus         `json:"bookingStatus"`
-	// True only when the payment is paid and the booking is confirmed.
+	// True only when the payment is paid and every item holds valid tickets.
 	TicketsValid bool `json:"ticketsValid"`
 	// Human readable result of the payment process.
-	Message string `json:"message" example:"Payment successful. Your booking is confirmed."`
+	Message string `json:"message" example:"Payment successful. Your tickets are confirmed."`
 	// Deadline for completing a pending payment; omitted once the payment is completed.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // EVENTHUB-236: Meine Tickets und Buchungshistorie
@@ -85,11 +86,23 @@ func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
 		resp.ExpiresAt = booking.ExpiresAt
 	}
 	if payment != nil {
-		amount, refundAmount := payment.Amount, payment.RefundAmount
+		// What this booking cost within its payment: its line amount, the tickets times the
+		// event price at checkout time. The payment amount is the sum over the checkout.
+		amount := payment.Amount
+		if booking.LineAmount != nil {
+			amount = *booking.LineAmount
+		}
 		resp.PaymentStatus = &payment.Status
 		resp.FailureReason = payment.FailureReason
-		resp.Amount, resp.RefundAmount = &amount, &refundAmount
-		resp.Message = paymentMessage(&own.BookingPayment, ticketsValid)
+		resp.Amount = &amount
+		// A cancelled booking of a paid or refunded payment got its line amount back; the
+		// payment accumulates the refunds of all its cancelled bookings.
+		refundAmount := decimal.Zero
+		if booking.Status == model.BookingStatusCancelled && payment.RefundAmount.GreaterThan(decimal.Zero) {
+			refundAmount = amount
+		}
+		resp.RefundAmount = &refundAmount
+		resp.Message = bookingMessage(&own.BookingPayment, ticketsValid)
 	}
 	if event := own.Event; event != nil {
 		resp.Event = &model.OwnBookingEvent{

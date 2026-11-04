@@ -5,66 +5,16 @@ import (
 	"backend/internal/repository"
 	"backend/internal/service"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type CreateBookingRequest struct {
-	EventID         *uuid.UUID `json:"eventId" binding:"required" example:"550e8400-e29b-41d4-a716-446655440000"`
-	NumberOfTickets int        `json:"numberOfTickets" binding:"required,gte=1" example:"2"`
-}
-
-// CreateBookingHandler godoc
-// @Summary      Buchung anlegen
-// @Description  Reserviert Tickets für ein veröffentlichtes Event. Die Reservierung verfällt nach Ablauf von expiresAt, solange sie nicht bestätigt wurde. Bestätigt wird sie über den Zahlungsvorgang (POST /bookings/{bookingId}/payment).
-// @Tags         bookings
-// @Accept       json
-// @Produce      json
-// @Param        booking body CreateBookingRequest true "Buchungsdaten"
-// @Success      201 {object} model.BookingModel
-// @Failure      400 {object} model.ErrorResponse
-// @Failure      401 {object} model.ErrorResponse
-// @Failure      403 {object} model.ErrorResponse
-// @Failure      404 {object} model.ErrorResponse
-// @Failure      409 {object} model.ErrorResponse "Event nicht veröffentlicht oder Kapazität überschritten"
-// @Failure      500 {object} model.ErrorResponse
-// @Security     BearerAuth
-// @Router       /bookings [post]
-func CreateBookingHandler(bookingService *service.BookingService, userRepo repository.UserRepository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := middleware.PrincipalFromContext(c)
-		if !ok {
-			writeProblem(c, http.StatusUnauthorized, "authentication is required")
-			return
-		}
-
-		var req CreateBookingRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			writeProblem(c, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		user, ok := resolveAPIUser(c, userRepo, principal)
-		if !ok {
-			return
-		}
-
-		created, err := bookingService.ReserveTickets(c.Request.Context(), *req.EventID, user.UserID, req.NumberOfTickets)
-		if err != nil {
-			writeBookingError(c, err)
-			return
-		}
-
-		c.JSON(http.StatusCreated, created)
-	}
-}
-
 // CancelBooking godoc
-// @Summary      Cancel a booking
-// @Description  Cancels the caller's reserved or confirmed booking and releases its tickets. Repeated cancellation succeeds without another refund. Pending payments fail; paid payments receive a full simulated refund of the stored payment amount in the same transaction.
+// @Summary      Buchung stornieren
+// @Description  Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Wiederholtes Stornieren gelingt ohne weitere Erstattung.
 // @Tags         bookings
 // @Produce      json
 // @Param        bookingId path string true "Booking ID"
@@ -73,7 +23,7 @@ func CreateBookingHandler(bookingService *service.BookingService, userRepo repos
 // @Failure      401 {object} model.ErrorResponse
 // @Failure      403 {object} model.ErrorResponse
 // @Failure      404 {object} model.ErrorResponse
-// @Failure      409 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse "Buchung in diesem Status nicht stornierbar"
 // @Failure      500 {object} model.ErrorResponse
 // @Security     BearerAuth
 // @Router       /bookings/{bookingId}/cancel [post]
@@ -114,7 +64,7 @@ func writeBookingError(c *gin.Context, err error) {
 	case errors.As(err, &capacityErr):
 		writeProblem(c, http.StatusConflict, err.Error())
 	default:
-		log.Printf("unexpected booking error: %v", err)
+		slog.Error("unexpected booking error", "error", err)
 		writeProblem(c, http.StatusInternalServerError, "internal error")
 	}
 }

@@ -44,6 +44,10 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   if (tickets !== null) {
     return (
       <OwnTickets
+        // Reading the clock here is safe: this is a server component, which
+        // renders once per request, so this is the request time — not a
+        // value that could change between re-renders.
+        // oxlint-disable-next-line react/purity
         {...splitTicketsByEnd(tickets, Date.now())}
         cancelled={cancelled}
         initialView={parseTicketView(view)}

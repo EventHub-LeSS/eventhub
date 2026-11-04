@@ -1,7 +1,7 @@
 export { CreateOrganizationForm } from "@/features/organizations/components/create-organization-form";
-export { EventsTable } from "@/features/organizations/components/events-table";
 export { OrganizationOverview } from "@/features/organizations/components/organization-overview";
 export {
+  type ActivityEvent,
   type ActivityPoint,
   activityByMonth,
 } from "@/features/organizations/lib/activity";

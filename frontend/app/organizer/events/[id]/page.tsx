@@ -14,21 +14,19 @@ export default async function OrganizerEventPage({
   const { id } = await params
 
   return (
-    <div className="flex flex-1 justify-center p-6">
-      <div className="flex w-full max-w-xl flex-col gap-6">
-        <div>
-          <Button
-            render={<Link href="/organizer/events" />}
-            nativeButton={false}
-            variant="ghost"
-            size="sm"
-          >
-            <ArrowLeftIcon />
-            Alle Veranstaltungen
-          </Button>
-        </div>
-        <OrganizerEventDetails eventId={id} />
+    <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
+      <div>
+        <Button
+          render={<Link href="/organizer/events" />}
+          nativeButton={false}
+          variant="ghost"
+          size="sm"
+        >
+          <ArrowLeftIcon />
+          Alle Veranstaltungen
+        </Button>
       </div>
+      <OrganizerEventDetails eventId={id} />
     </div>
   )
 }

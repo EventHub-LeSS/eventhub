@@ -1,7 +1,5 @@
 import type {
-  BookingStatus,
   OwnBookingLocation,
-  PaymentFailureReason,
   PaymentStatus,
 } from "@/features/bookings/lib/types"
 
@@ -93,51 +91,11 @@ export function formatLocation(location: OwnBookingLocation | null): string {
   return [location.name, street, city].filter(Boolean).join(", ")
 }
 
-/**
- * The time left to complete a pending payment, as "14:32 Min". The clock of
- * the backend is what counts; this is a display that ticks along.
- */
-export function formatRemaining(
-  expiresAt: string | null | undefined,
-  now: number
-): string | null {
-  if (!expiresAt) {
-    return null
-  }
-
-  const deadline = Date.parse(expiresAt)
-
-  if (Number.isNaN(deadline)) {
-    return null
-  }
-
-  const remaining = Math.max(0, Math.ceil((deadline - now) / 1000))
-  const minutes = Math.floor(remaining / 60)
-  const seconds = remaining % 60
-
-  return `${minutes}:${String(seconds).padStart(2, "0")} Min`
-}
-
 export const paymentStatusLabels: Record<PaymentStatus, string> = {
   pending: "Offen",
   paid: "Bezahlt",
   failed: "Fehlgeschlagen",
   refunded: "Erstattet",
-}
-
-export const bookingStatusLabels: Record<BookingStatus, string> = {
-  reserved: "Reserviert",
-  confirmed: "Bestätigt",
-  cancelled: "Storniert",
-  failed: "Fehlgeschlagen",
-  expired: "Abgelaufen",
-}
-
-export const failureReasonLabels: Record<PaymentFailureReason, string> = {
-  declined: "Zahlung abgelehnt",
-  booking_cancelled: "Buchung storniert",
-  reservation_expired: "Reservierung abgelaufen",
-  event_unavailable: "Veranstaltung nicht mehr verfügbar",
 }
 
 export function splitTicketsByEnd<
