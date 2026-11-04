@@ -1,5 +1,5 @@
 import "server-only"
-import type { OwnBooking } from "@/features/bookings/lib/types"
+import type { BookingStatus, OwnBooking } from "@/features/bookings/lib/types"
 import { envConfig } from "@/features/shared/lib/env"
 
 /**
@@ -57,6 +57,32 @@ export async function getOwnTickets(
   accessToken: string
 ): Promise<OwnBooking[]> {
   return apiFetch<OwnBooking[]>("/me/tickets", { accessToken })
+}
+
+export async function getOwnBookings(
+  accessToken: string,
+  status?: BookingStatus
+): Promise<OwnBooking[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ""
+
+  return apiFetch<OwnBooking[]>(`/me/bookings${query}`, { accessToken })
+}
+
+export async function getOwnBooking(
+  accessToken: string,
+  bookingId: string
+): Promise<OwnBooking> {
+  return apiFetch<OwnBooking>(`/me/bookings/${bookingId}`, { accessToken })
+}
+
+export async function cancelBooking(
+  accessToken: string,
+  bookingId: string
+): Promise<void> {
+  await apiFetch<unknown>(`/bookings/${bookingId}/cancel`, {
+    accessToken,
+    method: "POST",
+  })
 }
 
 export async function createEventRating(
