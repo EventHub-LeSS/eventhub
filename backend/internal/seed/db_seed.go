@@ -347,9 +347,11 @@ type bookingDef struct {
 	tag       string
 	userEmail string
 	eventTag  string
-	payTag    string
-	numTix    int
-	status    model.BookingStatus
+	// payTag is empty for cart items: reservations without a payment hold seats in the cart
+	// until their reservation expires (282).
+	payTag string
+	numTix int
+	status model.BookingStatus
 }
 
 func (s *DBSeeder) seedBookings(_ context.Context) error {
@@ -418,6 +420,12 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 		{"bkg-h22", "max.multi@eventhub.de", "evt-h13", "pay-h22", 1, model.BookingStatusConfirmed},
 		// eva.manager@: Exhibition
 		{"bkg-h23", "eva.manager@provadis-hochschule.de", "evt-h11", "pay-h23", 1, model.BookingStatusConfirmed},
+
+		// Warenkorb-Items von visitor@ (282): lebende Reservierungen ohne Zahlung,
+		// die Plätze bleiben bis zum Ablauf der Reservierung gehalten.
+		{"bkg-cart-1", "visitor@eventhub.de", "evt-19", "", 2, model.BookingStatusReserved},
+		{"bkg-cart-2", "visitor@eventhub.de", "evt-22", "", 3, model.BookingStatusReserved},
+		{"bkg-cart-3", "visitor@eventhub.de", "evt-13", "", 1, model.BookingStatusReserved},
 	}
 	for _, b := range bookings {
 		id := seedUUID(b.tag)
@@ -428,14 +436,25 @@ func (s *DBSeeder) seedBookings(_ context.Context) error {
 				return fmt.Errorf("user %q not found for booking %q", b.userEmail, b.tag)
 			}
 			eventID := seedUUID(b.eventTag)
-			payID := seedUUID(b.payTag)
 			bk := model.BookingModel{
 				BookingID:       id,
 				UserID:          &userID,
 				EventID:         &eventID,
-				PaymentID:       &payID,
 				NumberOfTickets: b.numTix,
 				Status:          b.status,
+			}
+			if b.payTag != "" {
+				// One payment can cover several bookings of a checkout; each booking stores
+				// its own line amount. The seeded payments each cover one booking, so the
+				// line amount is the payment amount.
+				payID := seedUUID(b.payTag)
+				var payment model.PaymentModel
+				if err := s.db.Where("payment_id = ?", payID).First(&payment).Error; err != nil {
+					return fmt.Errorf("payment %q not found for booking %q: %w", b.payTag, b.tag, err)
+				}
+				line := payment.Amount
+				bk.PaymentID = &payID
+				bk.LineAmount = &line
 			}
 			if b.status == model.BookingStatusReserved {
 				expiresAt := time.Now().Add(15 * time.Minute)

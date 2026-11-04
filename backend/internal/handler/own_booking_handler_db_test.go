@@ -18,61 +18,50 @@ import (
 	"gorm.io/gorm"
 )
 
-// EVENTHUB-236: the own booking endpoints against a real database. Bookings are made, paid,
-// declined and cancelled through the API like a visitor does; only states the API cannot reach
-// (an expired reservation, a deleted event or location, events in the past) are set up with SQL.
+// EVENTHUB-236: the own booking endpoints against a real database. Bookings are made through the
+// cart, checked out, paid, declined and cancelled through the API like a visitor does; only
+// states the API cannot reach (an expired reservation, a deleted event or location, events in
+// the past) are set up with SQL.
 
 func newOwnBookingRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	gin.SetMode(gin.TestMode)
-	userRepo := repository.NewUserRepository(db)
-	bookingService := service.NewBookingService(repository.NewBookingRepository(db), 0)
-	payments := NewPaymentHandler(service.NewPaymentService(repository.NewTransactor(db), repository.NewBookingRepository(db), repository.NewPaymentRepository(db)), userRepo)
-	own := NewOwnBookingHandler(service.NewOwnBookingService(repository.NewOwnBookingRepository(db)), userRepo)
-
-	setPrincipal := func(c *gin.Context) {
-		if principal != nil {
-			middleware.SetPrincipalForRequest(c, principal)
-		}
-		c.Next()
-	}
-
 	r := gin.New()
-	r.POST("/api/v1/bookings", setPrincipal, CreateBookingHandler(bookingService, userRepo))
-	r.POST("/api/v1/bookings/:bookingId/cancel", setPrincipal, CancelBooking(bookingService, userRepo))
-	r.POST("/api/v1/bookings/:bookingId/payment", setPrincipal, payments.StartPaymentHandler)
-	r.GET("/api/v1/bookings/:bookingId/payment", setPrincipal, payments.GetPaymentHandler)
-	r.POST("/api/v1/bookings/:bookingId/payment/simulate", setPrincipal, payments.SimulatePaymentHandler)
+	api := newCartAPI(db)
+	api.register(r, principalSetter(principal))
+	own := NewOwnBookingHandler(service.NewOwnBookingService(repository.NewOwnBookingRepository(db)), api.userRepo)
+
+	setPrincipal := principalSetter(principal)
 	r.GET("/api/v1/me/tickets", setPrincipal, own.ListOwnTicketsHandler)
 	r.GET("/api/v1/me/bookings", setPrincipal, own.ListOwnBookingsHandler)
 	r.GET("/api/v1/me/bookings/:bookingId", setPrincipal, own.GetOwnBookingHandler)
 	return r
 }
 
-// startPaymentViaAPI starts the payment process of a reservation and returns the pending payment.
-func startPaymentViaAPI(t *testing.T, router http.Handler, bookingID uuid.UUID) model.PaymentResponse {
+// payViaAPI checks the cart of the caller out and completes the payment with the outcome,
+// confirming the amount shown at the checkout like the frontend does.
+func payViaAPI(t *testing.T, router http.Handler, outcome model.SimulatedPaymentOutcome) model.PaymentResponse {
 	t.Helper()
-	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID), nil)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("start payment: %d %s", rec.Code, rec.Body.String())
-	}
-	return decodePayment(t, rec)
+	started := checkoutViaAPI(t, router)
+	return simulateViaAPI(t, router, started.PaymentID, outcome, started.Amount)
 }
 
-// payViaAPI starts the payment of a reservation and completes it with the outcome, confirming the
-// amount shown at the start like the frontend does.
-func payViaAPI(t *testing.T, router http.Handler, bookingID uuid.UUID, outcome model.SimulatedPaymentOutcome) model.PaymentResponse {
+func simulateViaAPI(t *testing.T, router http.Handler, paymentID uuid.UUID, outcome model.SimulatedPaymentOutcome, amount decimal.Decimal) model.PaymentResponse {
 	t.Helper()
-	started := startPaymentViaAPI(t, router, bookingID)
-	return simulateViaAPI(t, router, bookingID, outcome, started.Amount)
-}
-
-func simulateViaAPI(t *testing.T, router http.Handler, bookingID uuid.UUID, outcome model.SimulatedPaymentOutcome, amount decimal.Decimal) model.PaymentResponse {
-	t.Helper()
-	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(bookingID)+"/simulate", map[string]any{"outcome": outcome, "amount": amount.String()})
+	rec := doPaymentRequest(t, router, http.MethodPost, paymentPath(paymentID)+"/simulate", map[string]any{"outcome": outcome, "amount": amount.String()})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("simulate %s: %d %s", outcome, rec.Code, rec.Body.String())
 	}
 	return decodePayment(t, rec)
+}
+
+// paymentIDOf reads the payment a booking belongs to; false when it has none.
+func paymentIDOf(t *testing.T, db *gorm.DB, bookingID uuid.UUID) (uuid.UUID, bool) {
+	t.Helper()
+	var id uuid.NullUUID
+	if err := db.Raw("SELECT payment_id FROM bookings WHERE booking_id = ?", bookingID).Scan(&id).Error; err != nil {
+		t.Fatalf("read payment of booking %s: %v", bookingID, err)
+	}
+	return id.UUID, id.Valid
 }
 
 func cancelViaAPI(t *testing.T, router http.Handler, bookingID uuid.UUID) {
@@ -158,8 +147,8 @@ func TestListOwnTickets_PaidViaAPI_AppearsWithEventLocationAndPayment(t *testing
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	bookingID := reserveViaAPI(t, router, event.eventID, 2)
-	paid := payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	bookingID := addToCartViaAPI(t, router, event.eventID, 2)
+	paid := payViaAPI(t, router, model.SimulatedPaymentSuccess)
 
 	tickets := getOwnBookingList(t, router, "/api/v1/me/tickets")
 	if len(tickets) != 1 {
@@ -193,25 +182,25 @@ func TestListOwnTickets_PaidViaAPI_AppearsWithEventLocationAndPayment(t *testing
 }
 
 // A4, B1, B3, D2: a declined payment and open reservations are no tickets, but the history shows
-// them with their status.
+// them with their status. A live cart item and a pending checkout cannot coexist, so the item is
+// checked out in the second half of the test.
 func TestListOwnBookings_DeclinedAndOpenBookings_InHistoryNotInTickets(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	other := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	declined := reserveViaAPI(t, router, event.eventID, 2)
-	payViaAPI(t, router, declined, model.SimulatedPaymentFailure)
-	reserved := reserveViaAPI(t, router, event.eventID, 1)
-	pending := reserveViaAPI(t, router, event.eventID, 1)
-	startPaymentViaAPI(t, router, pending)
+	declined := addToCartViaAPI(t, router, event.eventID, 2)
+	payViaAPI(t, router, model.SimulatedPaymentFailure)
+	live := addToCartViaAPI(t, router, other.eventID, 1)
 
 	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 0 {
 		t.Fatalf("expected no tickets, got %+v", tickets)
 	}
 	history := getOwnBookingList(t, router, "/api/v1/me/bookings")
-	if len(history) != 3 {
-		t.Fatalf("expected 3 bookings in the history, got %d", len(history))
+	if len(history) != 2 {
+		t.Fatalf("expected 2 bookings in the history, got %d", len(history))
 	}
 
 	failed := findOwnBooking(history, declined)
@@ -220,12 +209,16 @@ func TestListOwnBookings_DeclinedAndOpenBookings_InHistoryNotInTickets(t *testin
 		failed.FailureReason == nil || *failed.FailureReason != model.PaymentFailureDeclined || failed.Message == "" {
 		t.Errorf("expected failed booking with failureReason declined, got %+v", failed)
 	}
-	open := findOwnBooking(history, reserved)
+	open := findOwnBooking(history, live)
 	if open == nil || open.BookingStatus != model.BookingStatusReserved || open.TicketsValid ||
 		open.PaymentStatus != nil || open.Amount != nil || open.ExpiresAt == nil || open.Message != "" {
 		t.Errorf("expected live reservation without payment, got %+v", open)
 	}
-	awaiting := findOwnBooking(history, pending)
+
+	// The live item becomes a pending checkout: still no ticket, but a payment to complete.
+	checkoutViaAPI(t, router)
+	history = getOwnBookingList(t, router, "/api/v1/me/bookings")
+	awaiting := findOwnBooking(history, live)
 	if awaiting == nil || awaiting.BookingStatus != model.BookingStatusReserved || awaiting.TicketsValid ||
 		awaiting.PaymentStatus == nil || *awaiting.PaymentStatus != model.PaymentStatusPending || awaiting.ExpiresAt == nil {
 		t.Errorf("expected reservation with pending payment, got %+v", awaiting)
@@ -240,8 +233,8 @@ func TestListOwnBookings_CancelledAfterPayment_CancelledRefundedNotInTickets(t *
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	bookingID := reserveViaAPI(t, router, event.eventID, 2)
-	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	bookingID := addToCartViaAPI(t, router, event.eventID, 2)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
 	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 1 {
 		t.Fatalf("expected the paid ticket before cancelling, got %+v", tickets)
 	}
@@ -269,8 +262,8 @@ func TestGetOwnBooking_EventWithdrawnAfterPayment_TicketInvalid(t *testing.T) {
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	bookingID := reserveViaAPI(t, router, event.eventID, 2)
-	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	bookingID := addToCartViaAPI(t, router, event.eventID, 2)
+	paid := payViaAPI(t, router, model.SimulatedPaymentSuccess)
 	withdrawViaAPI(t, db, event.eventID)
 
 	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 0 {
@@ -282,7 +275,7 @@ func TestGetOwnBooking_EventWithdrawnAfterPayment_TicketInvalid(t *testing.T) {
 		detail.Event == nil || detail.Event.Status != model.EventStatusCancelled {
 		t.Errorf("expected invalid ticket of a cancelled event, got %s", ownBookingJSON(t, detail))
 	}
-	payment := decodePayment(t, doPaymentRequest(t, router, http.MethodGet, paymentPath(bookingID), nil))
+	payment := decodePayment(t, doPaymentRequest(t, router, http.MethodGet, paymentPath(paid.PaymentID), nil))
 	if payment.TicketsValid || payment.Message != detail.Message {
 		t.Errorf("expected the payment result to agree, got ticketsValid=%v message=%q", payment.TicketsValid, payment.Message)
 	}
@@ -298,20 +291,20 @@ func TestOwnBookings_ForeignBookings_NotListedAndDetail404(t *testing.T) {
 	mine := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 	theirs := newOwnBookingRouter(db, &middleware.Principal{Subject: otherBookingKeycloakUserID})
 
-	own := reserveViaAPI(t, mine, event.eventID, 1)
-	payViaAPI(t, mine, own, model.SimulatedPaymentSuccess)
-	foreignPaid := reserveViaAPI(t, theirs, event.eventID, 2)
-	payViaAPI(t, theirs, foreignPaid, model.SimulatedPaymentSuccess)
-	foreignFailed := reserveViaAPI(t, theirs, event.eventID, 1)
-	payViaAPI(t, theirs, foreignFailed, model.SimulatedPaymentFailure)
+	own := addToCartViaAPI(t, mine, event.eventID, 1)
+	payViaAPI(t, mine, model.SimulatedPaymentSuccess)
+	foreignPaid := addToCartViaAPI(t, theirs, event.eventID, 2)
+	payViaAPI(t, theirs, model.SimulatedPaymentSuccess)
+	foreignFailed := addToCartViaAPI(t, theirs, event.eventID, 1)
+	payViaAPI(t, theirs, model.SimulatedPaymentFailure)
 
 	for _, path := range []string{"/api/v1/me/tickets", "/api/v1/me/bookings"} {
 		if ids := ownBookingIDs(getOwnBookingList(t, mine, path)); len(ids) != 1 || ids[0] != own {
 			t.Errorf("%s: expected only the own booking %s, got %v", path, own, ids)
 		}
 	}
-	if ids := ownBookingIDs(getOwnBookingList(t, theirs, "/api/v1/me/bookings")); len(ids) != 2 {
-		t.Errorf("the other visitor must see both own bookings, got %v", ids)
+	if ids := ownBookingIDs(getOwnBookingList(t, theirs, "/api/v1/me/bookings")); len(ids) != 2 || ids[0] != foreignFailed || ids[1] != foreignPaid {
+		t.Errorf("the other visitor must see both own bookings, newest first, got %v", ids)
 	}
 
 	foreign := doPaymentRequest(t, mine, http.MethodGet, "/api/v1/me/bookings/"+foreignPaid.String(), nil)
@@ -324,42 +317,49 @@ func TestOwnBookings_ForeignBookings_NotListedAndDetail404(t *testing.T) {
 	wantProblem(t, doPaymentRequest(t, mine, http.MethodGet, "/api/v1/me/bookings/not-a-uuid", nil), http.StatusBadRequest)
 }
 
-// ownBookingStates makes bookings in every state the API can reach, plus a reservation that ran
-// out, and returns them by name.
+// ownBookingStates makes bookings in every state the API can reach and returns them by name.
+// A visitor holds at most one open checkout at a time, so the pending payment is created last;
+// the states with a closed payment come first. A reservation that ran out is covered by
+// TestListOwnBookings_ExpiredReservation_ShownExpiredAndFiltered, which needs its own flow.
 func ownBookingStates(t *testing.T, db *gorm.DB, router http.Handler) map[string]uuid.UUID {
 	t.Helper()
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	withdrawn := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	cartEvent := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	states := map[string]uuid.UUID{}
-	book := func(name string, eventID uuid.UUID) uuid.UUID {
-		states[name] = reserveViaAPI(t, router, eventID, 2)
+
+	// cycle books two tickets, pays them and records the booking of the closed payment.
+	cycle := func(name string, eventID uuid.UUID, outcome model.SimulatedPaymentOutcome) uuid.UUID {
+		t.Helper()
+		addToCartViaAPI(t, router, eventID, 2)
+		paid := payViaAPI(t, router, outcome)
+		if len(paid.Items) != 1 {
+			t.Fatalf("%s: unexpected checkout: %+v", name, paid.Items)
+		}
+		states[name] = paid.Items[0].BookingID
 		return states[name]
 	}
 
-	payViaAPI(t, router, book("paid", event.eventID), model.SimulatedPaymentSuccess)
-	payViaAPI(t, router, book("declined", event.eventID), model.SimulatedPaymentFailure)
-	refunded := book("cancelled after payment", event.eventID)
-	payViaAPI(t, router, refunded, model.SimulatedPaymentSuccess)
-	cancelViaAPI(t, router, refunded)
-	cancelledPending := book("cancelled while pending", event.eventID)
-	startPaymentViaAPI(t, router, cancelledPending)
-	cancelViaAPI(t, router, cancelledPending)
-	startPaymentViaAPI(t, router, book("pending", event.eventID))
-	book("reserved without payment", event.eventID)
-	pendingExpired := book("pending, reservation expired", event.eventID)
-	startPaymentViaAPI(t, router, pendingExpired)
-	expireOwnReservation(t, db, pendingExpired)
-	storedExpired := book("expired", event.eventID)
-	started := startPaymentViaAPI(t, router, storedExpired)
-	expireOwnReservation(t, db, storedExpired)
-	simulateViaAPI(t, router, storedExpired, model.SimulatedPaymentSuccess, started.Amount)
-	payViaAPI(t, router, book("paid, event withdrawn", withdrawn.eventID), model.SimulatedPaymentSuccess)
+	cycle("paid", event.eventID, model.SimulatedPaymentSuccess)
+	cycle("declined", event.eventID, model.SimulatedPaymentFailure)
+	cycle("cancelled after payment", event.eventID, model.SimulatedPaymentSuccess)
+	cancelViaAPI(t, router, states["cancelled after payment"])
+	addToCartViaAPI(t, router, event.eventID, 2)
+	cancelledPending := checkoutViaAPI(t, router)
+	states["cancelled while pending"] = cancelledPending.Items[0].BookingID
+	cancelViaAPI(t, router, states["cancelled while pending"])
+	cycle("paid, event withdrawn", withdrawn.eventID, model.SimulatedPaymentSuccess)
 	withdrawViaAPI(t, db, withdrawn.eventID)
+
+	// The last checkout stays open, and a cart item lives beside it.
+	addToCartViaAPI(t, router, event.eventID, 2)
+	pending := checkoutViaAPI(t, router)
+	states["pending"] = pending.Items[0].BookingID
+	states["reserved without payment"] = addToCartViaAPI(t, router, cartEvent.eventID, 2)
 	return states
 }
 
-// C5: for every booking with a payment, the details say what GET /bookings/{bookingId}/payment
-// says. Only the shown status of a reservation that ran out differs, by design (F4).
+// C5: for every booking with a payment, the details say what GET /payments/{paymentId} says.
 func TestGetOwnBooking_BookingsWithPayment_MatchPaymentEndpoint(t *testing.T) {
 	db := testdb.Open(t)
 	seedBookingUser(t, db, bookingKeycloakUserID)
@@ -368,11 +368,19 @@ func TestGetOwnBooking_BookingsWithPayment_MatchPaymentEndpoint(t *testing.T) {
 
 	compared, valid := 0, 0
 	for name, bookingID := range states {
-		rec := doPaymentRequest(t, router, http.MethodGet, paymentPath(bookingID), nil)
-		if rec.Code == http.StatusNotFound {
+		paymentID, has := paymentIDOf(t, db, bookingID)
+		if !has {
 			continue // no payment process was started
 		}
+		rec := doPaymentRequest(t, router, http.MethodGet, paymentPath(paymentID), nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: get payment: %d %s", name, rec.Code, rec.Body.String())
+		}
 		payment := decodePayment(t, rec)
+		item := paymentItemOf(&payment, bookingID)
+		if item == nil {
+			t.Fatalf("%s: booking %s is not an item of its payment", name, bookingID)
+		}
 		own := getOwnBookingDetail(t, router, bookingID)
 		compared++
 		if own.TicketsValid {
@@ -382,21 +390,17 @@ func TestGetOwnBooking_BookingsWithPayment_MatchPaymentEndpoint(t *testing.T) {
 			t.Errorf("%s: ticketsValid=%v message=%q, payment endpoint says ticketsValid=%v message=%q",
 				name, own.TicketsValid, own.Message, payment.TicketsValid, payment.Message)
 		}
-		if own.PaymentStatus == nil || *own.PaymentStatus != payment.Status || own.Amount == nil || !own.Amount.Equal(payment.Amount) {
-			t.Errorf("%s: payment %v of %v, payment endpoint says %s of %s", name, own.PaymentStatus, own.Amount, payment.Status, payment.Amount)
+		if own.PaymentStatus == nil || *own.PaymentStatus != payment.Status {
+			t.Errorf("%s: payment %v, payment endpoint says %s", name, own.PaymentStatus, payment.Status)
+		}
+		if own.Amount == nil || !own.Amount.Equal(item.LineAmount) {
+			t.Errorf("%s: amount %v, payment endpoint says line %s", name, own.Amount, item.LineAmount)
 		}
 		if (own.FailureReason == nil) != (payment.FailureReason == nil) || (own.FailureReason != nil && *own.FailureReason != *payment.FailureReason) {
 			t.Errorf("%s: failureReason %v, payment endpoint says %v", name, own.FailureReason, payment.FailureReason)
 		}
-		wantStatus := payment.BookingStatus
-		if name == "pending, reservation expired" {
-			wantStatus = model.BookingStatusExpired
-			if payment.BookingStatus != model.BookingStatusReserved {
-				t.Errorf("%s: the payment endpoint shows the stored status reserved until the cleanup, got %s", name, payment.BookingStatus)
-			}
-		}
-		if own.BookingStatus != wantStatus {
-			t.Errorf("%s: bookingStatus %s, want %s", name, own.BookingStatus, wantStatus)
+		if own.BookingStatus != item.BookingStatus {
+			t.Errorf("%s: bookingStatus %s, payment endpoint says %s", name, own.BookingStatus, item.BookingStatus)
 		}
 	}
 	if compared != len(states)-1 || valid != 1 {
@@ -441,18 +445,20 @@ func TestOwnBookings_AllViews_ShowSameBooking(t *testing.T) {
 func TestListOwnBookings_ExpiredReservation_ShownExpiredAndFiltered(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	second := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	third := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	ranOut := reserveViaAPI(t, router, event.eventID, 1)
+	ranOut := addToCartViaAPI(t, router, event.eventID, 1)
 	expireOwnReservation(t, db, ranOut)
-	live := reserveViaAPI(t, router, event.eventID, 1)
-	storedExpired := reserveViaAPI(t, router, event.eventID, 1)
-	started := startPaymentViaAPI(t, router, storedExpired)
+	storedExpired := addToCartViaAPI(t, router, second.eventID, 1)
+	started := checkoutViaAPI(t, router)
 	expireOwnReservation(t, db, storedExpired)
-	simulateViaAPI(t, router, storedExpired, model.SimulatedPaymentSuccess, started.Amount)
-	paid := reserveViaAPI(t, router, event.eventID, 1)
-	payViaAPI(t, router, paid, model.SimulatedPaymentSuccess)
+	simulateViaAPI(t, router, started.PaymentID, model.SimulatedPaymentSuccess, started.Amount)
+	paid := addToCartViaAPI(t, router, second.eventID, 1)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
+	live := addToCartViaAPI(t, router, third.eventID, 1)
 
 	var stored string
 	if err := db.Raw("SELECT status FROM bookings WHERE booking_id = ?", ranOut).Scan(&stored).Error; err != nil || stored != "reserved" {
@@ -496,11 +502,11 @@ func TestListOwnBookings_History_ContainsEventDateTicketsStatusNewestFirst(t *te
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	first := reserveViaAPI(t, router, event.eventID, 3)
-	payViaAPI(t, router, first, model.SimulatedPaymentSuccess)
-	second := reserveViaAPI(t, router, event.eventID, 1)
-	payViaAPI(t, router, second, model.SimulatedPaymentFailure)
-	third := reserveViaAPI(t, router, event.eventID, 2)
+	first := addToCartViaAPI(t, router, event.eventID, 3)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
+	second := addToCartViaAPI(t, router, event.eventID, 1)
+	payViaAPI(t, router, model.SimulatedPaymentFailure)
+	third := addToCartViaAPI(t, router, event.eventID, 2)
 
 	history := getOwnBookingList(t, router, "/api/v1/me/bookings")
 	want := []struct {
@@ -547,8 +553,8 @@ func TestListOwnTickets_UpcomingFirstThenPast_OrderedByStart(t *testing.T) {
 	booked := map[string]uuid.UUID{}
 	for _, tt := range times {
 		event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
-		booked[tt.name] = reserveViaAPI(t, router, event.eventID, 1)
-		payViaAPI(t, router, booked[tt.name], model.SimulatedPaymentSuccess)
+		booked[tt.name] = addToCartViaAPI(t, router, event.eventID, 1)
+		payViaAPI(t, router, model.SimulatedPaymentSuccess)
 		err := db.Exec("UPDATE events SET start_time = NOW() + ?::interval, end_time = NOW() + ?::interval WHERE event_id = ?",
 			tt.start, tt.end, event.eventID).Error
 		if err != nil {
@@ -576,8 +582,8 @@ func TestGetOwnBooking_DeletedLocationOrEvent_ShowsNull(t *testing.T) {
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
-	bookingID := reserveViaAPI(t, router, event.eventID, 1)
-	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	bookingID := addToCartViaAPI(t, router, event.eventID, 1)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
 
 	if err := db.Exec("DELETE FROM locations WHERE location_id = ?", event.locationID).Error; err != nil {
 		t.Fatalf("delete location: %v", err)
@@ -608,7 +614,8 @@ func TestListOwnTickets_NoOwnBookings_ReturnsEmptyArray(t *testing.T) {
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	seedBookingUser(t, db, otherBookingKeycloakUserID)
 	theirs := newOwnBookingRouter(db, &middleware.Principal{Subject: otherBookingKeycloakUserID})
-	payViaAPI(t, theirs, reserveViaAPI(t, theirs, event.eventID, 1), model.SimulatedPaymentSuccess)
+	addToCartViaAPI(t, theirs, event.eventID, 1)
+	payViaAPI(t, theirs, model.SimulatedPaymentSuccess)
 
 	mine := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 	for _, path := range []string{"/api/v1/me/tickets", "/api/v1/me/bookings"} {
@@ -629,8 +636,8 @@ func TestListOwnTickets_RatingScore_FollowsOwnRating(t *testing.T) {
 	seedBookingUser(t, db, bookingKeycloakUserID)
 	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
 
-	bookingID := reserveViaAPI(t, router, event.eventID, 1)
-	payViaAPI(t, router, bookingID, model.SimulatedPaymentSuccess)
+	bookingID := addToCartViaAPI(t, router, event.eventID, 1)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
 	if err := db.Exec("UPDATE events SET start_time = NOW() - interval '2 day', end_time = NOW() - interval '1 day' WHERE event_id = ?",
 		event.eventID).Error; err != nil {
 		t.Fatalf("end event: %v", err)

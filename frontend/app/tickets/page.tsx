@@ -34,7 +34,12 @@ export default async function TicketsPage() {
           später erneut.
         </p>
       ) : (
+        // Reading the clock here is safe: this is a server component, which
+        // renders once per request, so this is the request time — not a
+        // value that could change between re-renders.
+        // oxlint-disable react/purity
         <OwnTickets {...splitTicketsByEnd(tickets, Date.now())} />
+        // oxlint-enable react/purity
       )}
     </div>
   )
