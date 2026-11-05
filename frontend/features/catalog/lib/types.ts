@@ -1,3 +1,5 @@
+import type { EventAddress } from "@/features/shared/lib/location"
+
 /** Mirrors `model.PublishedEventResponse` from `GET /events` on the backend
  * (see backend/internal/model/published_events.go). The repository joins
  * category, location and organizer, so all three are always present on every
@@ -14,14 +16,7 @@ export interface PublishedEvent {
     categoryId: string
     category: string
   }
-  location: {
-    locationId: string
-    name: string
-    city: string
-    postalCode: string
-    street: string
-    houseNumber: string | null
-  }
+  location: EventAddress
   /** Database UUID of the owning organization, for its rating summary. */
   organizerId: string
   /** Public name of the owning organization. */

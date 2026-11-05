@@ -224,3 +224,168 @@ func TestListRatingsForModerationDatabase(t *testing.T) {
 		t.Fatalf("released rating still hidden: %+v", page)
 	}
 }
+
+func readModeratedEvents(t *testing.T, router http.Handler, query string) model.ModeratedEventPage {
+	t.Helper()
+	rec := requestEventModeration(router, http.MethodGet, query, "")
+	var page model.ModeratedEventPage
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &page) != nil {
+		t.Fatalf("list events: %d %s", rec.Code, rec.Body.String())
+	}
+	if page.Items == nil {
+		t.Fatal("items must be an array")
+	}
+	return page
+}
+
+func TestEventModerationListDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	router := databaseModerationRouter(db, globalPrincipal(middleware.RoleAdmin))
+	if page := readModeratedEvents(t, router, ""); page.Total != 0 {
+		t.Fatalf("empty database: %+v", page)
+	}
+	statuses := []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted}
+	seeds := make([]seededEvent, 0, len(statuses))
+	for index, status := range statuses {
+		event := seedEventForOrg(t, db, "moderation-list", status)
+		if err := db.Exec("UPDATE events SET description = ?, created_at = ? WHERE event_id = ?", "Full description", time.Now().Add(time.Duration(index)*time.Hour), event.eventID).Error; err != nil {
+			t.Fatal(err)
+		}
+		seeds = append(seeds, event)
+	}
+	if page := readModeratedEvents(t, router, ""); page.Total != 4 || len(page.Items) != 4 || page.Items[0].EventID != seeds[3].eventID || page.Items[0].Description == nil || *page.Items[0].Description != "Full description" || page.Items[0].OrganizationName == nil || *page.Items[0].OrganizationName != "Org moderation-list" {
+		t.Fatalf("all statuses and text: %+v", page)
+	}
+	for index, status := range statuses {
+		page := readModeratedEvents(t, router, "?status="+string(status)+"&organizationId="+seeds[0].ownerOrgID.String())
+		if page.Total != 1 || len(page.Items) != 1 || page.Items[0].EventID != seeds[index].eventID {
+			t.Fatalf("filter %s: %+v", status, page)
+		}
+		rec := requestEventModeration(router, http.MethodGet, "/"+seeds[index].eventID.String(), "")
+		var event model.ModeratedEvent
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &event) != nil || event.EventID != seeds[index].eventID || event.Status != status {
+			t.Fatalf("inspect %s: %d %s", status, rec.Code, rec.Body.String())
+		}
+	}
+	if page := readModeratedEvents(t, router, "?limit=2&page=2"); page.Total != 4 || len(page.Items) != 2 || page.Items[0].EventID != seeds[1].eventID {
+		t.Fatalf("pagination: %+v", page)
+	}
+	if page := readModeratedEvents(t, router, "?limit=2&page=3"); page.Total != 4 || len(page.Items) != 0 {
+		t.Fatalf("past last page: %+v", page)
+	}
+	if page := readModeratedEvents(t, router, "?organizationId="+uuid.NewString()); page.Total != 0 {
+		t.Fatalf("unknown organization: %+v", page)
+	}
+	if err := db.Exec("UPDATE events SET organizer_id = NULL WHERE event_id = ?", seeds[0].eventID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if page := readModeratedEvents(t, router, "?status=draft"); page.Total != 1 || page.Items[0].OrganizationName != nil {
+		t.Fatalf("detached event missing: %+v", page)
+	}
+}
+
+func TestEventModerationConsistencyDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "moderation-consistency", model.EventStatusPublished)
+	seedBookingUser(t, db, "moderation-buyer")
+	visitor := newOwnBookingRouter(db, &middleware.Principal{Subject: "moderation-buyer"})
+	paidBookingID := addToCartViaAPI(t, visitor, event.eventID, 1)
+	paid := payViaAPI(t, visitor, model.SimulatedPaymentSuccess)
+	if !paid.TicketsValid {
+		t.Fatal("paid ticket should initially be valid")
+	}
+	pendingBookingID := addToCartViaAPI(t, visitor, event.eventID, 1)
+	pending := checkoutViaAPI(t, visitor)
+	moderation := databaseModerationRouter(db, globalPrincipal(middleware.RoleAdmin))
+	path := "/" + event.eventID.String()
+	for _, body := range []string{`{"title":" Corrected title ","description":"Safe description","reason":" Offensive text "}`, `{"title":"Corrected title","description":"Safe description","reason":"Repeated"}`} {
+		if rec := requestEventModeration(moderation, http.MethodPatch, path+"/content", body); rec.Code != http.StatusOK {
+			t.Fatalf("correct text: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	events := repository.NewEventRepository(db)
+	details, err := events.GetPublishedEventDetails(event.eventID)
+	if err != nil || details == nil || details.Title != "Corrected title" || details.Description == nil || *details.Description != "Safe description" || details.Capacity != 100 {
+		t.Fatalf("corrected public details: %+v %v", details, err)
+	}
+	for range 2 {
+		if rec := requestEventModeration(moderation, http.MethodPost, path+"/withdraw", `{"reason":" Confirmed fraud "}`); rec.Code != http.StatusOK {
+			t.Fatalf("withdraw: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	if details, err := events.GetPublishedEventDetails(event.eventID); err != nil || details != nil {
+		t.Fatalf("withdrawn public details: %+v %v", details, err)
+	}
+	if list, err := events.ListPublishedEvents(model.PublishedEventFilter{}); err != nil || len(list) != 0 {
+		t.Fatalf("withdrawn public listing: %+v %v", list, err)
+	}
+	if candidates, err := repository.NewRecommendationRepository(db).ListCandidates(uuid.New()); err != nil || len(candidates) != 0 {
+		t.Fatalf("withdrawn recommendation: %+v %v", candidates, err)
+	}
+	if rec := doPaymentRequest(t, visitor, http.MethodPost, "/api/v1/cart/items", map[string]any{"eventId": event.eventID, "quantity": 1}); rec.Code != http.StatusConflict {
+		t.Fatalf("new cart reservation accepted: %d %s", rec.Code, rec.Body.String())
+	}
+	failed := simulateViaAPI(t, visitor, pending.PaymentID, model.SimulatedPaymentSuccess, pending.Amount)
+	if failed.TicketsValid || failed.Status != model.PaymentStatusFailed {
+		t.Fatalf("pending payment succeeded after moderation: %+v", failed)
+	}
+	if booking := getOwnBookingDetail(t, visitor, pendingBookingID); booking.BookingStatus != model.BookingStatusFailed || booking.TicketsValid {
+		t.Fatalf("pending booking survived moderation: %+v", booking)
+	}
+	storedPayment := decodePayment(t, doPaymentRequest(t, visitor, http.MethodGet, paymentPath(paid.PaymentID), nil))
+	if storedPayment.TicketsValid || storedPayment.Status != model.PaymentStatusPaid {
+		t.Fatalf("paid history or ticket validity inconsistent: %+v", storedPayment)
+	}
+	if booking := getOwnBookingDetail(t, visitor, paidBookingID); booking.BookingStatus != model.BookingStatusConfirmed || booking.TicketsValid {
+		t.Fatalf("paid booking history or ticket validity inconsistent: %+v", booking)
+	}
+	if rec := postPublish(t, newEventRouter(db, principalManaging("moderation-consistency")), event.eventID.String()); rec.Code != http.StatusBadRequest {
+		t.Fatalf("organizer republished moderated event: %d %s", rec.Code, rec.Body.String())
+	}
+	entries, err := repository.NewAuditLogRepository(db).ListByOrganization("moderation-consistency", 10, nil)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("expected one entry per change: %+v %v", entries, err)
+	}
+	for index, reason := range []string{"Confirmed fraud", "Offensive text"} {
+		entry := entries[index]
+		if entry.Action != string(audit.EventModerated) || entry.ActorSubject != "moderator-1" || entry.ResourceID != event.eventID.String() || entry.Changes["reason"] != reason || entry.Phase != audit.PhaseCompleted {
+			t.Fatalf("audit entry: %+v", entry)
+		}
+	}
+	fields := entries[0].Changes["fields"].(map[string]any)
+	change := fields["status"].(map[string]any)
+	if change["from"] != "published" || change["to"] != "cancelled" {
+		t.Fatalf("missing status transition: %+v", change)
+	}
+}
+
+func TestEventModerationAuditRollbackDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "moderation-rollback", model.EventStatusPublished)
+	for _, statement := range []string{
+		`CREATE FUNCTION fail_moderation_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit down'; END $$`,
+		`CREATE TRIGGER fail_moderation_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_moderation_audit()`,
+	} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		db.Exec("DROP TRIGGER IF EXISTS fail_moderation_audit ON audit_logs")
+		db.Exec("DROP FUNCTION IF EXISTS fail_moderation_audit()")
+	})
+	router := databaseModerationRouter(db, globalPrincipal(middleware.RoleAdmin))
+	for _, request := range []struct{ method, suffix, body string }{
+		{http.MethodPatch, "/content", `{"title":"Changed","reason":"Text"}`},
+		{http.MethodPost, "/withdraw", `{"reason":"Fraud"}`},
+	} {
+		rec := requestEventModeration(router, request.method, "/"+event.eventID.String()+request.suffix, request.body)
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("audit failure: %d %s", rec.Code, rec.Body.String())
+		}
+		stored, err := repository.NewEventRepository(db).GetEventByID(event.eventID)
+		if err != nil || stored.Status != model.EventStatusPublished || stored.Title != "Altes Konzert" {
+			t.Fatalf("change survived audit failure: %+v %v", stored, err)
+		}
+	}
+}

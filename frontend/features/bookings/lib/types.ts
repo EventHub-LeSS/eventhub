@@ -1,3 +1,5 @@
+import type { EventAddress } from "@/features/shared/lib/location"
+
 /**
  * Mirrors the own-booking models of the backend (see
  * backend/internal/model/own_bookings.go). A booking starts as a
@@ -21,14 +23,7 @@ export type PaymentFailureReason =
   | "reservation_expired"
   | "event_unavailable"
 
-export interface OwnBookingLocation {
-  locationId: string
-  name: string
-  city: string
-  postalCode: string
-  street: string
-  houseNumber: string | null
-}
+export type OwnBookingLocation = EventAddress
 
 export interface OwnBookingEvent {
   eventId: string

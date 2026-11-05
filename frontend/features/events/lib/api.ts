@@ -190,26 +190,29 @@ export async function deleteEvent(
  * An unreachable catalog yields empty lists, which the form reports as "no
  * categories available" instead of failing.
  */
-export async function getEventCatalog(): Promise<EventCatalog> {
-  const { events } = await getPublishedEvents()
+export async function listLocations(
+  accessToken: string
+): Promise<EventLocation[]> {
+  return apiFetch<EventLocation[]>("/locations", { accessToken })
+}
+
+export async function getEventCatalog(
+  accessToken: string
+): Promise<EventCatalog> {
+  const [{ events }, locations] = await Promise.all([
+    getPublishedEvents(),
+    listLocations(accessToken).catch(() => []),
+  ])
   const categories = new Map<string, EventCategory>()
-  const locations = new Map<string, EventLocation>()
 
   for (const event of events) {
     categories.set(event.category.categoryId, event.category)
-    locations.set(event.location.locationId, {
-      locationId: event.location.locationId,
-      name: event.location.name,
-      city: event.location.city,
-    })
   }
 
   return {
     categories: [...categories.values()].toSorted((a, b) =>
       a.category.localeCompare(b.category)
     ),
-    locations: [...locations.values()].toSorted((a, b) =>
-      a.name.localeCompare(b.name)
-    ),
+    locations,
   }
 }
