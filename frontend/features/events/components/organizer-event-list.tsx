@@ -10,6 +10,7 @@ import {
   formatEventTimeRange,
 } from "@/features/events/lib/format"
 import { getOrganizerEvents } from "@/features/events/lib/get-organizer-events"
+import { formatPlace } from "@/features/shared/lib/location"
 
 export async function OrganizerEventList() {
   const [result, user] = await Promise.all([
@@ -59,7 +60,7 @@ export async function OrganizerEventList() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {formatEventTimeRange(event.startTime, event.endTime)} ·{" "}
-                  {event.location?.name ?? EMPTY_VALUE} ·{" "}
+                  {event.location ? formatPlace(event.location) : EMPTY_VALUE} ·{" "}
                   {formatAvailableSeats(event.availableSeats, event.capacity)} ·{" "}
                   {formatEventPrice(event.price)}
                 </p>

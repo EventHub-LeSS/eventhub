@@ -1,29 +1,36 @@
-"use client";
+"use client"
 
-import { useState, useTransition } from "react";
+import { useState, useTransition } from "react"
 
 import {
   saveDraftAction,
   updateDraftAction,
-} from "@/features/events/lib/actions";
+} from "@/features/events/lib/actions"
 import {
   type DraftErrors,
   type EventDraft,
   emptyDraft,
   toDraft,
-} from "@/features/events/lib/draft";
-import type { Event, EventCatalog } from "@/features/events/lib/types";
-import { Button } from "@/features/shared/components/ui/button";
+  withLocation,
+} from "@/features/events/lib/draft"
+import type {
+  Event,
+  EventCatalog,
+  EventLocation,
+} from "@/features/events/lib/types"
+import { Button } from "@/features/shared/components/ui/button"
+import { Checkbox } from "@/features/shared/components/ui/checkbox"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/features/shared/components/ui/select";
+} from "@/features/shared/components/ui/select"
+import { formatAddress } from "@/features/shared/lib/location"
 
 const fieldClass =
-  "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive";
+  "h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
 
 function Field({
   id,
@@ -32,11 +39,11 @@ function Field({
   hint,
   children,
 }: {
-  id: string;
-  label: string;
-  error?: string;
-  hint?: string;
-  children: React.ReactNode;
+  id: string
+  label: string
+  error?: string
+  hint?: string
+  children: React.ReactNode
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -49,58 +56,72 @@ function Field({
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
-  );
+  )
 }
 
 interface DraftFormProps {
-  catalog: EventCatalog;
+  catalog: EventCatalog
   /** Present when an existing draft is edited instead of a new one created. */
-  event?: Event;
+  event?: Event
 }
 
 export function DraftForm({ catalog, event }: DraftFormProps) {
   const [draft, setDraft] = useState<EventDraft>(() =>
-    event ? toDraft(event) : emptyDraft,
-  );
-  const [errors, setErrors] = useState<DraftErrors>({});
-  const [message, setMessage] = useState<string>();
-  const [isPending, startTransition] = useTransition();
+    event ? toDraft(event, catalog.locations) : emptyDraft
+  )
+  const [errors, setErrors] = useState<DraftErrors>({})
+  const [message, setMessage] = useState<string>()
+  const [isPending, startTransition] = useTransition()
 
   function update<K extends keyof EventDraft>(key: K, value: EventDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-    setErrors((current) => ({ ...current, [key]: undefined }));
+    setDraft((current) => ({ ...current, [key]: value }))
+    setErrors((current) => ({ ...current, [key]: undefined }))
+  }
+
+  /** Copies a stored address into the fields, which stay editable afterwards. */
+  function applyLocation(location: EventLocation) {
+    setDraft((current) => withLocation(current, location))
+    setErrors((current) => ({
+      ...current,
+      street: undefined,
+      houseNumber: undefined,
+      postalCode: undefined,
+      city: undefined,
+      addressAddition: undefined,
+    }))
   }
 
   function handleSubmit(submitEvent: React.FormEvent<HTMLFormElement>) {
-    submitEvent.preventDefault();
-    setMessage(undefined);
+    submitEvent.preventDefault()
+    setMessage(undefined)
 
     startTransition(async () => {
       const result = event
         ? await updateDraftAction(event.eventId, draft)
-        : await saveDraftAction(draft);
+        : await saveDraftAction(draft)
 
-      setErrors(result.errors ?? {});
-      setMessage(result.message);
-    });
+      setErrors(result.errors ?? {})
+      setMessage(result.message)
+    })
   }
 
-  const catalogMissing =
-    catalog.categories.length === 0 || catalog.locations.length === 0;
+  const catalogMissing = catalog.categories.length === 0
 
   // The labels the selects show for their current value, like in the event filters.
   const categoryItems = Object.fromEntries(
     catalog.categories.map((category) => [
       category.categoryId,
       category.category,
-    ]),
-  );
+    ])
+  )
   const locationItems = Object.fromEntries(
     catalog.locations.map((location) => [
       location.locationId,
-      `${location.name}, ${location.city}`,
-    ]),
-  );
+      location.accessible
+        ? `${formatAddress(location)} (barrierefrei)`
+        : formatAddress(location),
+    ])
+  )
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -204,42 +225,140 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
             </SelectContent>
           </Select>
         </Field>
+      </div>
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="mb-4 text-sm font-medium">Veranstaltungsort</legend>
+
+        {catalog.locations.length > 0 && (
+          <Field
+            id="storedLocation"
+            label="Vorhandenen Ort übernehmen"
+            hint="Optional. Die Felder unten bleiben danach noch bearbeitbar."
+          >
+            <Select
+              items={locationItems}
+              value={null}
+              onValueChange={(value) => {
+                const location = catalog.locations.find(
+                  (candidate) => candidate.locationId === value
+                )
+
+                if (location) {
+                  applyLocation(location)
+                }
+              }}
+            >
+              <SelectTrigger
+                id="storedLocation"
+                className="w-full data-[size=default]:h-9"
+              >
+                <SelectValue placeholder="Bitte auswählen" />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {catalog.locations.map((location) => (
+                  <SelectItem
+                    key={location.locationId}
+                    value={location.locationId}
+                  >
+                    {locationItems[location.locationId]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+          <Field id="street" label="Straße" error={errors.street}>
+            <input
+              id="street"
+              className={fieldClass}
+              autoComplete="address-line1"
+              value={draft.street}
+              onChange={(changed) => update("street", changed.target.value)}
+              aria-invalid={Boolean(errors.street)}
+            />
+          </Field>
+
+          <Field
+            id="houseNumber"
+            label="Hausnummer"
+            error={errors.houseNumber}
+            hint="Optional."
+          >
+            <input
+              id="houseNumber"
+              className={fieldClass}
+              value={draft.houseNumber}
+              onChange={(changed) =>
+                update("houseNumber", changed.target.value)
+              }
+              aria-invalid={Boolean(errors.houseNumber)}
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+          <Field id="postalCode" label="PLZ" error={errors.postalCode}>
+            <input
+              id="postalCode"
+              inputMode="numeric"
+              maxLength={5}
+              autoComplete="postal-code"
+              className={fieldClass}
+              value={draft.postalCode}
+              onChange={(changed) => update("postalCode", changed.target.value)}
+              aria-invalid={Boolean(errors.postalCode)}
+            />
+          </Field>
+
+          <Field id="city" label="Ort" error={errors.city}>
+            <input
+              id="city"
+              autoComplete="address-level2"
+              className={fieldClass}
+              value={draft.city}
+              onChange={(changed) => update("city", changed.target.value)}
+              aria-invalid={Boolean(errors.city)}
+            />
+          </Field>
+        </div>
 
         <Field
-          id="locationId"
-          label="Veranstaltungsort"
-          error={errors.locationId}
+          id="addressAddition"
+          label="Adresszusatz"
+          error={errors.addressAddition}
+          hint="Optional, z. B. Name der Halle oder Etage."
         >
-          <Select
-            items={locationItems}
-            value={draft.locationId || null}
-            onValueChange={(value) => update("locationId", value ?? "")}
-          >
-            <SelectTrigger
-              id="locationId"
-              className="w-full data-[size=default]:h-9"
-              aria-invalid={Boolean(errors.locationId)}
-            >
-              <SelectValue placeholder="Bitte auswählen" />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {catalog.locations.map((location) => (
-                <SelectItem
-                  key={location.locationId}
-                  value={location.locationId}
-                >
-                  {locationItems[location.locationId]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <input
+            id="addressAddition"
+            className={fieldClass}
+            value={draft.addressAddition}
+            onChange={(changed) =>
+              update("addressAddition", changed.target.value)
+            }
+            aria-invalid={Boolean(errors.addressAddition)}
+          />
         </Field>
-      </div>
+
+        <label
+          htmlFor="accessible"
+          className="flex items-center gap-2 text-sm font-medium"
+        >
+          <Checkbox
+            id="accessible"
+            checked={draft.accessible}
+            onCheckedChange={(checked) => update("accessible", checked)}
+          />
+          Barrierefrei
+        </label>
+      </fieldset>
 
       {catalogMissing && (
         <p className="text-sm text-muted-foreground">
-          Es sind noch keine Kategorien oder Veranstaltungsorte verfügbar, daher
-          kann der Entwurf nicht gespeichert werden.
+          Es sind noch keine Kategorien verfügbar, daher kann der Entwurf nicht
+          gespeichert werden.
         </p>
       )}
 
@@ -251,5 +370,5 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
         </Button>
       </div>
     </form>
-  );
+  )
 }

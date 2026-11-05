@@ -22,7 +22,7 @@ export default async function EditEventDraftPage({
     notFound()
   }
 
-  const catalog = await getEventCatalog()
+  const catalog = await getEventCatalog(session?.accessToken ?? "")
 
   return (
     <div className="flex flex-1 justify-center p-6">

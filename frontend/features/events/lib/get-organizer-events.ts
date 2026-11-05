@@ -1,11 +1,10 @@
 import "server-only"
 import { getCurrentUser, getSession } from "@/features/auth"
 import { getPublishedEvents, type PublishedEvent } from "@/features/catalog"
-import { getAvailableSeats } from "@/features/events/lib/api"
-import type { Event } from "@/features/events/lib/types"
+import { getAvailableSeats, listLocations } from "@/features/events/lib/api"
+import type { Event, EventLocation } from "@/features/events/lib/types"
 import { envConfig } from "@/features/shared/lib/env"
 
-type EventLocation = PublishedEvent["location"]
 type EventCategory = PublishedEvent["category"]
 
 /** An event of the active organization with its venue and category resolved. */
@@ -50,19 +49,24 @@ export async function getOrganizerEvents(): Promise<OrganizerEventsResult> {
     return { status: "unavailable" }
   }
 
-  const [events, catalog] = await Promise.all([
+  const [events, catalog, storedLocations] = await Promise.all([
     fetchOrganizationEvents(user.activeOrganization, session.accessToken),
     getPublishedEvents(),
+    listLocations(session.accessToken).catch(() => null),
   ])
 
   if (!events) {
     return { status: "unavailable" }
   }
 
-  // The endpoint returns venue and category as ids only. Their names come from
-  // the public listing, the one place the API exposes them.
-  const locations = new Map(
-    catalog.events.map((event) => [event.location.locationId, event.location])
+  // The endpoint returns venue and category as ids only. GET /locations covers
+  // the locations of drafts too, but only answers members with the
+  // event_manager role; everyone else gets those of published events. Category
+  // names come from the public listing, the one place the API exposes them.
+  const locations = new Map<string, EventLocation>(
+    (storedLocations ?? catalog.events.map((event) => event.location)).map(
+      (location) => [location.locationId, location]
+    )
   )
   const categories = new Map(
     catalog.events.map((event) => [event.category.categoryId, event.category])
