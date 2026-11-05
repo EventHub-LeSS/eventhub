@@ -70,6 +70,23 @@ type EventRatingSummary struct {
 	RatingCount   int64     `json:"ratingCount"`
 }
 
+// 297: Öffentliche Bewertungstexte eines Events.
+// AuthorName is only the reviewer's first name; it is null if the reviewer is unknown or has none.
+type EventRating struct {
+	RatingID   uuid.UUID `json:"ratingId" gorm:"column:rating_id"`
+	Score      int       `json:"score" gorm:"column:score"`
+	Text       string    `json:"text" gorm:"column:text"`
+	AuthorName *string   `json:"authorName" gorm:"column:author_name" extensions:"x-nullable"`
+	CreatedAt  time.Time `json:"createdAt" gorm:"column:created_at"`
+}
+
+type EventRatingPage struct {
+	Items []EventRating `json:"items"`
+	Page  int           `json:"page"`
+	Limit int           `json:"limit"`
+	Total int64         `json:"total"`
+}
+
 // EVENTHUB-239: Bewertungsdurchschnitt für Organisator/Veranstalter.
 type OrganizerRatingSummary struct {
 	OrganizationID  uuid.UUID `json:"organizationId"`

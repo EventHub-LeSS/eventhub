@@ -4,6 +4,7 @@ import (
 	"backend/internal/model"
 	"context"
 	"errors"
+	"math"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -20,6 +21,9 @@ var (
 type RatingRepository interface {
 	GetEventRatingSummary(eventID uuid.UUID) (*float64, int64, error)
 	GetOrganizerRatingSummary(organizationID uuid.UUID) (*float64, int64, error)
+	// ListEventRatings returns one page of the ratings counted by GetEventRatingSummary, newest
+	// first, and the number of all of them.
+	ListEventRatings(eventID uuid.UUID, page, limit int) ([]model.EventRating, int64, error)
 	CreateEventRating(ctx context.Context, userID, eventID uuid.UUID, score int, text string) (*model.RatingModel, error)
 }
 
@@ -73,6 +77,27 @@ func (r *ratingRepository) GetOrganizerRatingSummary(organizationID uuid.UUID) (
 		return nil, 0, err
 	}
 	return row.AverageRating, row.RatedEventCount, nil
+}
+
+func (r *ratingRepository) ListEventRatings(eventID uuid.UUID, page, limit int) ([]model.EventRating, int64, error) {
+	if page < 1 || limit < 1 || page-1 > math.MaxInt/limit {
+		return nil, 0, errors.New("invalid rating pagination")
+	}
+	var total int64
+	if err := r.validRatings().Where("b.event_id = ?", eventID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	items := make([]model.EventRating, 0, limit)
+	// Only the first name is public; bookings of deleted users have no user_id.
+	err := r.validRatings().Where("b.event_id = ?", eventID).
+		Joins("LEFT JOIN users AS u ON u.user_id = b.user_id").
+		Select("r.rating_id, r.score, r.text, NULLIF(TRIM(u.first_name), '') AS author_name, r.created_at").
+		Order("r.created_at DESC, r.rating_id DESC").Offset((page - 1) * limit).Limit(limit).
+		Scan(&items).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventID uuid.UUID, score int, text string) (*model.RatingModel, error) {

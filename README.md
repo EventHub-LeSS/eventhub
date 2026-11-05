@@ -484,6 +484,26 @@ generischem Fehlertext. Die bestehenden Eventdetail-Antworten bleiben unverände
 abgeschlossene Events haben eine Bewertungszusammenfassung, sobald sie beendet sind,
 aber noch keine öffentliche Eventdetail-Antwort.
 
+### Bewertungstexte eines Events (297)
+
+`GET /api/v1/events/{eventId}/ratings?page=1&limit=50` ist öffentlich und liefert genau die
+Bewertungen, die `rating-summary` zählt (sichtbar, Score 1–5, bestätigte Buchung dieses Events),
+neueste zuerst. `total` entspricht daher `ratingCount`. Bewertungen ohne Text sind mit leerem
+`text` enthalten. Jedes Element hat `ratingId`, `score`, `text`, `authorName` und `createdAt`.
+`authorName` ist nur der **Vorname** der bewertenden Person; ohne Nutzer (z. B. gelöscht) oder
+ohne Vornamen ist er `null`. Nachname, E-Mail, Nutzer- und Buchungs-IDs werden nicht ausgegeben.
+
+Paginierung wie bei `/moderation/ratings`: `page` ab 1, `limit` 1–100 (Standard 50); die Antwort
+enthält `items`, `page`, `limit` und `total`. Sichtbarkeit und Fehler wie bei `rating-summary`:
+Entwürfe, abgesagte und noch nicht beendete `completed`-Events ergeben `404`, ungültige UUIDs
+oder Paginierungswerte `400`. Die Event-Detailseite im Frontend zeigt die Bewertungen mit
+zehn pro Seite (`?reviewPage=n`); fehlt der Vorname, steht dort „Anonym“.
+
+**Code:** `RatingHandler.ListEventRatingsHandler` → `RatingService.ListEventRatings` →
+`RatingRepository.ListEventRatings`. **Getestet:** `TestListEventRatings*` sowie
+`TestEventRatingList*Database` in `backend/internal/handler`, im Frontend
+`bun test features/catalog/lib/event-ratings.test.ts`.
+
 ### Audit Log der Organisationen
 
 Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen Keycloak-Konto (`sub`, Benutzername) und einem Datenbank-Zeitstempel in der Tabelle `audit_logs` protokolliert. Protokolliert werden: Event anlegen/ändern/veröffentlichen/zurückziehen/löschen und das Ändern der Mitgliedsrollen. Nicht erfasst werden Besucheraktionen, globale Rollen und das Anlegen von Organisationen.
