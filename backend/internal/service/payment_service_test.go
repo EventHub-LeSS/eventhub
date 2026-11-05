@@ -176,6 +176,8 @@ func TestCheckout_SumsTheLinesOfAllItems(t *testing.T) {
 	if item := paymentItemFor(resp, musicItem); item == nil || item.NumberOfTickets != 3 || !item.LineAmount.Equal(decimal.RequireFromString("59.97")) ||
 		item.BookingStatus != model.BookingStatusReserved || item.Event == nil || item.Event.EventID != music {
 		t.Fatalf("unexpected music item: %+v", item)
+	} else {
+		wantSeededLocation(t, item.Event.Location)
 	}
 	if item := paymentItemFor(resp, foodItem); item == nil || !item.LineAmount.Equal(decimal.NewFromInt(10)) {
 		t.Fatalf("unexpected food item: %+v", item)

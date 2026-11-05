@@ -38,7 +38,7 @@ func getOwnEvents(router http.Handler, query string) *httptest.ResponseRecorder 
 	return rec
 }
 
-// draftBody references the category and location of s, which therefore exist.
+// draftBody references the category of s and sends the address of its location.
 func draftBody(s seededEvent) map[string]any {
 	return map[string]any{
 		"title":      "Sommerfest 2026",
@@ -47,7 +47,7 @@ func draftBody(s seededEvent) map[string]any {
 		"capacity":   100,
 		"price":      15,
 		"categoryId": s.categoryID.String(),
-		"locationId": s.locationID.String(),
+		"location":   seededLocation(s),
 	}
 }
 
@@ -146,7 +146,12 @@ func TestSaveEventAsDraftHandler_StatusCodes(t *testing.T) {
 		{name: "several organizations without organizationId", principal: principalManaging("kc-org-a", "kc-org-b"), body: draftBody(seeded), want: http.StatusBadRequest, wantDetail: "organizationId"},
 		{name: "foreign organizationId", principal: principalManaging("kc-org-a"), body: with(draftBody(seeded), "organizationId", "kc-org-b"), want: http.StatusForbidden},
 		{name: "unknown category", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "categoryId", uuid.NewString()), want: http.StatusUnprocessableEntity, wantDetail: "categoryId"},
-		{name: "unknown location", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "locationId", uuid.NewString()), want: http.StatusUnprocessableEntity, wantDetail: "locationId"},
+		{name: "missing location", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", nil), want: http.StatusBadRequest, wantDetail: "Street"},
+		{name: "blank street", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", with(seededLocation(seeded), "street", " \t ")), want: http.StatusBadRequest, wantDetail: "Street"},
+		{name: "missing city", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", with(seededLocation(seeded), "city", "")), want: http.StatusBadRequest, wantDetail: "City"},
+		{name: "postal code too short", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", with(seededLocation(seeded), "postalCode", "5311")), want: http.StatusBadRequest, wantDetail: "PostalCode"},
+		{name: "postal code with letters", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", with(seededLocation(seeded), "postalCode", "5311a")), want: http.StatusBadRequest, wantDetail: "PostalCode"},
+		{name: "address addition too long", principal: principalManaging("kc-org-b"), body: with(draftBody(seeded), "location", with(seededLocation(seeded), "addressAddition", strings.Repeat("ö", 201))), want: http.StatusBadRequest, wantDetail: "AddressAddition"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

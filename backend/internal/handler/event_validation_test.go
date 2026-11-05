@@ -18,7 +18,7 @@ func validUpdateEventRequest() model.UpdateEventRequest {
 		Capacity:   100,
 		Price:      decimal.NewFromInt(20),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   model.LocationInput{Street: "Markt", PostalCode: "53111", City: "Bonn", Accessible: true},
 	}
 }
 
@@ -36,7 +36,10 @@ func TestUpdateEventRequestValidation(t *testing.T) {
 		{name: "zero capacity", mutate: func(r *model.UpdateEventRequest) { r.Capacity = 0 }, wantErr: true},
 		{name: "negative price", mutate: func(r *model.UpdateEventRequest) { r.Price = decimal.NewFromInt(-1) }, wantErr: true},
 		{name: "missing category", mutate: func(r *model.UpdateEventRequest) { r.CategoryID = uuid.Nil }, wantErr: true},
-		{name: "missing location", mutate: func(r *model.UpdateEventRequest) { r.LocationID = uuid.Nil }, wantErr: true},
+		{name: "missing location", mutate: func(r *model.UpdateEventRequest) { r.Location = model.LocationInput{} }, wantErr: true},
+		{name: "blank street", mutate: func(r *model.UpdateEventRequest) { r.Location.Street = "   " }, wantErr: true},
+		{name: "invalid postal code", mutate: func(r *model.UpdateEventRequest) { r.Location.PostalCode = "5311a" }, wantErr: true},
+		{name: "missing city", mutate: func(r *model.UpdateEventRequest) { r.Location.City = "" }, wantErr: true},
 	}
 
 	for _, tt := range tests {

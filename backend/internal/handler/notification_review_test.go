@@ -154,7 +154,7 @@ func TestSimulatedReminderRefreshDatabase(t *testing.T) {
 		t.Fatal("unchanged reminder changed")
 	}
 	nextLocation := seedEventForOrg(t, db, "notification-refresh", model.EventStatusPublished)
-	if err := db.Exec("UPDATE locations SET name='Neue Halle',city='Berlin',street='Neue Straße',house_number='17' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
+	if err := db.Exec("UPDATE locations SET address_addition='Neue Halle',city='Berlin',street='Neue Straße',house_number='17' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec("UPDATE events SET title='Neuer Titel',start_time=start_time+interval '2 days',end_time=end_time+interval '2 days',location_id=? WHERE event_id=?", nextLocation.locationID, event.eventID).Error; err != nil {
@@ -188,7 +188,7 @@ func TestSimulatedReminderRefreshDatabase(t *testing.T) {
 	}
 	// Editing the same location row must refresh too, without changing locationId.
 	markNotificationRead(t, router, original.NotificationID, http.StatusOK)
-	if err := db.Exec("UPDATE locations SET name='Umbenannte Halle' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
+	if err := db.Exec("UPDATE locations SET address_addition='Umbenannte Halle' WHERE location_id=?", nextLocation.locationID).Error; err != nil {
 		t.Fatal(err)
 	}
 	moved := notificationPage(t, router, "").Items[0]
