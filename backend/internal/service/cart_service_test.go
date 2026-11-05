@@ -6,6 +6,7 @@ import (
 	"backend/internal/testdb"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,7 +41,7 @@ func seedEventFor(t *testing.T, db *gorm.DB, capacity int, status model.EventSta
 		args []any
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{categoryID, "cat-" + categoryID.String()}},
-		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{locationID, "loc-" + locationID.String(), "Bonn", "53111", "Weg"}},
+		{"INSERT INTO locations (location_id, street, postal_code, city, address_addition) VALUES (?, ?, ?, ?, ?)", []any{locationID, "Weg", "53111", "Bonn", "loc-" + locationID.String()}},
 		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{orgID, "kc-org-" + orgID.String(), "Org " + orgID.String()}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', ?, ?, ?, ?, ?, ?)`,
@@ -52,6 +53,16 @@ func seedEventFor(t *testing.T, db *gorm.DB, capacity int, status model.EventSta
 		}
 	}
 	return eventID
+}
+
+// wantSeededLocation fails unless location is the address that seedEventFor stores.
+func wantSeededLocation(t *testing.T, location *model.PublishedEventLocation) {
+	t.Helper()
+	if location == nil || location.Street != "Weg" || location.HouseNumber != nil || location.PostalCode != "53111" ||
+		location.City != "Bonn" || location.AddressAddition == nil || !strings.HasPrefix(*location.AddressAddition, "loc-") ||
+		location.Accessible {
+		t.Errorf("unexpected location: %+v", location)
+	}
 }
 
 // seedEvent seeds an event and its user; the event costs nothing.
@@ -345,6 +356,7 @@ func TestGetCart_ShowsCurrentPricesAvailabilityAndBookability(t *testing.T) {
 	if withdrawnItem.Bookable || cart.CheckoutReady {
 		t.Errorf("a withdrawn event must block the checkout: %+v", withdrawnItem)
 	}
+	wantSeededLocation(t, musicItem.Event.Location)
 }
 
 func TestGetCart_ShowsTheOpenCheckout(t *testing.T) {

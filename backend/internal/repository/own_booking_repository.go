@@ -52,8 +52,9 @@ const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS
 	    p.amount AS payment_amount, p.status AS payment_status, p.failure_reason AS payment_failure_reason,
 	    p.refund_amount AS payment_refund_amount, p.created_at AS payment_created_at, p.updated_at AS payment_updated_at,
 	    e.status AS event_status, e.title AS event_title, e.start_time AS event_start_time, e.end_time AS event_end_time,
-	    l.location_id AS location_id, l.name AS location_name, l.city AS location_city,
-	    l.postal_code AS location_postal_code, l.street AS location_street, l.house_number AS location_house_number,
+	    l.location_id AS location_id, l.street AS location_street, l.house_number AS location_house_number,
+	    l.postal_code AS location_postal_code, l.city AS location_city,
+	    l.address_addition AS location_address_addition, l.accessible AS location_accessible,
 	    (SELECT r.score FROM ratings r JOIN bookings rb ON rb.booking_id = r.booking_id
 	     WHERE rb.user_id = b.user_id AND rb.event_id = b.event_id LIMIT 1) AS rating_score,
 	    clock.database_now
@@ -68,24 +69,25 @@ const ownBookingQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS
 // when the booking has none.
 type ownBookingRow struct {
 	model.BookingModel
-	PaymentAmount        decimal.NullDecimal         `gorm:"column:payment_amount"`
-	PaymentStatus        *model.PaymentStatus        `gorm:"column:payment_status"`
-	PaymentFailureReason *model.PaymentFailureReason `gorm:"column:payment_failure_reason"`
-	PaymentRefundAmount  decimal.NullDecimal         `gorm:"column:payment_refund_amount"`
-	PaymentCreatedAt     *time.Time                  `gorm:"column:payment_created_at"`
-	PaymentUpdatedAt     *time.Time                  `gorm:"column:payment_updated_at"`
-	EventStatus          *model.EventStatus          `gorm:"column:event_status"`
-	EventTitle           *string                     `gorm:"column:event_title"`
-	EventStartTime       *time.Time                  `gorm:"column:event_start_time"`
-	EventEndTime         *time.Time                  `gorm:"column:event_end_time"`
-	LocationID           *uuid.UUID                  `gorm:"column:location_id"`
-	LocationName         *string                     `gorm:"column:location_name"`
-	LocationCity         *string                     `gorm:"column:location_city"`
-	LocationPostalCode   *string                     `gorm:"column:location_postal_code"`
-	LocationStreet       *string                     `gorm:"column:location_street"`
-	LocationHouseNumber  *string                     `gorm:"column:location_house_number"`
-	RatingScore          *int                        `gorm:"column:rating_score"`
-	DatabaseNow          time.Time                   `gorm:"column:database_now"`
+	PaymentAmount           decimal.NullDecimal         `gorm:"column:payment_amount"`
+	PaymentStatus           *model.PaymentStatus        `gorm:"column:payment_status"`
+	PaymentFailureReason    *model.PaymentFailureReason `gorm:"column:payment_failure_reason"`
+	PaymentRefundAmount     decimal.NullDecimal         `gorm:"column:payment_refund_amount"`
+	PaymentCreatedAt        *time.Time                  `gorm:"column:payment_created_at"`
+	PaymentUpdatedAt        *time.Time                  `gorm:"column:payment_updated_at"`
+	EventStatus             *model.EventStatus          `gorm:"column:event_status"`
+	EventTitle              *string                     `gorm:"column:event_title"`
+	EventStartTime          *time.Time                  `gorm:"column:event_start_time"`
+	EventEndTime            *time.Time                  `gorm:"column:event_end_time"`
+	LocationID              *uuid.UUID                  `gorm:"column:location_id"`
+	LocationStreet          *string                     `gorm:"column:location_street"`
+	LocationHouseNumber     *string                     `gorm:"column:location_house_number"`
+	LocationPostalCode      *string                     `gorm:"column:location_postal_code"`
+	LocationCity            *string                     `gorm:"column:location_city"`
+	LocationAddressAddition *string                     `gorm:"column:location_address_addition"`
+	LocationAccessible      *bool                       `gorm:"column:location_accessible"`
+	RatingScore             *int                        `gorm:"column:rating_score"`
+	DatabaseNow             time.Time                   `gorm:"column:database_now"`
 }
 
 func (r *ownBookingRepository) ListByUserNewestFirst(userID uuid.UUID) ([]*OwnBooking, error) {
@@ -146,12 +148,13 @@ func (row *ownBookingRow) ownBooking() *OwnBooking {
 	}
 	if row.LocationID != nil {
 		own.Location = &model.LocationModel{
-			LocationID:  *row.LocationID,
-			Name:        derefString(row.LocationName),
-			City:        derefString(row.LocationCity),
-			PostalCode:  derefString(row.LocationPostalCode),
-			Street:      derefString(row.LocationStreet),
-			HouseNumber: row.LocationHouseNumber,
+			LocationID:      *row.LocationID,
+			Street:          derefString(row.LocationStreet),
+			HouseNumber:     row.LocationHouseNumber,
+			PostalCode:      derefString(row.LocationPostalCode),
+			City:            derefString(row.LocationCity),
+			AddressAddition: row.LocationAddressAddition,
+			Accessible:      row.LocationAccessible != nil && *row.LocationAccessible,
 		}
 	}
 	return own

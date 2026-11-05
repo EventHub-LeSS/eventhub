@@ -48,7 +48,7 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 		args []any
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{s.categoryID, "cat-" + s.categoryID.String()}},
-		{"INSERT INTO locations (location_id, name, city, postal_code, street) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "loc-" + s.locationID.String(), "Bonn", "53111", "Weg"}},
+		{"INSERT INTO locations (location_id, street, postal_code, city, address_addition) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "Weg", "53111", "Bonn", "loc-" + s.locationID.String()}},
 		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, alias) VALUES (?, ?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID, "alias-" + keycloakOrgID}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', 100, ?, 20, ?, ?, ?)`,
@@ -60,6 +60,12 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 		}
 	}
 	return s
+}
+
+// seededLocation is the address of the location of s as a request sends it, so saving an event with
+// it keeps that location.
+func seededLocation(s seededEvent) map[string]any {
+	return map[string]any{"street": "Weg", "postalCode": "53111", "city": "Bonn", "addressAddition": "loc-" + s.locationID.String()}
 }
 
 func principalManaging(keycloakOrgIDs ...string) *middleware.Principal {
@@ -101,6 +107,8 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
 	r.DELETE("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventDeleted), h.DeleteEventHandler)
+	locations := NewLocationHandler(service.NewLocationService(repository.NewOrganizationRepository(db), repository.NewLocationRepository(db)))
+	r.GET("/api/v1/locations", setPrincipal, locations.ListLocationsHandler)
 	return r
 }
 
@@ -262,7 +270,7 @@ func validBody(s seededEvent) map[string]any {
 		"capacity":   250,
 		"price":      35,
 		"categoryId": s.categoryID.String(),
-		"locationId": s.locationID.String(),
+		"location":   seededLocation(s),
 	}
 }
 

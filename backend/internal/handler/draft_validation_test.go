@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -21,9 +22,11 @@ func validDraftRequest() model.CreateDraftRequest {
 		Capacity:   100,
 		Price:      decimal.NewFromInt(15),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   model.LocationInput{Street: "Markt", HouseNumber: textPtr("1"), PostalCode: "53111", City: "Bonn"},
 	}
 }
+
+func textPtr(s string) *string { return &s }
 
 // EVENTHUB-77 / AK1: Eingabepruefung beim Speichern eines Entwurfs.
 func TestCreateDraftRequestValidation(t *testing.T) {
@@ -43,7 +46,18 @@ func TestCreateDraftRequestValidation(t *testing.T) {
 		{name: "negativer preis", mutate: func(r *model.CreateDraftRequest) { r.Price = decimal.NewFromInt(-1) }, wantErr: true},
 		{name: "preis zu hoch", mutate: func(r *model.CreateDraftRequest) { r.Price = decimal.NewFromInt(10001) }, wantErr: true},
 		{name: "kategorie fehlt", mutate: func(r *model.CreateDraftRequest) { r.CategoryID = uuid.Nil }, wantErr: true},
-		{name: "ort fehlt", mutate: func(r *model.CreateDraftRequest) { r.LocationID = uuid.Nil }, wantErr: true},
+		{name: "ort fehlt", mutate: func(r *model.CreateDraftRequest) { r.Location = model.LocationInput{} }, wantErr: true},
+		{name: "strasse nur leerzeichen", mutate: func(r *model.CreateDraftRequest) { r.Location.Street = " \t " }, wantErr: true},
+		{name: "strasse zu lang", mutate: func(r *model.CreateDraftRequest) { r.Location.Street = strings.Repeat("ß", 201) }, wantErr: true},
+		{name: "ohne hausnummer", mutate: func(r *model.CreateDraftRequest) { r.Location.HouseNumber = nil }},
+		{name: "hausnummer zu lang", mutate: func(r *model.CreateDraftRequest) { r.Location.HouseNumber = textPtr(strings.Repeat("1", 21)) }, wantErr: true},
+		{name: "plz fehlt", mutate: func(r *model.CreateDraftRequest) { r.Location.PostalCode = "" }, wantErr: true},
+		{name: "plz zu lang", mutate: func(r *model.CreateDraftRequest) { r.Location.PostalCode = "531111" }, wantErr: true},
+		{name: "plz mit vorzeichen", mutate: func(r *model.CreateDraftRequest) { r.Location.PostalCode = "-5311" }, wantErr: true},
+		{name: "ort nur leerzeichen", mutate: func(r *model.CreateDraftRequest) { r.Location.City = "   " }, wantErr: true},
+		{name: "mit adresszusatz", mutate: func(r *model.CreateDraftRequest) { r.Location.AddressAddition = textPtr("Halle 3, 2. Etage") }},
+		{name: "adresszusatz zu lang", mutate: func(r *model.CreateDraftRequest) { r.Location.AddressAddition = textPtr(strings.Repeat("ä", 201)) }, wantErr: true},
+		{name: "barrierefrei", mutate: func(r *model.CreateDraftRequest) { r.Location.Accessible = true }},
 	}
 
 	for _, tt := range tests {
