@@ -42,6 +42,9 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 	if err := s.seedUsers(ctx); err != nil {
 		return err
 	}
+	if err := s.seedUserRoles(ctx); err != nil {
+		return err
+	}
 	if err := s.seedOrganizations(ctx); err != nil {
 		return err
 	}
@@ -137,6 +140,23 @@ func (s *KeycloakSeeder) seedUsers(ctx context.Context) error {
 			return fmt.Errorf("create user %q: %w", mu.Username, err)
 		}
 		log.Printf("  created user %s", mu.Username)
+	}
+	return nil
+}
+
+func (s *KeycloakSeeder) seedUserRoles(ctx context.Context) error {
+	for _, mu := range mockUsers {
+		if len(mu.BackendRoles) == 0 {
+			continue
+		}
+		user, err := s.kc.GetUserByUsername(ctx, s.token, s.realm, mu.Username)
+		if err != nil || user == nil || user.ID == nil {
+			return fmt.Errorf("lookup user %q for role assignment: %w", mu.Username, err)
+		}
+		if _, err := s.kc.SetUserGlobalRoles(ctx, *user.ID, mu.BackendRoles); err != nil {
+			return fmt.Errorf("assign backend roles to %q: %w", mu.Username, err)
+		}
+		log.Printf("  assigned backend roles %v to %s", mu.BackendRoles, mu.Username)
 	}
 	return nil
 }
