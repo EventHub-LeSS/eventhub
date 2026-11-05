@@ -33,6 +33,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/shared/components/ui/card"
+import { formatStreet } from "@/features/shared/lib/location"
 
 /** A key figure in the row above the details. */
 function Stat({
@@ -227,15 +228,20 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
                 <Detail icon={MapPinIcon} label="Veranstaltungsort">
                   {location ? (
                     <span className="flex flex-col">
-                      <span>{location.name}</span>
+                      {location.addressAddition && (
+                        <span>{location.addressAddition}</span>
+                      )}
                       <span className="font-normal text-muted-foreground">
-                        {[location.street, location.houseNumber]
-                          .filter(Boolean)
-                          .join(" ")}
+                        {formatStreet(location)}
                       </span>
                       <span className="font-normal text-muted-foreground">
                         {location.postalCode} {location.city}
                       </span>
+                      {location.accessible && (
+                        <span className="font-normal text-muted-foreground">
+                          Barrierefrei
+                        </span>
+                      )}
                     </span>
                   ) : (
                     EMPTY_VALUE

@@ -1,3 +1,5 @@
+import type { EventAddress } from "@/features/shared/lib/location"
+
 /** Statuses of the backend's event_status enum. */
 export type EventStatus = "draft" | "published" | "cancelled" | "completed"
 
@@ -26,11 +28,8 @@ export interface EventCategory {
   category: string
 }
 
-export interface EventLocation {
-  locationId: string
-  name: string
-  city: string
-}
+/** A stored location, from `GET /locations`. */
+export type EventLocation = EventAddress
 
 /** The categories and locations an organizer can pick from. */
 export interface EventCatalog {

@@ -2,6 +2,7 @@ import type {
   OwnBookingLocation,
   PaymentStatus,
 } from "@/features/bookings/lib/types"
+import { formatAddress } from "@/features/shared/lib/location"
 
 /** Shown in place of a missing value, so no line renders as a blank gap. */
 export const EMPTY_VALUE = "—"
@@ -83,12 +84,7 @@ export function formatLocation(location: OwnBookingLocation | null): string {
     return EMPTY_VALUE
   }
 
-  const street = [location.street, location.houseNumber]
-    .filter(Boolean)
-    .join(" ")
-  const city = [location.postalCode, location.city].filter(Boolean).join(" ")
-
-  return [location.name, street, city].filter(Boolean).join(", ")
+  return formatAddress(location)
 }
 
 export const paymentStatusLabels: Record<PaymentStatus, string> = {
