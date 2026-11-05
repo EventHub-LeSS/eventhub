@@ -11,8 +11,10 @@ import {
   activityByMonth,
 } from "@/features/organizations/lib/activity"
 import {
+  useOrganization,
   useOrganizationAuditLog,
   useOrganizationMembers,
+  useUpdateOrganization,
 } from "@/features/organizations/lib/api"
 import type { OrganizationRight } from "@/features/organizations/lib/types"
 import { Button } from "@/features/shared/components/ui/button"
@@ -29,6 +31,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/features/shared/components/ui/tabs"
+import { toast } from "@/features/shared/components/ui/toast"
 
 export function OrganizationOverview({
   alias,
@@ -49,17 +52,49 @@ export function OrganizationOverview({
   const canEditOrganization = hasRight("org_admin")
 
   const membersQuery = useOrganizationMembers(alias, canViewMembers)
+  const organizationQuery = useOrganization(alias)
+  const updateOrganization = useUpdateOrganization(alias)
+
+  // Fall back to the alias until the details request resolves.
+  const name = organizationQuery.data?.name ?? alias
 
   const [isEditing, setIsEditing] = useState(false)
-  const [draft, setDraft] = useState({ name: alias, alias })
+  const [draftName, setDraftName] = useState(name)
 
   function handleEditClick() {
-    setDraft({ name: alias, alias })
+    setDraftName(name)
     setIsEditing(true)
   }
 
   function handleSaveClick() {
-    setIsEditing(false)
+    const trimmedName = draftName.trim()
+
+    if (!trimmedName) {
+      toast.add({
+        type: "error",
+        title: "Speichern fehlgeschlagen",
+        description: "Der Name der Organisation darf nicht leer sein.",
+      })
+      return
+    }
+
+    updateOrganization.mutate(trimmedName, {
+      onSuccess: (data) => {
+        setIsEditing(false)
+        toast.add({
+          type: "success",
+          title: "Organisation aktualisiert",
+          description: `Der Name ist jetzt „${data.name}".`,
+        })
+      },
+      onError: (error) => {
+        toast.add({
+          type: "error",
+          title: "Speichern fehlgeschlagen",
+          description: error.message,
+        })
+      },
+    })
   }
 
   const members = membersQuery.data ?? []
@@ -71,6 +106,7 @@ export function OrganizationOverview({
         <OrganizationHeader
           alias={alias}
           isEditing={isEditing}
+          isSaving={updateOrganization.isPending}
           onEditClick={canEditOrganization ? handleEditClick : undefined}
           onSaveClick={canEditOrganization ? handleSaveClick : undefined}
         />
@@ -82,20 +118,13 @@ export function OrganizationOverview({
           <CardContent className="flex flex-col divide-y divide-border">
             <SettingsRow
               label="Name"
-              value={draft.name}
+              value={isEditing ? draftName : name}
               isEditing={isEditing}
-              onChange={(value) =>
-                setDraft((prev) => ({ ...prev, name: value }))
-              }
+              onChange={setDraftName}
             />
-            <SettingsRow
-              label="Alias"
-              value={draft.alias}
-              isEditing={isEditing}
-              onChange={(value) =>
-                setDraft((prev) => ({ ...prev, alias: value }))
-              }
-            />
+            {/* The alias is the identity reference carried by the token claim
+                and deliberately not changeable, so it is always read-only. */}
+            <SettingsRow label="Alias" value={alias} />
           </CardContent>
         </Card>
       </div>

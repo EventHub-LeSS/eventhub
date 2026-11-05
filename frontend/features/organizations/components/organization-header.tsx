@@ -41,11 +41,13 @@ function initials(name: string) {
 export function OrganizationHeader({
   alias,
   isEditing = false,
+  isSaving = false,
   onEditClick,
   onSaveClick,
 }: {
   alias: string
   isEditing?: boolean
+  isSaving?: boolean
   onEditClick?: () => void
   onSaveClick?: () => void
 }) {
@@ -66,6 +68,7 @@ export function OrganizationHeader({
             (isEditing ? (
               <Button
                 onClick={onSaveClick}
+                disabled={isSaving}
                 className={cn(
                   "w-full border-emerald-600 bg-emerald-600 text-white",
                   "hover:bg-emerald-500",
