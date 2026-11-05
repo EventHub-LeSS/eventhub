@@ -267,9 +267,9 @@ export function CartView() {
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Alle Reservierungen werden zusammen in einem Zahlungsvorgang
-                abgeschlossen — oder gar nicht. Unbezahlt laufen sie ab und die
-                Plätze werden wieder freigegeben.
+                Alle Items im Warenkorb werden zusammen in einem
+                Zahlungsvorgang ausgecheckt — oder gar nicht. Unbezahlt laufen
+                die Reservierungen ab und die Plätze werden wieder freigegeben.
               </p>
             )}
           </CardContent>
