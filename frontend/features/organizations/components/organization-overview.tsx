@@ -1,35 +1,34 @@
-"use client";
+"use client"
 
-import { CheckIcon, PencilIcon } from "lucide-react"
 import { useState } from "react"
 
-import { ActivityChart } from "@/features/organizations/components/activity-chart";
-import { AuditLogTable } from "@/features/organizations/components/audit-log-table";
-import { MembersTable } from "@/features/organizations/components/members-table";
-import { OrganizationHeader } from "@/features/organizations/components/organization-header";
+import { ActivityChart } from "@/features/organizations/components/activity-chart"
+import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
+import { MembersTable } from "@/features/organizations/components/members-table"
+import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import {
   type ActivityEvent,
   activityByMonth,
-} from "@/features/organizations/lib/activity";
+} from "@/features/organizations/lib/activity"
 import {
   useOrganizationAuditLog,
   useOrganizationMembers,
-} from "@/features/organizations/lib/api";
-import type { OrganizationRight } from "@/features/organizations/lib/types";
-import { Button } from "@/features/shared/components/ui/button";
+} from "@/features/organizations/lib/api"
+import type { OrganizationRight } from "@/features/organizations/lib/types"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card";
-import { Input } from "@/features/shared/components/ui/input";
+} from "@/features/shared/components/ui/card"
+import { Input } from "@/features/shared/components/ui/input"
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/features/shared/components/ui/tabs";
+} from "@/features/shared/components/ui/tabs"
 
 export function OrganizationOverview({
   alias,
@@ -37,42 +36,34 @@ export function OrganizationOverview({
   isAdmin = false,
   events,
 }: {
-  alias: string;
+  alias: string
   /** Null when the events could not be loaded. */
-  events: ActivityEvent[] | null;
-  rights: string[];
-  isAdmin?: boolean;
+  events: ActivityEvent[] | null
+  rights: string[]
+  isAdmin?: boolean
 }) {
   const hasRight = (right: OrganizationRight) =>
     isAdmin || rights.includes(right)
   const canViewMembers = isAdmin
-  const canViewEvents = hasRight("event_manager")
   const canViewAuditLog = hasRight("org_admin")
   const canEditOrganization = hasRight("org_admin")
 
   const membersQuery = useOrganizationMembers(alias, canViewMembers)
 
-  const membersQuery = useOrganizationMembers(alias, canViewMembers);
-
-  function handleTabChange(value: unknown) {
-    setActiveTab(value as string)
-    setIsEditing(false)
-    setDraft({ name: alias, alias })
-  }
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: alias, alias });
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState({ name: alias, alias })
 
   function handleEditClick() {
-    setDraft({ name: alias, alias });
-    setIsEditing(true);
+    setDraft({ name: alias, alias })
+    setIsEditing(true)
   }
 
   function handleSaveClick() {
-    setIsEditing(false);
+    setIsEditing(false)
   }
 
-  const members = membersQuery.data ?? [];
-  const activity = events ? activityByMonth(events, members) : null;
+  const members = membersQuery.data ?? []
+  const activity = events ? activityByMonth(events, members) : null
 
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -80,8 +71,8 @@ export function OrganizationOverview({
         <OrganizationHeader
           alias={alias}
           isEditing={isEditing}
-          onEditClick={handleEditClick}
-          onSaveClick={handleSaveClick}
+          onEditClick={canEditOrganization ? handleEditClick : undefined}
+          onSaveClick={canEditOrganization ? handleSaveClick : undefined}
         />
 
         <Card>
@@ -109,7 +100,7 @@ export function OrganizationOverview({
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="min-w-0">
+      <Tabs defaultValue="overview" className="min-w-0">
         <TabsList>
           <TabsTrigger value="overview">Übersicht</TabsTrigger>
           {canViewAuditLog && (
@@ -162,48 +153,14 @@ export function OrganizationOverview({
             <AuditLogCard alias={alias} />
           </TabsContent>
         )}
-
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader className="flex items-center justify-between gap-4">
-              <CardTitle>Organisationsdetails</CardTitle>
-              {canEditOrganization &&
-                (isEditing ? (
-                  <Button onClick={handleSaveClick}>
-                    <CheckIcon />
-                    Änderungen speichern
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={handleEditClick}>
-                    <PencilIcon />
-                    Bearbeiten
-                  </Button>
-                ))}
-            </CardHeader>
-            <CardContent className="flex flex-col divide-y divide-border">
-              <SettingsRow
-                label="Name"
-                value={draft.name}
-                isEditing={isEditing}
-                onChange={(value) => setDraft((prev) => ({ ...prev, name: value }))}
-              />
-              <SettingsRow
-                label="Alias"
-                value={draft.alias}
-                isEditing={isEditing}
-                onChange={(value) => setDraft((prev) => ({ ...prev, alias: value }))}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
-  );
+  )
 }
 
 function AuditLogCard({ alias }: { alias: string }) {
-  const auditLogQuery = useOrganizationAuditLog(alias);
-  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const auditLogQuery = useOrganizationAuditLog(alias)
+  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
     <Card>
@@ -237,7 +194,7 @@ function AuditLogCard({ alias }: { alias: string }) {
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function SettingsRow({
@@ -246,10 +203,10 @@ function SettingsRow({
   isEditing,
   onChange,
 }: {
-  label: string;
-  value: string;
-  isEditing?: boolean;
-  onChange?: (value: string) => void;
+  label: string
+  value: string
+  isEditing?: boolean
+  onChange?: (value: string) => void
 }) {
   return (
     <div className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
@@ -263,5 +220,5 @@ function SettingsRow({
         <p className="text-sm break-words text-muted-foreground">{value}</p>
       )}
     </div>
-  );
+  )
 }

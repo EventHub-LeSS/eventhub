@@ -1,6 +1,6 @@
 "use client"
 
-import { UserPlusIcon } from "lucide-react"
+import { CheckIcon, PencilIcon, UserPlusIcon } from "lucide-react"
 import { useState } from "react"
 
 import { useInviteMember } from "@/features/organizations/lib/api"
@@ -15,9 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/features/shared/components/ui/dialog"
-import { Field, FieldError, FieldLabel } from "@/features/shared/components/ui/field"
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+} from "@/features/shared/components/ui/field"
 import { Input } from "@/features/shared/components/ui/input"
 import { toast } from "@/features/shared/components/ui/toast"
+import { cn } from "@/features/shared/lib/utils"
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -33,18 +38,54 @@ function initials(name: string) {
   )
 }
 
-export function OrganizationHeader({ alias }: { alias: string }) {
+export function OrganizationHeader({
+  alias,
+  isEditing = false,
+  onEditClick,
+  onSaveClick,
+}: {
+  alias: string
+  isEditing?: boolean
+  onEditClick?: () => void
+  onSaveClick?: () => void
+}) {
   return (
     <Card className="h-fit">
       <CardContent className="flex flex-col gap-4">
         <Avatar size="lg" className="size-28">
-          <AvatarFallback className="text-2xl">{initials(alias)}</AvatarFallback>
+          <AvatarFallback className="text-2xl">
+            {initials(alias)}
+          </AvatarFallback>
         </Avatar>
 
         <h1 className="text-xl font-semibold break-words">{alias}</h1>
 
         <div className="flex flex-col gap-2">
           <InviteMemberDialog alias={alias} />
+          {onEditClick !== undefined &&
+            (isEditing ? (
+              <Button
+                onClick={onSaveClick}
+                className={cn(
+                  "w-full border-emerald-600 bg-emerald-600 text-white",
+                  "hover:bg-emerald-500",
+                  "focus-visible:border-emerald-600 focus-visible:ring-emerald-600/50",
+                  "dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                )}
+              >
+                <CheckIcon />
+                Änderungen speichern
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={onEditClick}
+              >
+                <PencilIcon />
+                Organisation bearbeiten
+              </Button>
+            ))}
         </div>
       </CardContent>
     </Card>
@@ -98,7 +139,11 @@ function InviteMemberDialog({ alias }: { alias: string }) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => setOpen(true)}
+      >
         <UserPlusIcon />
         Invite member
       </Button>
@@ -107,9 +152,9 @@ function InviteMemberDialog({ alias }: { alias: string }) {
           <DialogHeader>
             <DialogTitle>Invite member</DialogTitle>
             <DialogDescription>
-              Keycloak sends them an email invitation. Membership stays
-              pending until they accept — events, sales and billing already
-              belong to the organization either way.
+              Keycloak sends them an email invitation. Membership stays pending
+              until they accept — events, sales and billing already belong to
+              the organization either way.
             </DialogDescription>
           </DialogHeader>
 
