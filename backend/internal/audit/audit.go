@@ -25,6 +25,7 @@ const (
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
 	OrganizationUpdated           Action = "organization.updated"
 	RatingVisibilityChanged       Action = "rating.visibility_changed"
+	EventModerated                Action = "event.moderated"
 )
 
 // Resource types of audited objects.

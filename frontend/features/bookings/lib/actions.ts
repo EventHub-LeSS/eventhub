@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { getSession } from "@/features/auth"
 import {
   BookingApiError,
+  cancelBooking,
   createEventRating,
 } from "@/features/bookings/lib/api"
 import {
@@ -13,6 +14,11 @@ import {
   isUUID,
   MAX_RATING_TEXT_LENGTH,
 } from "@/features/bookings/lib/validation"
+
+export interface CancelBookingResult {
+  cancelled?: boolean
+  message?: string
+}
 
 export interface RatingActionResult {
   rated?: boolean
@@ -32,6 +38,39 @@ async function authorize(returnTo: string): Promise<string> {
   }
 
   return session.accessToken
+}
+
+export async function cancelBookingAction(
+  bookingId: string
+): Promise<CancelBookingResult> {
+  if (!isUUID(bookingId)) {
+    return { message: "Ungültige Buchungs-ID." }
+  }
+
+  const accessToken = await authorize("/tickets")
+
+  try {
+    await cancelBooking(accessToken, bookingId)
+    revalidatePath("/tickets")
+    return { cancelled: true }
+  } catch (error) {
+    if (error instanceof BookingApiError) {
+      return { message: cancelErrorMessage(error) }
+    }
+
+    throw error
+  }
+}
+
+function cancelErrorMessage(error: BookingApiError): string {
+  switch (error.status) {
+    case 404:
+      return "Diese Buchung gibt es nicht mehr."
+    case 409:
+      return "Diese Buchung kann nicht mehr storniert werden."
+    default:
+      return error.message
+  }
 }
 
 export async function createEventRatingAction(

@@ -11,6 +11,7 @@ import {
 import type { PublishedEvent } from "@/features/catalog/lib/types"
 import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
+import { formatPlace } from "@/features/shared/lib/location"
 import { cn } from "@/features/shared/lib/utils"
 
 const ROTATION_INTERVAL_MS = 6000
@@ -139,7 +140,7 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
           </span>
           <span className="flex items-center gap-1.5">
             <MapPinIcon className="size-3.5 shrink-0" />
-            {event.location.name}, {event.location.city}
+            {formatPlace(event.location)}
           </span>
         </div>
         <div className="flex items-center gap-4 pt-2">

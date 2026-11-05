@@ -61,7 +61,7 @@ func (r *notificationRepository) refreshReminders(userID uuid.UUID, ids []uuid.U
 	return r.db.Exec(
 		"UPDATE notification_data AS n SET subject = fresh.subject, content = fresh.content, scheduled_at = fresh.scheduled_at, read_at = NULL, updated_at = clock_timestamp() FROM ("+
 			"SELECT note.notification_id, 'Erinnerung: ' || e.title AS subject, "+
-			"e.title || ' beginnt am ' || to_char(e.start_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || ' in ' || l.name || ', ' || l.city || ' (' || l.postal_code || ' ' || l.street || COALESCE(' ' || l.house_number, '') || '). Gebuchte Tickets: ' || b.number_of_tickets::text || '.' AS content, "+
+			"e.title || ' beginnt am ' || to_char(e.start_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || ' in ' || concat_ws(', ', l.address_addition, l.street || COALESCE(' ' || l.house_number, ''), l.postal_code || ' ' || l.city) || '. Gebuchte Tickets: ' || b.number_of_tickets::text || '.' AS content, "+
 			"GREATEST(e.start_time - interval '24 hours', note.created_at) AS scheduled_at "+
 			"FROM notification_data AS note JOIN bookings AS b ON b.booking_id = note.booking_id AND b.user_id = note.user_id "+
 			"JOIN events AS e ON e.event_id = b.event_id JOIN locations AS l ON l.location_id = e.location_id "+

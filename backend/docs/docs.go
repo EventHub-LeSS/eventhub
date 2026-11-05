@@ -817,7 +817,7 @@ const docTemplate = `{
         },
         "/events": {
             "get": {
-                "description": "Public list of published events with their category, location and organizer alias. Optional location searches city or venue name; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
+                "description": "Public list of published events with their category, location and organizer alias. Optional location searches the city and the address addition of the location; categoryId selects an exact category. date selects a calendar day in Europe/Berlin (YYYY-MM-DD) and returns every event taking place during that day, including multi-day events that span it. All filters are combined using AND. Omit a filter or pass an empty value to reset it. Unknown categories and searches without matches return 200 with []. Invalid dates, invalid category UUIDs or location values exceeding 200 characters after trimming return 400. Events missing a category, location or organizer are omitted. Sorted by start time and event ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -828,7 +828,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Case-insensitive substring of city or venue name; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
+                        "description": "Case-insensitive substring of the city or the address addition of the location; trimmed, empty means no filter, maximum 200 characters. Wildcards are treated literally.",
                         "name": "location",
                         "in": "query"
                     },
@@ -877,7 +877,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization.",
+                "description": "Creates an event in status draft. Drafts are only visible to the organization that owns them and can be edited (PUT /events/{id}) and published (POST /events/{id}/publish) later. Requires the event_manager role in the owning organization. organizationId is the Keycloak organization ID or alias as returned by GET /users/me; it may be omitted when the caller manages events in exactly one organization. location holds the address fields; the event is linked to the stored location with the same address (compared case-insensitively), which is created if there is none. GET /locations lists existing locations to fill the fields.",
                 "consumes": [
                     "application/json"
                 ],
@@ -925,7 +925,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unknown categoryId or locationId",
+                        "description": "Unknown categoryId",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -1353,7 +1353,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409).",
+                "description": "Updates title, description, time span, location, category, price and capacity of an event. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. The capacity cannot be lowered below the tickets already sold or reserved (409). A changed address links the event to the stored location with that address, created if there is none; locations themselves are never changed, so other events at the previous address are not affected.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1706,6 +1706,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/locations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the stored locations an organizer can pick to fill the address fields of an event: the locations of all events that are no drafts and of every event of the organizations in which the caller holds the event_manager role. Locations used only by drafts of other organizations are not listed. Saving an event with the same address, compared case-insensitively, reuses the location; any other address creates a new one. Locations are never changed. Sorted by city, street, house number and address addition.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "locations"
+                ],
+                "summary": "List selectable locations",
+                "responses": {
+                    "200": {
+                        "description": "Selectable locations; an empty array if there are none",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.PublishedEventLocation"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/me/bookings": {
             "get": {
                 "security": [
@@ -1870,6 +1916,314 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Nutzer nicht in der API-Datenbank synchronisiert",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/events": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "All event statuses and full descriptions, including withdrawn events. Requires admin or moderator. Newest first; organizationId is the local organization UUID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "List events for moderation",
+                "parameters": [
+                    {
+                        "enum": [
+                            "draft",
+                            "published",
+                            "cancelled",
+                            "completed"
+                        ],
+                        "type": "string",
+                        "description": "Event status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Organization UUID",
+                        "name": "organizationId",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ModeratedEventPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/events/{eventId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Full event content in any status. Requires admin or moderator.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "Inspect an event for moderation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ModeratedEvent"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/events/{eventId}/content": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires admin or moderator and a reason of 1-1000 characters after trimming. Supply title (3-200 characters after trimming), description (0-5000 characters; empty clears it), or both. Other event fields and status stay unchanged. Works in any status. Changes, previous values, reason and actor are recorded atomically. An unchanged request returns changed=false without an audit entry.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "Correct problematic event text",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Content correction and reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.ModerateEventContentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventModerationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/moderation/events/{eventId}/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires admin or moderator and a reason of 1-1000 characters after trimming. Draft and published events become cancelled and disappear from public lists, details and recommendations. New bookings and payment completion are rejected; existing bookings and payments remain in the history and tickets are invalid. No automatic refunds. Completed events return 409. Already cancelled events return changed=false without another audit entry. The status change, reason and actor are recorded atomically.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "moderation"
+                ],
+                "summary": "Withdraw a problematic event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Moderation reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.EventModerationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventModerationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -2965,6 +3319,19 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.EventModerationRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1
+                }
+            }
+        },
         "handler.RatingVisibilityRequest": {
             "type": "object",
             "required": [
@@ -3399,7 +3766,6 @@ const docTemplate = `{
                 "capacity",
                 "categoryId",
                 "endTime",
-                "locationId",
                 "startTime",
                 "title"
             ],
@@ -3419,8 +3785,13 @@ const docTemplate = `{
                 "endTime": {
                     "type": "string"
                 },
-                "locationId": {
-                    "type": "string"
+                "location": {
+                    "description": "Address of the event; the event is linked to the stored location with this address, which is\ncreated if there is none.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.LocationInput"
+                        }
+                    ]
                 },
                 "organizationId": {
                     "description": "Keycloak ID or alias of the organization that owns the draft, as returned by GET /users/me.\nMay be omitted when the caller manages events in exactly one organization.",
@@ -3625,6 +3996,20 @@ const docTemplate = `{
                 }
             }
         },
+        "model.EventModerationResponse": {
+            "type": "object",
+            "properties": {
+                "changed": {
+                    "type": "boolean"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                }
+            }
+        },
         "model.EventRatingSummary": {
             "type": "object",
             "properties": {
@@ -3672,6 +4057,134 @@ const docTemplate = `{
                 },
                 "time": {
                     "type": "string"
+                }
+            }
+        },
+        "model.LocationInput": {
+            "type": "object",
+            "required": [
+                "city",
+                "postalCode",
+                "street"
+            ],
+            "properties": {
+                "accessible": {
+                    "description": "Whether the place is accessible; false when omitted.",
+                    "type": "boolean"
+                },
+                "addressAddition": {
+                    "description": "Optional detail such as venue, hall or floor.",
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "Musikhalle Hamburg, Großer Saal"
+                },
+                "city": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "example": "Hamburg"
+                },
+                "houseNumber": {
+                    "description": "Omitted or empty when the address has no house number.",
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "1"
+                },
+                "postalCode": {
+                    "description": "German postal code with five digits.",
+                    "type": "string",
+                    "example": "20354"
+                },
+                "street": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "Lombardsbrücke"
+                }
+            }
+        },
+        "model.ModerateEventContentRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.ModeratedEvent": {
+            "type": "object",
+            "properties": {
+                "capacity": {
+                    "type": "integer"
+                },
+                "categoryId": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "eventId": {
+                    "type": "string"
+                },
+                "locationId": {
+                    "type": "string"
+                },
+                "organizationName": {
+                    "type": "string",
+                    "x-nullable": true
+                },
+                "organizerId": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "number"
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.EventStatus"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.ModeratedEventPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.ModeratedEvent"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -4175,6 +4688,13 @@ const docTemplate = `{
         "model.PublishedEventLocation": {
             "type": "object",
             "properties": {
+                "accessible": {
+                    "type": "boolean"
+                },
+                "addressAddition": {
+                    "description": "Venue, hall or floor; null when there is none.",
+                    "type": "string"
+                },
                 "city": {
                     "type": "string"
                 },
@@ -4182,9 +4702,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "locationId": {
-                    "type": "string"
-                },
-                "name": {
                     "type": "string"
                 },
                 "postalCode": {
@@ -4321,7 +4838,6 @@ const docTemplate = `{
                 "capacity",
                 "categoryId",
                 "endTime",
-                "locationId",
                 "startTime",
                 "title"
             ],
@@ -4340,8 +4856,13 @@ const docTemplate = `{
                 "endTime": {
                     "type": "string"
                 },
-                "locationId": {
-                    "type": "string"
+                "location": {
+                    "description": "Address of the event; the event is linked to the stored location with this address.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.LocationInput"
+                        }
+                    ]
                 },
                 "price": {
                     "type": "number",

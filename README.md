@@ -503,6 +503,56 @@ Schreibende Aktionen von Organisationsmitgliedern werden mit dem persönlichen K
 
 **Tests mit Datenbank:** `TEST_DATABASE_DSN` auf eine solche Datenbank setzen, dann `go test -p 1 ./...` im Ordner `backend`.
 
+### Inhalte moderieren (Backend)
+
+Alle Moderationsendpunkte verlangen ein Bearer-Token mit globaler Rolle `admin`
+oder `moderator`. Besucher und reine Organisations-Admins haben keinen Zugriff
+(`401` ohne Anmeldung, `403` ohne globale Moderationsrolle).
+
+Die bestehende Bewertungsmoderation bleibt unveraendert: Bewertungen werden
+eingesehen und begruendet aus- oder wieder eingeblendet. Veranstaltungstexte
+lassen sich jetzt organisationsuebergreifend pruefen und korrigieren:
+
+| Endpunkt | Funktion |
+| --- | --- |
+| `GET /api/v1/moderation/events` | Vollstaendige Events aller Status, neueste zuerst; Filter `status` und `organizationId` (lokale UUID), `page` ab 1, `limit` 1-100 (Standard 50). Antwort: `items`, `page`, `limit`, `total`. |
+| `GET /api/v1/moderation/events/{eventId}` | Einzelansicht einschliesslich Beschreibung, Status und Organisationsname, auch fuer Entwuerfe und zurueckgezogene Events. |
+| `PATCH /api/v1/moderation/events/{eventId}/content` | Titel und/oder Beschreibung korrigieren; Body z. B. `{"title":"Korrigierter Titel","description":"Sachlicher Text","reason":"Problematischer Inhalt"}`. |
+| `POST /api/v1/moderation/events/{eventId}/withdraw` | Event zurueckziehen; Body z. B. `{"reason":"Bestaetigter Betrugsfall"}`. |
+
+Jede Aenderung braucht eine Begründung mit 1-1.000 Zeichen nach Entfernen
+aeusserer Leerzeichen. Titel haben nach Trimmen 3-200 Zeichen, Beschreibungen
+maximal 5.000 Zeichen. Eine leere Beschreibung entfernt den bisherigen Text;
+weggelassene Felder bleiben unveraendert. Inhaltskorrekturen sind in jedem
+Eventstatus moeglich und veraendern weder Preis, Kapazitaet, Termine,
+Veranstalter noch Status. Die Antwort enthaelt `eventId`, `status`, `changed`.
+
+Zurueckziehen setzt Entwuerfe und veroeffentlichte Events auf `cancelled`.
+Bereits abgesagte Events bleiben unveraendert; abgeschlossene Events ergeben
+`409`. Zurueckgezogene Events verschwinden aus oeffentlichen Listen, Details
+und Empfehlungen. Neue Buchungen und der Abschluss offener Zahlungen sind
+nicht mehr moeglich, bereits bezahlte Tickets sind ungueltig. Buchungen und
+Zahlungen bleiben in der Historie erhalten; es erfolgen keine automatischen
+Rueckerstattungen. Veranstalter koennen abgesagte Events nicht erneut
+veroeffentlichen.
+
+Status- und Textaenderungen werden als `event.moderated` mit vorherigen und
+neuen Werten, Begründung und handelndem Konto im Organisations-Audit-Log
+gespeichert (ohne Organisation im Scope `platform`). Aenderung und Audit-Eintrag
+sind atomar; ein Audit-Fehler rollt die Aenderung zurueck. Identische erneute
+Anfragen liefern `changed=false`, ohne einen weiteren Eintrag zu schreiben.
+Ungueltige Eingaben ergeben `400`, unbekannte Events `404`.
+
+Fachliche Abgrenzung: Bewertungen werden ausgeblendet statt administrativ
+umgeschrieben oder geloescht; Events werden unter Erhalt der Historie
+zurueckgezogen statt hart geloescht. Organisations-/Veranstaltersperren sind
+nicht Teil dieser Implementierung. Fuer die neuen Eventaktionen ist keine
+Datenbankmigration erforderlich. Das Frontend bleibt unveraendert.
+
+Backend-Tests einschliesslich PostgreSQL-Integration: `go test -p 1 ./...`
+im Backend-Verzeichnis mit `TEST_DATABASE_DSN` auf einer separaten,
+wegwerfbaren Testdatenbank.
+
 ### Inhalte moderieren (Frontend)
 
 Globale Administratoren erreichen **Moderation** über die Navigation oder
@@ -520,11 +570,9 @@ Der bestehende Organisations-Audit-Log zeigt die Aktion und ihre Begründung.
 Ausgeblendete Bewertungen zählen nicht mehr für öffentliche Zusammenfassungen und
 Empfehlungen; Wieder-Einblenden stellt die vorherige Sichtbarkeit wieder her.
 
-**Backend-Grenzen der Story:** Administrative Kommentar-Bearbeitung/-Löschung,
-plattformweite Moderation von Veranstaltungen/Beschreibungen und das Sperren von
-Organisationen/Veranstaltern sind noch nicht unterstützt. Bestehende Event-Aktionen
-bleiben an Organisationsrechte und Event-Status gebunden; sie sind kein Ersatz für
-plattformweite Moderationsrechte. Das Backend erlaubt zusätzlich globale Moderatoren,
+**Grenzen der Ansicht:** Die Frontend-Ansicht bietet weiterhin nur
+Bewertungsmoderation. Die oben beschriebenen Eventaktionen sind ausschliesslich
+als Backend-API implementiert. Das Backend erlaubt zusätzlich globale Moderatoren,
 während diese Frontend-Story den Zugriff auf globale Administratoren beschränkt.
 
 Validierungs- und API-Antworttests: im Frontend-Verzeichnis

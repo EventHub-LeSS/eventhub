@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/features/shared/components/ui/card"
+import { formatPlace } from "@/features/shared/lib/location"
 
 interface EventCardProps {
   event: PublishedEvent
@@ -43,7 +44,7 @@ export function EventCard({ event }: EventCardProps) {
           </span>
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <MapPinIcon className="size-3.5 shrink-0" />
-            {event.location.name}, {event.location.city}
+            {formatPlace(event.location)}
           </span>
           <span className="pt-2 text-sm font-semibold">
             {formatEventPrice(event.price)}

@@ -52,7 +52,8 @@ type UpdateEventRequest struct {
 	Capacity    int             `json:"capacity" binding:"required,min=1"`
 	Price       decimal.Decimal `json:"price" binding:"gte=0"`
 	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+	// Address of the event; the event is linked to the stored location with this address.
+	Location LocationInput `json:"location"`
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
@@ -63,6 +64,36 @@ type EventActionResponse struct {
 // EVENTHUB-82: Veranstaltung zurückziehen
 type EventWithdrawnResponse struct {
 	Message string `json:"message" example:"event withdrawn"`
+}
+
+type EventModerationResponse struct {
+	EventID uuid.UUID   `json:"eventId"`
+	Status  EventStatus `json:"status"`
+	Changed bool        `json:"changed"`
+}
+
+type ModeratedEvent struct {
+	EventModel
+	OrganizationName *string `json:"organizationName" gorm:"column:organization_name" extensions:"x-nullable"`
+}
+
+type ModeratedEventFilter struct {
+	Status         EventStatus
+	OrganizationID *uuid.UUID
+	EventID        *uuid.UUID
+}
+
+type ModeratedEventPage struct {
+	Items []ModeratedEvent `json:"items"`
+	Page  int              `json:"page"`
+	Limit int              `json:"limit"`
+	Total int64            `json:"total"`
+}
+
+type ModerateEventContentRequest struct {
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	Reason      string  `json:"reason" binding:"required" minLength:"1" maxLength:"1000"`
 }
 
 // EVENTHUB-256: Veranstaltungsentwurf löschen
@@ -82,5 +113,7 @@ type CreateDraftRequest struct {
 	Capacity       int             `json:"capacity" binding:"required,min=1,max=100000"`
 	Price          decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
 	CategoryID     uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID     uuid.UUID       `json:"locationId" binding:"required"`
+	// Address of the event; the event is linked to the stored location with this address, which is
+	// created if there is none.
+	Location LocationInput `json:"location"`
 }

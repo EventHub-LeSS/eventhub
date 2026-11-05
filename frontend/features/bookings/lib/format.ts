@@ -1,4 +1,8 @@
-import type { OwnBookingLocation } from "@/features/bookings/lib/types"
+import type {
+  OwnBookingLocation,
+  PaymentStatus,
+} from "@/features/bookings/lib/types"
+import { formatAddress } from "@/features/shared/lib/location"
 
 /** Shown in place of a missing value, so no line renders as a blank gap. */
 export const EMPTY_VALUE = "—"
@@ -44,6 +48,18 @@ export function formatTicketCount(count: number): string {
   return `${count} ${count === 1 ? "Ticket" : "Tickets"}`
 }
 
+export function formatDateTime(timestamp: string | null | undefined): string {
+  if (!timestamp) {
+    return EMPTY_VALUE
+  }
+
+  const date = new Date(timestamp)
+
+  return Number.isNaN(date.getTime())
+    ? EMPTY_VALUE
+    : dateTimeFormat.format(date)
+}
+
 export function formatEventPeriod(startTime: string, endTime: string): string {
   const start = new Date(startTime)
   const end = new Date(endTime)
@@ -68,12 +84,14 @@ export function formatLocation(location: OwnBookingLocation | null): string {
     return EMPTY_VALUE
   }
 
-  const street = [location.street, location.houseNumber]
-    .filter(Boolean)
-    .join(" ")
-  const city = [location.postalCode, location.city].filter(Boolean).join(" ")
+  return formatAddress(location)
+}
 
-  return [location.name, street, city].filter(Boolean).join(", ")
+export const paymentStatusLabels: Record<PaymentStatus, string> = {
+  pending: "Offen",
+  paid: "Bezahlt",
+  failed: "Fehlgeschlagen",
+  refunded: "Erstattet",
 }
 
 export function splitTicketsByEnd<

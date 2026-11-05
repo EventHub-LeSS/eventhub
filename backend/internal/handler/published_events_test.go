@@ -112,8 +112,8 @@ func TestListPublishedEventsDatabase(t *testing.T) {
 		t.Fatalf("wrong event data: %+v", event)
 	}
 	if event.Category.CategoryID != published.categoryID || event.Category.Category != "cat-"+published.categoryID.String() ||
-		event.Location.LocationID != published.locationID || event.Location.Name != "loc-"+published.locationID.String() ||
-		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil ||
+		event.Location.LocationID != published.locationID || event.Location.AddressAddition == nil || *event.Location.AddressAddition != "loc-"+published.locationID.String() ||
+		event.Location.City != "Bonn" || event.Location.PostalCode != "53111" || event.Location.Street != "Weg" || event.Location.HouseNumber != nil || event.Location.Accessible ||
 		event.Alias != "alias-listing" || event.OrganizerID != published.ownerOrgID {
 		t.Fatalf("wrong display data: %+v", event)
 	}
@@ -220,7 +220,7 @@ func TestPublishedEventsLocationDatabase(t *testing.T) {
 		{venue.locationID.String(), "Berlin", "Bonner Bühne"},
 		{special.locationID.String(), "Köln", "100%_!Club"},
 	} {
-		if err := db.Exec("UPDATE locations SET city = ?, name = ? WHERE location_id = ?", row.city, row.name, row.id).Error; err != nil {
+		if err := db.Exec("UPDATE locations SET city = ?, address_addition = ? WHERE location_id = ?", row.city, row.name, row.id).Error; err != nil {
 			t.Fatal(err)
 		}
 	}

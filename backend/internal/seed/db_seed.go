@@ -144,18 +144,19 @@ func (s *DBSeeder) seedCategories(_ context.Context) error {
 
 func (s *DBSeeder) seedLocations(_ context.Context) error {
 	log.Println("db: seeding locations...")
+	// The IDs keep the venue names of the event definitions, which the address addition now holds.
 	locs := []model.LocationModel{
-		{LocationID: seedUUID("loc-Musikhalle Hamburg"), Name: "Musikhalle Hamburg", City: "Hamburg", PostalCode: "20354", Street: "Lombardsbrücke", HouseNumber: ptrString("1")},
-		{LocationID: seedUUID("loc-Olympiahalle München"), Name: "Olympiahalle München", City: "München", PostalCode: "80809", Street: "Spiridon-Louis-Ring", HouseNumber: ptrString("21")},
-		{LocationID: seedUUID("loc-Treptower Park Berlin"), Name: "Treptower Park Berlin", City: "Berlin", PostalCode: "12435", Street: "Alt-Treptow", HouseNumber: ptrString("6")},
-		{LocationID: seedUUID("loc-Stadthalle Bremen"), Name: "Stadthalle Bremen", City: "Bremen", PostalCode: "28215", Street: "Findorffstraße", HouseNumber: ptrString("105")},
-		{LocationID: seedUUID("loc-Frankfurt Festplatz"), Name: "Frankfurt Festplatz", City: "Frankfurt", PostalCode: "60386", Street: "Ratsweg", HouseNumber: ptrString("1")},
+		{LocationID: seedUUID("loc-Musikhalle Hamburg"), AddressAddition: ptrString("Musikhalle Hamburg"), City: "Hamburg", PostalCode: "20354", Street: "Lombardsbrücke", HouseNumber: ptrString("1"), Accessible: true},
+		{LocationID: seedUUID("loc-Olympiahalle München"), AddressAddition: ptrString("Olympiahalle München"), City: "München", PostalCode: "80809", Street: "Spiridon-Louis-Ring", HouseNumber: ptrString("21"), Accessible: true},
+		{LocationID: seedUUID("loc-Treptower Park Berlin"), AddressAddition: ptrString("Treptower Park Berlin"), City: "Berlin", PostalCode: "12435", Street: "Alt-Treptow", HouseNumber: ptrString("6")},
+		{LocationID: seedUUID("loc-Stadthalle Bremen"), AddressAddition: ptrString("Stadthalle Bremen"), City: "Bremen", PostalCode: "28215", Street: "Findorffstraße", HouseNumber: ptrString("105"), Accessible: true},
+		{LocationID: seedUUID("loc-Frankfurt Festplatz"), AddressAddition: ptrString("Frankfurt Festplatz"), City: "Frankfurt", PostalCode: "60386", Street: "Ratsweg", HouseNumber: ptrString("1")},
 	}
 	for _, l := range locs {
 		var existing model.LocationModel
-		if err := s.db.Where("name = ?", l.Name).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := s.db.Where("location_id = ?", l.LocationID).First(&existing).Error; errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := s.db.Create(&l).Error; err != nil {
-				return fmt.Errorf("create location %q: %w", l.Name, err)
+				return fmt.Errorf("create location %q: %w", *l.AddressAddition, err)
 			}
 		}
 	}
