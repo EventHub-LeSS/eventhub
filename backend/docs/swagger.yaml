@@ -274,6 +274,14 @@ definitions:
     - BookingStatusCancelled
     - BookingStatusFailed
     - BookingStatusExpired
+  model.CancelledBy:
+    enum:
+    - organizer
+    - user
+    type: string
+    x-enum-varnames:
+    - CancelledByOrganizer
+    - CancelledByUser
   model.CartItemResponse:
     properties:
       availableSeats:
@@ -757,6 +765,17 @@ definitions:
         description: |-
           Stored booking status, except that a reservation whose expiresAt has passed by the database
           clock is shown as expired. GET /bookings/{bookingId}/payment shows the stored status.
+      cancelledBy:
+        allOf:
+        - $ref: '#/definitions/model.CancelledBy'
+        description: |-
+          Set when paid tickets were cancelled: organizer when the event of a confirmed and paid
+          booking was withdrawn, user when the user cancelled the booking after paying for it. A
+          booking the user cancelled stays user even if the event is withdrawn later. Omitted
+          otherwise, also for cart reservations and checkouts cancelled before payment.
+        enum:
+        - organizer
+        - user
       event:
         allOf:
         - $ref: '#/definitions/model.OwnBookingEvent'
@@ -1239,7 +1258,9 @@ paths:
         die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts
         abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung
         zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine
-        Buchungen storniert sind. Wiederholtes Stornieren gelingt ohne weitere Erstattung.'
+        Buchungen storniert sind. Eine bezahlte Buchung einer vom Veranstalter abgesagten
+        Veranstaltung ist nicht stornierbar (409), die Erstattung übernimmt der Veranstalter.
+        Wiederholtes Stornieren gelingt ohne weitere Erstattung.'
       parameters:
       - description: Booking ID
         in: path
@@ -1270,7 +1291,8 @@ paths:
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "409":
-          description: Buchung in diesem Status nicht stornierbar
+          description: Buchung in diesem Status nicht stornierbar oder Veranstaltung
+            vom Veranstalter abgesagt
           schema:
             $ref: '#/definitions/model.ErrorResponse'
         "500":
@@ -2432,16 +2454,20 @@ paths:
       - bookings
   /me/tickets:
     get:
-      description: 'Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit
-        ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder
-        abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend,
-        danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis
-        es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für
-        GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer
+      description: 'Liefert die gültigen und die stornierten Tickets des Aufrufers.
+        Gültig sind Buchungen mit ticketsValid true, also bezahlt, bestätigt und für
+        ein veröffentlichtes oder abgeschlossenes Event. Storniert sind bezahlte Tickets
+        mit cancelledBy: organizer, wenn der Veranstalter das Event abgesagt hat,
+        oder user, wenn der Aufrufer die Buchung nach der Bezahlung storniert hat;
+        sie haben ticketsValid false. Warenkorb-Reservierungen und vor der Bezahlung
+        abgebrochene Checkouts erscheinen nicht. Kommende Events zuerst nach Startzeit
+        aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als
+        kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId
+        für GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer
         das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung
         zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und
         GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein
-        leeres Array, wenn es keine gültigen Tickets gibt.'
+        leeres Array, wenn es weder gültige noch stornierte Tickets gibt.'
       produces:
       - application/json
       responses:

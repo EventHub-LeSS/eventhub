@@ -39,6 +39,13 @@ export interface OwnBookingEvent {
   location: OwnBookingLocation | null
 }
 
+/**
+ * Mirrors `model.CancelledBy`: who cancelled tickets that had been paid for.
+ * `organizer` — the event was withdrawn; `user` — the visitor cancelled the
+ * booking after paying for it.
+ */
+export type CancelledBy = "organizer" | "user"
+
 export interface OwnBooking {
   bookingId: string
   numberOfTickets: number
@@ -48,6 +55,8 @@ export interface OwnBooking {
   amount: string | null
   refundAmount: string | null
   ticketsValid: boolean
+  /** Set only for paid tickets that were cancelled; never valid then. */
+  cancelledBy?: CancelledBy
   ratingScore: number | null
   message?: string
   bookedAt: string

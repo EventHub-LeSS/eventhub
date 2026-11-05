@@ -16,12 +16,14 @@ import Link from "next/link"
 import { useState } from "react"
 
 import { CancelBookingDialog } from "@/features/bookings/components/cancel-booking-dialog"
+import { CancelledByNotice } from "@/features/bookings/components/cancelled-by-notice"
 import { RatingDialog } from "@/features/bookings/components/rating-dialog"
 import {
   formatAmount,
   formatEventPeriod,
   formatLocation,
   formatTicketCount,
+  hasRefund,
 } from "@/features/bookings/lib/format"
 import type {
   OwnBooking,
@@ -66,8 +68,8 @@ const VIEWS: Record<
   cancelled: {
     label: "Storniert",
     description:
-      "Buchungen, die du storniert hast, und was mit deiner Zahlung passiert ist.",
-    empty: "Du hast keine Buchung storniert.",
+      "Tickets, die du storniert hast oder deren Veranstaltung abgesagt wurde, und was mit deiner Zahlung passiert ist.",
+    empty: "Du hast keine stornierten Tickets.",
     icon: TicketXIcon,
   },
 }
@@ -125,7 +127,7 @@ export function OwnTickets({
     if (view === "cancelled") {
       return (
         <TicketCard ticket={ticket} kind="cancelled">
-          {ticket.paymentStatus === "refunded" && (
+          {hasRefund(ticket) && (
             <span className="text-sm font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
               {formatAmount(ticket.refundAmount)} erstattet
             </span>
@@ -365,6 +367,10 @@ function TicketCard({
               </dd>
             </div>
           </dl>
+        )}
+
+        {kind === "cancelled" && ticket.cancelledBy && (
+          <CancelledByNotice cancelledBy={ticket.cancelledBy} />
         )}
 
         {children && (

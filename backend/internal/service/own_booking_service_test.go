@@ -179,17 +179,24 @@ func TestOwnBookingResponse_NoPaymentNoEvent_ReturnsNullFields(t *testing.T) {
 	}
 }
 
-func TestListOwnTickets_MixedBookings_ReturnsOnlyValidInRepositoryOrder(t *testing.T) {
+// Valid tickets and paid tickets cancelled by the organizer or the user are listed in repository
+// order; reservations, open and failed checkouts and cart items cancelled before payment are not.
+func TestListOwnTickets_MixedBookings_ReturnsValidAndCancelledInRepositoryOrder(t *testing.T) {
 	published, cancelled := model.EventStatusPublished, model.EventStatusCancelled
+	cancelledReason := model.PaymentFailureBookingCancelled
 	now := time.Now()
 	live := now.Add(time.Minute)
 	first := ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &published, now)
+	withdrawn := ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &cancelled, now)
+	refunded := ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusRefunded, nil), &published, now)
 	second := ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &published, now)
 	repo := &fakeOwnBookingRepo{bookings: []*repository.OwnBooking{
 		ownBookingWith(model.BookingStatusReserved, &live, paymentWith(model.PaymentStatusPending, nil), &published, now),
 		first,
-		ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &cancelled, now),
-		ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusRefunded, nil), &published, now),
+		withdrawn,
+		ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusFailed, &cancelledReason), &published, now),
+		ownBookingWith(model.BookingStatusCancelled, nil, nil, &published, now),
+		refunded,
 		second,
 	}}
 
@@ -197,9 +204,75 @@ func TestListOwnTickets_MixedBookings_ReturnsOnlyValidInRepositoryOrder(t *testi
 	if err != nil {
 		t.Fatalf("list tickets: %v", err)
 	}
-	if len(tickets) != 2 || tickets[0].BookingID != first.Booking.BookingID || tickets[1].BookingID != second.Booking.BookingID {
-		t.Fatalf("expected the two valid tickets in repository order, got %+v", tickets)
+	want := []struct {
+		id    uuid.UUID
+		valid bool
+		by    *model.CancelledBy
+	}{
+		{first.Booking.BookingID, true, nil},
+		{withdrawn.Booking.BookingID, false, cancelledByOf(model.CancelledByOrganizer)},
+		{refunded.Booking.BookingID, false, cancelledByOf(model.CancelledByUser)},
+		{second.Booking.BookingID, true, nil},
 	}
+	if len(tickets) != len(want) {
+		t.Fatalf("expected %d tickets, got %+v", len(want), tickets)
+	}
+	for i, w := range want {
+		got := tickets[i]
+		if got.BookingID != w.id || got.TicketsValid != w.valid || !sameCancelledBy(got.CancelledBy, w.by) {
+			t.Errorf("ticket %d: expected id=%s valid=%v cancelledBy=%v, got id=%s valid=%v cancelledBy=%v",
+				i, w.id, w.valid, w.by, got.BookingID, got.TicketsValid, got.CancelledBy)
+		}
+	}
+}
+
+// Only paid tickets report who cancelled them; a booking the user cancelled stays cancelled by the
+// user even when its event is withdrawn afterwards.
+func TestOwnBookingResponse_CancelledBy_OnlyForPaidTickets(t *testing.T) {
+	published, completed, cancelled := model.EventStatusPublished, model.EventStatusCompleted, model.EventStatusCancelled
+	declined, cancelledReason := model.PaymentFailureDeclined, model.PaymentFailureBookingCancelled
+	now := time.Now()
+	live := now.Add(time.Minute)
+	partlyRefunded := paymentWith(model.PaymentStatusPaid, nil)
+	partlyRefunded.RefundAmount = decimal.NewFromInt(40)
+
+	cases := []struct {
+		name string
+		own  *repository.OwnBooking
+		want *model.CancelledBy
+	}{
+		{"valid ticket", ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &published, now), nil},
+		{"valid ticket of completed event", ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &completed, now), nil},
+		{"withdrawn event", ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), &cancelled, now), cancelledByOf(model.CancelledByOrganizer)},
+		{"cancelled after payment, refunded", ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusRefunded, nil), &published, now), cancelledByOf(model.CancelledByUser)},
+		{"cancelled after payment, partly refunded", ownBookingWith(model.BookingStatusCancelled, nil, partlyRefunded, &published, now), cancelledByOf(model.CancelledByUser)},
+		{"cancelled by user, then withdrawn", ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusRefunded, nil), &cancelled, now), cancelledByOf(model.CancelledByUser)},
+		{"cart item cancelled", ownBookingWith(model.BookingStatusCancelled, nil, nil, &published, now), nil},
+		{"cart item of withdrawn event", ownBookingWith(model.BookingStatusReserved, &live, nil, &cancelled, now), nil},
+		{"checkout cancelled while pending", ownBookingWith(model.BookingStatusCancelled, nil, paymentWith(model.PaymentStatusFailed, &cancelledReason), &published, now), nil},
+		{"pending checkout of withdrawn event", ownBookingWith(model.BookingStatusReserved, &live, paymentWith(model.PaymentStatusPending, nil), &cancelled, now), nil},
+		{"declined", ownBookingWith(model.BookingStatusFailed, nil, paymentWith(model.PaymentStatusFailed, &declined), &cancelled, now), nil},
+		{"paid for deleted event", ownBookingWith(model.BookingStatusConfirmed, nil, paymentWith(model.PaymentStatusPaid, nil), nil, now), nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ownBookingResponse(tc.own)
+			if !sameCancelledBy(got.CancelledBy, tc.want) {
+				t.Errorf("expected cancelledBy %v, got %v", tc.want, got.CancelledBy)
+			}
+			if got.CancelledBy != nil && got.TicketsValid {
+				t.Errorf("cancelled tickets must not be valid, got %+v", got)
+			}
+		})
+	}
+}
+
+func cancelledByOf(by model.CancelledBy) *model.CancelledBy {
+	return &by
+}
+
+func sameCancelledBy(a, b *model.CancelledBy) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 func TestListOwnBookings_StatusFilter_UsesShownStatus(t *testing.T) {

@@ -111,7 +111,7 @@ export function CancellationNoticeDialog() {
             variant="outline"
             size="lg"
             className="min-h-11 sm:min-w-40"
-            render={<Link href="/tickets" />}
+            render={<Link href="/tickets?view=cancelled" />}
             nativeButton={false}
             onClick={() => setPaused(true)}
           >

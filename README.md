@@ -241,8 +241,11 @@ neuen Versuch werden die Tickets erneut in den Warenkorb gelegt.
 Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem **ganzen**
 Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es
 wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung
-rückerstattet; der Zahlungsvorgang gilt als `refunded`, sobald die Erstattung den vollen Betrag
-erreicht. Wiederholtes Stornieren gelingt ohne weitere Erstattung idempotent.
+rückerstattet; der Zahlungsvorgang gilt als `refunded`, sobald alle seine Buchungen storniert sind
+(eine kostenlose Buchung neben einer bezahlten bleibt also gültig, auch wenn die Erstattung schon den
+vollen Betrag erreicht). Eine bezahlte Buchung eines vom Veranstalter abgesagten Events ist nicht
+stornierbar (`409`): Die Erstattung übernimmt der Veranstalter, und das Ticket bleibt als „Vom
+Veranstalter abgesagt“ sichtbar. Wiederholtes Stornieren gelingt ohne weitere Erstattung idempotent.
 
 **Keine dauerhaft offenen Zahlungen:** Zusätzlich schließt die API jede Minute offene Zahlungen
 ab, von denen mindestens eine Reservierung abgelaufen ist, als fehlgeschlagen ab
@@ -307,13 +310,13 @@ Ticket-Tabelle und keine kopierten Status. Ein Ticket ist eine Buchung mit ihrer
 
 | Endpunkt | Inhalt |
 | --- | --- |
-| `GET /api/v1/me/tickets` | Gültige Tickets (`ticketsValid: true`). Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. |
+| `GET /api/v1/me/tickets` | Gültige Tickets (`ticketsValid: true`) und stornierte bezahlte Tickets (`cancelledBy` gesetzt). Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. |
 | `GET /api/v1/me/bookings?status=…` | Buchungshistorie: alle eigenen Buchungen in jedem Status, die neueste zuerst. `status` (optional) filtert auf den angezeigten Status `reserved`, `confirmed`, `cancelled`, `failed` oder `expired`. |
 | `GET /api/v1/me/bookings/{bookingId}` | Details einer eigenen Buchung in jedem Status. |
 
 Alle drei liefern dieselbe Form (`model.OwnBookingResponse`): `bookingId`, `numberOfTickets`,
 `bookingStatus`, `paymentStatus`, `failureReason`, `amount`, `refundAmount`, `ticketsValid`,
-`message`, `bookedAt`, `expiresAt` und `event` mit Titel, Start, Ende, Status und `location` (Name und
+`cancelledBy`, `message`, `bookedAt`, `expiresAt` und `event` mit Titel, Start, Ende, Status und `location` (Name und
 Adresse). Ohne Zahlungsvorgang sind die Zahlungsfelder `null` und `message` fehlt; ein gelöschter Ort
 ergibt `location: null`, ein gelöschtes Event `event: null`.
 
@@ -322,8 +325,17 @@ und das Event `published` oder `completed` ist. Es ist dieselbe Funktion wie bei
 `GET /api/v1/payments/{paymentId}` (`hasValidTickets` in
 `backend/internal/service/payment_service.go`), und `message` ist derselbe Text wie dort. Stornierte,
 fehlgeschlagene und abgelaufene Buchungen sowie Tickets zurückgezogener oder gelöschter Events sind
-ungültig: Sie fehlen in der Ticketliste und erscheinen in Historie und Details mit
-`ticketsValid: false`.
+ungültig und erscheinen in Historie und Details mit `ticketsValid: false`.
+
+**Stornierte Tickets:** `cancelledBy` kennzeichnet bezahlte Tickets, die storniert wurden:
+`organizer`, wenn der Veranstalter das Event einer bestätigten, bezahlten Buchung abgesagt hat (die
+Buchung bleibt `confirmed`), und `user`, wenn der Besucher die Buchung nach der Bezahlung storniert
+hat (Zahlung `paid` oder `refunded`). Hat der Besucher zuerst selbst storniert, bleibt es `user`, auch
+wenn das Event später abgesagt wird; umgekehrt kann der Besucher nach der Absage nicht mehr selbst
+stornieren. Diese Tickets bleiben in der Ticketliste; das Frontend zeigt sie unter „Meine Tickets“ im
+Tab „Storniert“ mit dem Hinweis „Vom Veranstalter abgesagt“ bzw. „Von dir storniert“.
+Warenkorb-Reservierungen und vor der Bezahlung abgebrochene Checkouts haben kein `cancelledBy` und
+fehlen in der Ticketliste, ebenso alle übrigen ungültigen Buchungen.
 
 **Angezeigter Status:** `bookingStatus` ist der gespeicherte Status. Nur eine Reservierung, deren
 `expiresAt` nach der Datenbankuhr verstrichen ist, wird als `expired` angezeigt, auch wenn sie noch als
