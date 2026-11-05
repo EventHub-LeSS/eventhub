@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +190,11 @@ func eventOwnedBy(org *model.OrganizationModel, status model.EventStatus) *model
 	}
 }
 
+// eventLocation is the address of the events of eventOwnedBy in the fake location repository.
+func eventLocation() model.LocationInput {
+	return model.LocationInput{Street: "Markt", HouseNumber: ptr("1"), PostalCode: "53111", City: "Bonn", Accessible: true}
+}
+
 func updateRequest() model.UpdateEventRequest {
 	return model.UpdateEventRequest{
 		Title:      "Neues Konzert",
@@ -197,12 +203,38 @@ func updateRequest() model.UpdateEventRequest {
 		Capacity:   250,
 		Price:      decimal.NewFromInt(35),
 		CategoryID: uuid.New(),
-		LocationID: uuid.New(),
+		Location:   model.LocationInput{Street: "Hauptstraße", HouseNumber: ptr("5"), PostalCode: "50667", City: "Köln", AddressAddition: ptr("Halle 2")},
 	}
+}
+
+func ptr(s string) *string { return &s }
+
+// fakeLocationRepo hands out one location per address like the unique index of the locations table.
+type fakeLocationRepo struct {
+	byAddress map[string]*model.LocationModel
+}
+
+func locationKey(l *model.LocationModel) string {
+	return fmt.Sprintf("%s|%t", strings.ToLower(l.Address()), l.Accessible)
+}
+
+func (f *fakeLocationRepo) FindOrCreate(location *model.LocationModel) (*model.LocationModel, error) {
+	if stored, ok := f.byAddress[locationKey(location)]; ok {
+		return stored, nil
+	}
+	stored := *location
+	stored.LocationID = uuid.New()
+	f.byAddress[locationKey(location)] = &stored
+	return &stored, nil
+}
+
+func (f *fakeLocationRepo) ListSelectable([]uuid.UUID) ([]*model.LocationModel, error) {
+	return nil, nil
 }
 
 type fakeTransactor struct {
 	events        repository.EventRepository
+	locations     repository.LocationRepository
 	orgs          repository.OrganizationRepository
 	audit         repository.AuditLogRepository
 	notifications repository.NotificationRepository
@@ -210,7 +242,14 @@ type fakeTransactor struct {
 }
 
 func (f *fakeTransactor) InTransaction(_ context.Context, fn func(repository.Tx) error) error {
-	return fn(repository.Tx{Events: f.events, Organizations: f.orgs, Audit: f.audit, Notifications: f.notifications, Bookings: f.bookings})
+	return fn(repository.Tx{
+		Events:        f.events,
+		Locations:     f.locations,
+		Organizations: f.orgs,
+		Audit:         f.audit,
+		Notifications: f.notifications,
+		Bookings:      f.bookings,
+	})
 }
 
 type fakeAuditRepo struct {
@@ -253,8 +292,15 @@ func newTestServiceWithAudit(event *model.EventModel) (*EventService, *fakeEvent
 		},
 	}
 	auditRepo := &fakeAuditRepo{}
+	locationRepo := &fakeLocationRepo{byAddress: map[string]*model.LocationModel{}}
+	if event != nil && event.LocationID != nil {
+		location := eventLocation().Location()
+		location.LocationID = *event.LocationID
+		locationRepo.byAddress[locationKey(location)] = location
+	}
 	tx := &fakeTransactor{
 		events: eventRepo, orgs: orgRepo, audit: auditRepo,
+		locations: locationRepo,
 		notifications: &fakeNotificationRepo{}, bookings: &fakeTicketHolderRepo{},
 	}
 	return NewEventService(eventRepo, orgRepo, tx), eventRepo, auditRepo
@@ -348,6 +394,33 @@ func TestUpdateEvent_KeepsStatusAndOrganizer(t *testing.T) {
 	}
 	if updated.Title != "Neues Konzert" || updated.Capacity != 250 {
 		t.Errorf("fields not applied: title=%q capacity=%d", updated.Title, updated.Capacity)
+	}
+}
+
+// The address of the request selects the location: the same address in another case and with
+// surrounding whitespace keeps it, any other address, accessibility included, links another one.
+func TestUpdateEvent_LinksLocationByAddress(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusDraft)
+	previous := *event.LocationID
+	svc, _ := newTestService(event)
+	req := updateRequest()
+
+	req.Location = model.LocationInput{Street: " MARKT", HouseNumber: ptr("1 "), PostalCode: "53111", City: "bonn", AddressAddition: ptr("  "), Accessible: true}
+	updated, err := svc.UpdateEvent(auditCtx(audit.EventUpdated), event.EventID, []string{"kc-org-b"}, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *updated.LocationID != previous {
+		t.Errorf("same address linked location %s, want %s", *updated.LocationID, previous)
+	}
+
+	req.Location.Accessible = false
+	updated, err = svc.UpdateEvent(auditCtx(audit.EventUpdated), event.EventID, []string{"kc-org-b"}, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if *updated.LocationID == previous || *updated.LocationID == uuid.Nil {
+		t.Errorf("other address linked location %s, want a new one", *updated.LocationID)
 	}
 }
 
@@ -552,7 +625,7 @@ func draftRequest(organizationID string) model.CreateDraftRequest {
 		Capacity:       100,
 		Price:          decimal.NewFromInt(15),
 		CategoryID:     uuid.New(),
-		LocationID:     uuid.New(),
+		Location:       eventLocation(),
 	}
 }
 
@@ -592,7 +665,7 @@ func TestCreateDraft_SavesDraftForManagedOrganization(t *testing.T) {
 				t.Errorf("organizer = %v, want %v", created.OrganizerID, tt.wantOrg.OrganizationID)
 			}
 			if created.Title != req.Title || created.Capacity != req.Capacity || !created.Price.Equal(req.Price) ||
-				*created.CategoryID != req.CategoryID || *created.LocationID != req.LocationID {
+				*created.CategoryID != req.CategoryID || created.LocationID == nil || *created.LocationID == uuid.Nil {
 				t.Errorf("request fields not applied: %#v", created)
 			}
 		})

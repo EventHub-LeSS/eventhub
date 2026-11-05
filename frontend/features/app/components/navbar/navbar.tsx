@@ -1,10 +1,13 @@
 "use client"
 
 import {
+  ClipboardListIcon,
   CompassIcon,
+  FlagIcon,
   LayoutDashboardIcon,
   MenuIcon,
   ShieldCheckIcon,
+  ShieldIcon,
   TicketIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -42,10 +45,12 @@ interface NavbarProps {
 
 const visitorLinks: NavLink[] = [
   { label: "Entdecken", href: "/", icon: CompassIcon },
+  { label: "Buchungen", href: "/bookings", icon: ClipboardListIcon },
   { label: "Meine Tickets", href: "/tickets", icon: TicketIcon },
 ]
 
 const navigationByRole: Record<UserRole, NavLink[]> = {
+  // Anonymous users must sign in before they get visitor functions, so their nav stays minimal.
   guest: [{ label: "Entdecken", href: "/", icon: CompassIcon }],
   visitor: visitorLinks,
   // Organizing is an extra ability, so organizers keep everything a visitor can do.
@@ -54,6 +59,19 @@ const navigationByRole: Record<UserRole, NavLink[]> = {
     { label: "Veranstalter", href: "/organizer", icon: LayoutDashboardIcon },
   ],
 }
+
+// Admins and moderators are platform-wide flags independent of `role` (see SessionUser),
+// so their nav replaces the role-based links entirely instead of being keyed by UserRole.
+const adminLinks: NavLink[] = [
+  { label: "Entdecken", href: "/", icon: CompassIcon },
+  { label: "Administration", href: "/admin", icon: ShieldIcon },
+  { label: "Moderation", href: "/admin/moderation", icon: ShieldCheckIcon },
+]
+
+const moderatorLinks: NavLink[] = [
+  { label: "Entdecken", href: "/", icon: CompassIcon },
+  { label: "Moderation", href: "/moderation", icon: FlagIcon },
+]
 
 /** Returns the most specific matching href, so /organizer/events/new does not also light up /organizer/events. */
 function activeHref(pathname: string, links: NavLink[]) {
@@ -75,15 +93,10 @@ export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
   const links = user?.isAdmin
-    ? [
-        ...navigationByRole[role],
-        {
-          label: "Moderation",
-          href: "/admin/moderation",
-          icon: ShieldCheckIcon,
-        },
-      ]
-    : navigationByRole[role]
+    ? adminLinks
+    : user?.isModerator
+      ? moderatorLinks
+      : navigationByRole[role]
   const active = activeHref(pathname, links)
 
   return (

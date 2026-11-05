@@ -82,6 +82,7 @@ func main() {
 
 	// Initialize Services
 	eventService := service.NewEventService(eventRepo, orgRepo, tx)
+	locationService := service.NewLocationService(orgRepo, repository.NewLocationRepository(db))
 	bookingService := service.NewBookingService(tx, bookingRepo, paymentRepo)
 	paymentService := service.NewPaymentService(tx, bookingRepo, paymentRepo)
 	cartService := service.NewCartService(tx, bookingRepo, cartRepo, paymentRepo, service.DefaultReservationTTL)
@@ -99,6 +100,7 @@ func main() {
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
+	locationHandler := handler.NewLocationHandler(locationService)
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
 	paymentHandler := handler.NewPaymentHandler(paymentService, userRepo)
 	cartHandler := handler.NewCartHandler(cartService, userRepo)
@@ -150,6 +152,7 @@ func main() {
 			events.GET("/:eventId/available-seats", eventHandler.GetAvailableSeatsHandler)
 			events.GET("/:eventId/utilization-percentage", eventHandler.GetUtilizationPercentageHandler)
 		}
+		protected.GET("/locations", locationHandler.ListLocationsHandler)
 		adminUsers := v1.Group("/admin/users")
 		adminUsers.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 		{

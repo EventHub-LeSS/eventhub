@@ -493,14 +493,8 @@ func ownEvent(event *model.EventModel, location *model.LocationModel) *model.Own
 		Status:    event.Status,
 	}
 	if location != nil {
-		out.Location = &model.PublishedEventLocation{
-			LocationID:  location.LocationID,
-			Name:        location.Name,
-			City:        location.City,
-			PostalCode:  location.PostalCode,
-			Street:      location.Street,
-			HouseNumber: location.HouseNumber,
-		}
+		shown := model.LocationResponse(location)
+		out.Location = &shown
 	}
 	return out
 }

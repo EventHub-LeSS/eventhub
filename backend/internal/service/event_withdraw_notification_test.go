@@ -72,7 +72,7 @@ func newWithdrawFixture(event *model.EventModel, holders ...model.TicketHolder) 
 		events: &fakeEventRepo{event: event},
 		notifications: &fakeNotificationRepo{
 			now:      withdrawNow,
-			location: &model.LocationModel{Name: "Stadthalle", City: "Berlin"},
+			location: &model.LocationModel{AddressAddition: ptr("Stadthalle"), Street: "Messe", PostalCode: "10115", City: "Berlin"},
 		},
 		bookings: &fakeTicketHolderRepo{holders: holders},
 		audit:    &fakeAuditRepo{},

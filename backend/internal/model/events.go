@@ -52,7 +52,8 @@ type UpdateEventRequest struct {
 	Capacity    int             `json:"capacity" binding:"required,min=1"`
 	Price       decimal.Decimal `json:"price" binding:"gte=0"`
 	CategoryID  uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID  uuid.UUID       `json:"locationId" binding:"required"`
+	// Address of the event; the event is linked to the stored location with this address.
+	Location LocationInput `json:"location"`
 }
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
@@ -85,5 +86,7 @@ type CreateDraftRequest struct {
 	Capacity       int             `json:"capacity" binding:"required,min=1,max=100000"`
 	Price          decimal.Decimal `json:"price" binding:"gte=0,lte=10000"`
 	CategoryID     uuid.UUID       `json:"categoryId" binding:"required"`
-	LocationID     uuid.UUID       `json:"locationId" binding:"required"`
+	// Address of the event; the event is linked to the stored location with this address, which is
+	// created if there is none.
+	Location LocationInput `json:"location"`
 }

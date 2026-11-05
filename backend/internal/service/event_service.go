@@ -101,10 +101,14 @@ func (s *EventService) CreateDraft(ctx context.Context, keycloakOrgIDs []string,
 		Price:       req.Price,
 		CategoryID:  &req.CategoryID,
 		OrganizerID: &org.OrganizationID,
-		LocationID:  &req.LocationID,
 	}
 
 	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		location, err := tx.Locations.FindOrCreate(req.Location.Location())
+		if err != nil {
+			return err
+		}
+		event.LocationID = &location.LocationID
 		if err := tx.Events.CreateEvent(event); err != nil {
 			return err
 		}
@@ -196,7 +200,11 @@ func (s *EventService) UpdateEvent(
 		event.Capacity = req.Capacity
 		event.Price = req.Price
 		event.CategoryID = &req.CategoryID
-		event.LocationID = &req.LocationID
+		location, err := tx.Locations.FindOrCreate(req.Location.Location())
+		if err != nil {
+			return err
+		}
+		event.LocationID = &location.LocationID
 
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err

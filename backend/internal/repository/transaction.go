@@ -9,6 +9,7 @@ import (
 type Tx struct {
 	Notifications NotificationRepository
 	Events        EventRepository
+	Locations     LocationRepository
 	Organizations OrganizationRepository
 	Users         UserRepository
 	Audit         AuditLogRepository
@@ -33,6 +34,7 @@ func (t *transactor) InTransaction(ctx context.Context, fn func(tx Tx) error) er
 	return t.db.WithContext(ctx).Transaction(func(gdb *gorm.DB) error {
 		return fn(Tx{
 			Events:        NewEventRepository(gdb),
+			Locations:     NewLocationRepository(gdb),
 			Notifications: NewNotificationRepository(gdb),
 			Organizations: NewOrganizationRepository(gdb),
 			Users:         NewUserRepository(gdb),
