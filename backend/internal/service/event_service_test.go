@@ -300,7 +300,7 @@ func newTestServiceWithAudit(event *model.EventModel) (*EventService, *fakeEvent
 	}
 	tx := &fakeTransactor{
 		events: eventRepo, orgs: orgRepo, audit: auditRepo,
-		locations: locationRepo,
+		locations:     locationRepo,
 		notifications: &fakeNotificationRepo{}, bookings: &fakeTicketHolderRepo{},
 	}
 	return NewEventService(eventRepo, orgRepo, tx), eventRepo, auditRepo
