@@ -23,8 +23,6 @@ export interface SessionUser {
   role: UserRole
   /** Platform-wide admin, from the "admin" backend client role. Independent of `role`/organization membership. */
   isAdmin: boolean
-  /** Platform-wide moderator, from the "moderator" backend client role. Independent of `role`/organization membership. */
-  isModerator: boolean
   /** Roles in the active organization, e.g. event_manager to manage its events. */
   organizationRoles: OrganizationRole[]
 }
@@ -52,28 +50,20 @@ export function roleFor(organizations: string[]): UserRole {
 }
 
 /**
- * Reads a backend client role out of the (already Keycloak-issued) access token.
+ * Reads the "admin" backend client role out of the (already Keycloak-issued) access token.
  * Not signature-verified: this is only used to gate UI, the API re-checks on every request.
  */
-function hasBackendClientRole(accessToken: string, role: string): boolean {
+export function isAdminFromAccessToken(accessToken: string): boolean {
   try {
     const claims = decodeJwt(accessToken)
     const resourceAccess = claims.resource_access as
       | Record<string, { roles?: string[] }>
       | undefined
 
-    return Boolean(resourceAccess?.[BACKEND_CLIENT_ID]?.roles?.includes(role))
+    return Boolean(resourceAccess?.[BACKEND_CLIENT_ID]?.roles?.includes("admin"))
   } catch {
     return false
   }
-}
-
-export function isAdminFromAccessToken(accessToken: string): boolean {
-  return hasBackendClientRole(accessToken, "admin")
-}
-
-export function isModeratorFromAccessToken(accessToken: string): boolean {
-  return hasBackendClientRole(accessToken, "moderator")
 }
 
 /**
