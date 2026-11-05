@@ -7,9 +7,7 @@ import (
 	"backend/internal/repository"
 	"backend/internal/service"
 	"backend/internal/testdb"
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -289,22 +287,15 @@ func TestEventModerationListDatabase(t *testing.T) {
 func TestEventModerationConsistencyDatabase(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "moderation-consistency", model.EventStatusPublished)
-	userID := seedBookingUser(t, db, "moderation-buyer")
+	seedBookingUser(t, db, "moderation-buyer")
 	visitor := newOwnBookingRouter(db, &middleware.Principal{Subject: "moderation-buyer"})
-	bookings := service.NewBookingService(repository.NewBookingRepository(db), 0)
-	paidBooking, err := bookings.ReserveTickets(context.Background(), event.eventID, userID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	paid := payViaAPI(t, visitor, paidBooking.BookingID, model.SimulatedPaymentSuccess)
+	paidBookingID := addToCartViaAPI(t, visitor, event.eventID, 1)
+	paid := payViaAPI(t, visitor, model.SimulatedPaymentSuccess)
 	if !paid.TicketsValid {
 		t.Fatal("paid ticket should initially be valid")
 	}
-	pendingBooking, err := bookings.ReserveTickets(context.Background(), event.eventID, userID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pending := startPaymentViaAPI(t, visitor, pendingBooking.BookingID)
+	pendingBookingID := addToCartViaAPI(t, visitor, event.eventID, 1)
+	pending := checkoutViaAPI(t, visitor)
 	moderation := databaseModerationRouter(db, globalPrincipal(middleware.RoleAdmin))
 	path := "/" + event.eventID.String()
 	for _, body := range []string{`{"title":" Corrected title ","description":"Safe description","reason":" Offensive text "}`, `{"title":"Corrected title","description":"Safe description","reason":"Repeated"}`} {
@@ -331,16 +322,22 @@ func TestEventModerationConsistencyDatabase(t *testing.T) {
 	if candidates, err := repository.NewRecommendationRepository(db).ListCandidates(uuid.New()); err != nil || len(candidates) != 0 {
 		t.Fatalf("withdrawn recommendation: %+v %v", candidates, err)
 	}
-	if _, err := bookings.ReserveTickets(context.Background(), event.eventID, userID, 1); !errors.Is(err, service.ErrEventNotPublished) {
-		t.Fatalf("new booking accepted: %v", err)
+	if rec := doPaymentRequest(t, visitor, http.MethodPost, "/api/v1/cart/items", map[string]any{"eventId": event.eventID, "quantity": 1}); rec.Code != http.StatusConflict {
+		t.Fatalf("new cart reservation accepted: %d %s", rec.Code, rec.Body.String())
 	}
-	failed := simulateViaAPI(t, visitor, pendingBooking.BookingID, model.SimulatedPaymentSuccess, pending.Amount)
+	failed := simulateViaAPI(t, visitor, pending.PaymentID, model.SimulatedPaymentSuccess, pending.Amount)
 	if failed.TicketsValid || failed.Status != model.PaymentStatusFailed {
 		t.Fatalf("pending payment succeeded after moderation: %+v", failed)
 	}
-	storedPayment := decodePayment(t, doPaymentRequest(t, visitor, http.MethodGet, paymentPath(paidBooking.BookingID), nil))
+	if booking := getOwnBookingDetail(t, visitor, pendingBookingID); booking.BookingStatus != model.BookingStatusFailed || booking.TicketsValid {
+		t.Fatalf("pending booking survived moderation: %+v", booking)
+	}
+	storedPayment := decodePayment(t, doPaymentRequest(t, visitor, http.MethodGet, paymentPath(paid.PaymentID), nil))
 	if storedPayment.TicketsValid || storedPayment.Status != model.PaymentStatusPaid {
 		t.Fatalf("paid history or ticket validity inconsistent: %+v", storedPayment)
+	}
+	if booking := getOwnBookingDetail(t, visitor, paidBookingID); booking.BookingStatus != model.BookingStatusConfirmed || booking.TicketsValid {
+		t.Fatalf("paid booking history or ticket validity inconsistent: %+v", booking)
 	}
 	if rec := postPublish(t, newEventRouter(db, principalManaging("moderation-consistency")), event.eventID.String()); rec.Code != http.StatusBadRequest {
 		t.Fatalf("organizer republished moderated event: %d %s", rec.Code, rec.Body.String())
