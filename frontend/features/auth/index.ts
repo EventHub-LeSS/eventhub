@@ -9,6 +9,7 @@ export {
   getCurrentUser,
   getSession,
   requireAdmin,
+  requireModerator,
   requireOrganizer,
   requireSession,
 } from "@/features/auth/lib/dal"
