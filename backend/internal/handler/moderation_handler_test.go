@@ -21,14 +21,22 @@ import (
 )
 
 type moderationRepoStub struct {
+	repository.ModerationRepository
 	target  *model.RatingModerationTarget
 	lockErr error
 	updated []bool
 
-	listItems  []model.ModeratedRating
-	listErr    error
-	listFilter *model.ModeratedRatingFilter
-	listPage   [2]int
+	listItems   []model.ModeratedRating
+	listErr     error
+	listFilter  *model.ModeratedRatingFilter
+	listPage    [2]int
+	eventItems  []model.ModeratedEvent
+	eventFilter *model.ModeratedEventFilter
+}
+
+func (s *moderationRepoStub) ListEvents(filter model.ModeratedEventFilter, page, limit int) ([]model.ModeratedEvent, int64, error) {
+	s.eventFilter, s.listPage = &filter, [2]int{page, limit}
+	return s.eventItems, int64(len(s.eventItems)), s.listErr
 }
 
 func (s *moderationRepoStub) ListRatings(filter model.ModeratedRatingFilter, page, limit int) ([]model.ModeratedRating, int64, error) {
@@ -63,11 +71,13 @@ type moderationTxStub struct {
 	ratings *moderationRepoStub
 	audit   *moderationAuditStub
 	calls   int
+	events  repository.EventRepository
+	orgs    repository.OrganizationRepository
 }
 
 func (s *moderationTxStub) InTransaction(_ context.Context, fn func(repository.Tx) error) error {
 	s.calls++
-	return fn(repository.Tx{Moderation: s.ratings, Audit: s.audit})
+	return fn(repository.Tx{Moderation: s.ratings, Audit: s.audit, Events: s.events, Organizations: s.orgs})
 }
 
 func newModerationTxStub(target *model.RatingModerationTarget) *moderationTxStub {
@@ -100,6 +110,10 @@ func moderationRouter(s *service.ModerationService, principal *middleware.Princi
 	}, middleware.RequireGlobalRole(middleware.RoleAdmin, middleware.RoleModerator))
 	g.GET("/ratings", h.ListRatingsHandler)
 	g.PUT("/ratings/:ratingId/visibility", middleware.Audit(audit.RatingVisibilityChanged), h.SetRatingVisibilityHandler)
+	g.GET("/events", h.ListEventsHandler)
+	g.GET("/events/:eventId", h.GetEventHandler)
+	g.PATCH("/events/:eventId/content", middleware.Audit(audit.EventModerated), h.EditEventContentHandler)
+	g.POST("/events/:eventId/withdraw", middleware.Audit(audit.EventModerated), h.WithdrawEventHandler)
 	return r
 }
 
@@ -109,6 +123,130 @@ func putRatingVisibility(router http.Handler, ratingID, body string) *httptest.R
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+type moderationEventRepoStub struct {
+	repository.EventRepository
+	event *model.EventModel
+	err   error
+}
+
+func (s *moderationEventRepoStub) LockEvent(uuid.UUID) (*model.EventModel, error) {
+	return s.event, s.err
+}
+
+func (s *moderationEventRepoStub) UpdateEvent(event *model.EventModel) error {
+	s.event = event
+	return s.err
+}
+
+func requestEventModeration(router http.Handler, method, path, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, "/api/v1/moderation/events"+path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestEventModerationAuthorization(t *testing.T) {
+	for _, principal := range []struct {
+		name      string
+		principal *middleware.Principal
+		want      int
+	}{
+		{"anonymous", nil, http.StatusUnauthorized},
+		{"visitor", globalPrincipal(middleware.RoleVisitor), http.StatusForbidden},
+		{"organization manager", principalManaging("org-kc"), http.StatusForbidden},
+		{"admin", globalPrincipal(middleware.RoleAdmin), http.StatusOK},
+		{"moderator", globalPrincipal(middleware.RoleModerator), http.StatusOK},
+	} {
+		for _, endpoint := range []struct{ method, suffix, body string }{
+			{http.MethodGet, "", ""},
+			{http.MethodGet, "/%s", ""},
+			{http.MethodPatch, "/%s/content", `{"title":"Corrected","reason":"Offensive text"}`},
+			{http.MethodPost, "/%s/withdraw", `{"reason":"Confirmed fraud"}`},
+		} {
+			t.Run(principal.name+endpoint.method+endpoint.suffix, func(t *testing.T) {
+				event := &model.EventModel{EventID: uuid.New(), Title: "Original", Status: model.EventStatusPublished}
+				tx := newModerationTxStub(nil)
+				tx.events = &moderationEventRepoStub{event: event}
+				tx.ratings.eventItems = []model.ModeratedEvent{{EventModel: *event}}
+				path := strings.ReplaceAll(endpoint.suffix, "%s", event.EventID.String())
+				rec := requestEventModeration(moderationRouter(tx.service(), principal.principal), endpoint.method, path, endpoint.body)
+				if rec.Code != principal.want {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				if principal.want != http.StatusOK && (tx.calls != 0 || tx.ratings.eventFilter != nil || len(tx.audit.entries) != 0 || event.Status != model.EventStatusPublished || event.Title != "Original") {
+					t.Fatal("unauthorized request reached moderation logic")
+				}
+			})
+		}
+	}
+}
+
+func TestEventModerationRejectsInvalidInput(t *testing.T) {
+	eventID := uuid.NewString()
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodGet, "?status=unknown", ""},
+		{http.MethodGet, "?organizationId=invalid", ""},
+		{http.MethodGet, "?page=0", ""},
+		{http.MethodGet, "?limit=101", ""},
+		{http.MethodGet, "?limit=2&page=" + strconv.Itoa(math.MaxInt), ""},
+		{http.MethodGet, "/invalid", ""},
+		{http.MethodPost, "/invalid/withdraw", `{"reason":"Fraud"}`},
+		{http.MethodPost, "/" + eventID + "/withdraw", `{}`},
+		{http.MethodPost, "/" + eventID + "/withdraw", `{"reason":"   "}`},
+		{http.MethodPost, "/" + eventID + "/withdraw", `{"reason":"` + strings.Repeat("x", 1001) + `"}`},
+		{http.MethodPatch, "/invalid/content", `{"title":"Valid","reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"title":"Valid"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"title":null,"description":null,"reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"title":" x ","reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"title":"` + strings.Repeat("x", 201) + `","reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"description":"` + strings.Repeat("x", 5001) + `","reason":"Text"}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"description":"","reason":" "}`},
+		{http.MethodPatch, "/" + eventID + "/content", `{"description":"","reason":"` + strings.Repeat("x", 1001) + `"}`},
+	} {
+		t.Run(tc.method+tc.path+strconv.Itoa(len(tc.body)), func(t *testing.T) {
+			tx := newModerationTxStub(nil)
+			rec := requestEventModeration(moderationRouter(tx.service(), globalPrincipal(middleware.RoleAdmin)), tc.method, tc.path, tc.body)
+			if rec.Code != http.StatusBadRequest || tx.calls != 0 || tx.ratings.eventFilter != nil {
+				t.Fatalf("status=%d body=%s transactions=%d", rec.Code, rec.Body.String(), tx.calls)
+			}
+		})
+	}
+}
+
+func TestEventModerationFiltersAndErrors(t *testing.T) {
+	tx := newModerationTxStub(nil)
+	router := moderationRouter(tx.service(), globalPrincipal(middleware.RoleAdmin))
+	organizationID := uuid.New()
+	rec := requestEventModeration(router, http.MethodGet, "?status=cancelled&organizationId="+organizationID.String()+"&page=2&limit=5", "")
+	if rec.Code != http.StatusOK || tx.ratings.eventFilter.Status != model.EventStatusCancelled || *tx.ratings.eventFilter.OrganizationID != organizationID || tx.ratings.listPage != [2]int{2, 5} {
+		t.Fatalf("filters not forwarded: %d %s", rec.Code, rec.Body.String())
+	}
+	eventID := uuid.New()
+	tx.events = &moderationEventRepoStub{}
+	for _, endpoint := range []struct{ method, path, body string }{
+		{http.MethodGet, "/" + eventID.String(), ""},
+		{http.MethodPatch, "/" + eventID.String() + "/content", `{"title":"Fixed","reason":"Text"}`},
+		{http.MethodPost, "/" + eventID.String() + "/withdraw", `{"reason":"Fraud"}`},
+	} {
+		if rec := requestEventModeration(router, endpoint.method, endpoint.path, endpoint.body); rec.Code != http.StatusNotFound {
+			t.Fatalf("unknown event: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	privateErr := errors.New("private database details")
+	tx.ratings.listErr = privateErr
+	for _, path := range []string{"", "/" + eventID.String()} {
+		if rec := requestEventModeration(router, http.MethodGet, path, ""); rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), privateErr.Error()) {
+			t.Fatalf("database failure leaked: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	tx.events = &moderationEventRepoStub{event: &model.EventModel{EventID: eventID, Status: model.EventStatusCompleted}}
+	if rec := requestEventModeration(router, http.MethodPost, "/"+eventID.String()+"/withdraw", `{"reason":"Fraud"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("completed event: %d %s", rec.Code, rec.Body.String())
+	}
 }
 
 func decodeRatingVisibility(t *testing.T, rec *httptest.ResponseRecorder) model.RatingVisibilityResponse {
