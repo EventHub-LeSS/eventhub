@@ -151,7 +151,7 @@ func (h *EventHandler) UpdateEventHandler(c *gin.Context) {
 
 // EVENTHUB-76: Veranstaltung veröffentlichen
 // @Summary      Publish event
-// @Description  Publishes a draft event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft can be published. If the event is already published, returns 400 with detail "this event is already published".
+// @Description  Publishes a draft event or republishes a withdrawn (cancelled) event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft or cancelled can be published. Events withdrawn by moderation cannot be republished by organizers. Existing bookings are preserved and are not reactivated or duplicated. If the event is already published, returns 400 with detail "this event is already published".
 // @Tags         events
 // @Security     BearerAuth
 // @Produce      json
@@ -264,6 +264,10 @@ func writeEventActionError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrInvalidStatus):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrIncomplete):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrModerationWithdrawal):
+		writeProblem(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrNotCancelled):
 		writeProblem(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrNotDraft):
 		writeProblem(c, http.StatusBadRequest, err.Error())
@@ -577,4 +581,36 @@ func (h *EventHandler) GetUtilizationPercentageHandler(c *gin.Context) {
 		EventID:               statistics.EventID,
 		UtilizationPercentage: statistics.UtilizationPercentage,
 	})
+}
+
+// RestoreEventAsDraftHandler handles EVENTHUB-290.
+// @Summary Restore withdrawn event as draft
+// @Description Returns a cancelled event to draft so the owning organization can edit and publish it again. Requires event_manager in the owning organization. Only events withdrawn by their organizer are accepted; moderation withdrawals, completed, published and draft events return 400. Event ID, content and bookings are preserved. Incomplete events may be restored for editing; publication still checks completeness. The draft remains hidden from public listings and cannot be booked.
+// @Tags events
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Event UUID"
+// @Success 200 {object} model.EventModel
+// @Failure 400 {object} model.ErrorResponse
+// @Failure 401 {object} model.APIError
+// @Failure 403 {object} model.ErrorResponse
+// @Failure 404 {object} model.ErrorResponse
+// @Failure 500 {object} model.ErrorResponse
+// @Router /events/{id}/restore-draft [post]
+func (h *EventHandler) RestoreEventAsDraftHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "invalid event id")
+		return
+	}
+	orgIDs, ok := managedOrganizationIDs(c)
+	if !ok {
+		return
+	}
+	restored, err := h.eventService.RestoreEventAsDraft(c.Request.Context(), eventID, orgIDs)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, restored)
 }

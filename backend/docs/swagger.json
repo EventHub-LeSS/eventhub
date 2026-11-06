@@ -1496,7 +1496,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Publishes a draft event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft can be published. If the event is already published, returns 400 with detail \"this event is already published\".",
+                "description": "Publishes a draft event or republishes a withdrawn (cancelled) event so that visitors can find and book it. Requires the event_manager role in the organization that owns the event. Only sufficiently complete events in status draft or cancelled can be published. Events withdrawn by moderation cannot be republished by organizers. Existing bookings are preserved and are not reactivated or duplicated. If the event is already published, returns 400 with detail \"this event is already published\".",
                 "produces": [
                     "application/json"
                 ],
@@ -1622,6 +1622,70 @@
                     },
                     "409": {
                         "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/events/{id}/restore-draft": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a cancelled event to draft so the owning organization can edit and publish it again. Requires event_manager in the owning organization. Only events withdrawn by their organizer are accepted; moderation withdrawals, completed, published and draft events return 400. Event ID, content and bookings are preserved. Incomplete events may be restored for editing; publication still checks completeness. The draft remains hidden from public listings and cannot be booked.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Restore withdrawn event as draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -2155,7 +2219,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires admin or moderator and a reason of 1-1000 characters after trimming. Draft and published events become cancelled and disappear from public lists, details and recommendations. New bookings and payment completion are rejected; existing bookings and payments remain in the history and tickets are invalid. No automatic refunds. Completed events return 409. Already cancelled events return changed=false without another audit entry. The status change, reason and actor are recorded atomically.",
+                "description": "Requires admin or moderator and a reason of 1-1000 characters after trimming. Draft and published events become cancelled and disappear from public lists, details and recommendations. New bookings and payment completion are rejected; existing bookings and payments remain in the history and tickets are invalid. No automatic refunds. Completed events return 409. Events already withdrawn by moderation return changed=false without another audit entry. Events previously withdrawn by their organizer receive a moderation block so they cannot be restored or republished by organizers. The status change, reason and actor are recorded atomically.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3986,6 +4050,9 @@
                 },
                 "updatedAt": {
                     "type": "string"
+                },
+                "withdrawnByModerator": {
+                    "type": "boolean"
                 }
             }
         },
@@ -4158,6 +4225,9 @@
                 },
                 "updatedAt": {
                     "type": "string"
+                },
+                "withdrawnByModerator": {
+                    "type": "boolean"
                 }
             }
         },

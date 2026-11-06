@@ -12,6 +12,7 @@ func TestModerationWithdrawEvent(t *testing.T) {
 	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
 		t.Run(string(status), func(t *testing.T) {
 			event := eventOwnedBy(orgB, status)
+			event.WithdrawnByModerator = status == model.EventStatusCancelled
 			base, events, entries := newTestServiceWithAudit(event)
 			svc := NewModerationService(base.tx, nil)
 			result, err := svc.WithdrawEvent(auditCtx(audit.EventModerated), event.EventID, "Confirmed fraud")
@@ -59,6 +60,7 @@ func TestModerationEditEventContent(t *testing.T) {
 	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusPublished, model.EventStatusCancelled, model.EventStatusCompleted} {
 		t.Run(string(status), func(t *testing.T) {
 			event := eventOwnedBy(orgB, status)
+			event.WithdrawnByModerator = status == model.EventStatusCancelled
 			before := *event
 			base, events, entries := newTestServiceWithAudit(event)
 			svc := NewModerationService(base.tx, nil)

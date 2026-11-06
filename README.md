@@ -610,3 +610,27 @@ dient der ursprüngliche Erstellungszeitpunkt als stabile Untergrenze.
 Geänderte Erinnerungen werden wieder ungelesen. Auch eine erneute Simulation
 aktualisiert die bestehende Erinnerung. Es gibt weiterhin keinen Versandjob;
 vor einem späteren echten Versand müsste dieser Abgleich ebenfalls erfolgen.
+### Zurückgezogene Veranstaltungen erneut verwenden (EVENTHUB-290)
+
+Veranstalter mit event_manager in der zugehörigen Organisation können beide
+Wege nutzen:
+
+- POST /api/v1/events/{id}/restore-draft: cancelled wird draft. Der vorhandene
+  Datensatz mit seiner ID bleibt erhalten und kann über PUT /api/v1/events/{id}
+  bearbeitet und anschließend über POST /api/v1/events/{id}/publish publiziert
+  werden. Unvollständige Veranstaltungen dürfen zur Bearbeitung zurück in den
+  Entwurf; erst die Veröffentlichung verlangt vollständige Daten.
+- POST /api/v1/events/{id}/publish: erlaubt neben draft jetzt auch cancelled
+  und veröffentlicht die Veranstaltung direkt erneut.
+
+Der Entwurf bleibt öffentlich unsichtbar und nicht buchbar. Buchungen werden
+weder dupliziert noch reaktiviert; die Kapazitätsprüfung beim Bearbeiten bleibt
+bestehen. Completed-Veranstaltungen dürfen nicht wiederhergestellt oder
+erneut veröffentlicht werden. Statuswechsel werden unter derselben Event-Sperre
+und atomar mit dem Audit-Eintrag gespeichert; der Eintrag hält Ausgangs- und
+Zielstatus fest (event.restored_as_draft beziehungsweise event.published).
+Migration 000014 unterscheidet selbst zurückgezogene Veranstaltungen von
+Moderationssperren (withdrawnByModerator). Bestehende, im Audit protokollierte
+Moderationsrückzüge werden übernommen. Durch Moderation zurückgezogene Events
+bleiben für beide Veranstalteraktionen gesperrt; ein Moderator kann auch eine
+bereits vom Veranstalter zurückgezogene Veranstaltung nachträglich sperren.

@@ -146,6 +146,7 @@ func main() {
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
+			events.POST("/:id/restore-draft", middleware.Audit(audit.EventRestoredAsDraft), eventHandler.RestoreEventAsDraftHandler)
 			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)
 			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
