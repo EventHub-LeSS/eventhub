@@ -245,6 +245,37 @@ func TestRepublishCancelledConcurrentRequests(t *testing.T) {
 	}
 }
 
+func TestRepublishRestoresTicketValidity(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "republish-tickets", model.EventStatusPublished)
+	seedBookingUser(t, db, "republish-ticket-buyer")
+	visitor := newOwnBookingRouter(db, &middleware.Principal{Subject: "republish-ticket-buyer"})
+	bookingID := addToCartViaAPI(t, visitor, event.eventID, 1)
+	if paid := payViaAPI(t, visitor, model.SimulatedPaymentSuccess); !paid.TicketsValid {
+		t.Fatal("paid ticket should initially be valid")
+	}
+	wantTickets := func(step string, valid bool) {
+		t.Helper()
+		booking := getOwnBookingDetail(t, visitor, bookingID)
+		if booking.BookingStatus != model.BookingStatusConfirmed || booking.TicketsValid != valid {
+			t.Fatalf("%s: %+v", step, booking)
+		}
+	}
+	organizer := newEventRouter(db, principalManaging("republish-tickets"))
+	if rec := postWithdraw(t, organizer, event.eventID.String()); rec.Code != http.StatusOK {
+		t.Fatalf("withdraw=%s", rec.Body.String())
+	}
+	wantTickets("withdrawn", false)
+	if rec := postRestoreDraft(organizer, event.eventID.String()); rec.Code != http.StatusOK {
+		t.Fatalf("restore=%s", rec.Body.String())
+	}
+	wantTickets("restored draft", false)
+	if rec := postPublish(t, organizer, event.eventID.String()); rec.Code != http.StatusOK {
+		t.Fatalf("republish=%s", rec.Body.String())
+	}
+	wantTickets("republished", true)
+}
+
 func TestModerationWithdrawalBlocksRestoreAndRepublish(t *testing.T) {
 	db := testdb.Open(t)
 	router := newEventRouter(db, principalManaging("moderation-block"))

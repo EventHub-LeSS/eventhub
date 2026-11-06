@@ -26,7 +26,6 @@ func IsValidEventStatus(status EventStatus) bool {
 }
 
 type EventModel struct {
-	WithdrawnByModerator bool            `json:"withdrawnByModerator" gorm:"column:withdrawn_by_moderator"`
 	EventID              uuid.UUID       `json:"eventId" gorm:"column:event_id;type:uuid;primaryKey"`
 	Title                string          `json:"title" gorm:"column:title"`
 	Description          *string         `json:"description" gorm:"column:description"`
@@ -34,6 +33,7 @@ type EventModel struct {
 	EndTime              time.Time       `json:"endTime" gorm:"column:end_time"`
 	Capacity             int             `json:"capacity" gorm:"column:capacity"`
 	Status               EventStatus     `json:"status" gorm:"column:status"`
+	WithdrawnByModerator bool            `json:"withdrawnByModerator" gorm:"column:withdrawn_by_moderator"`
 	Price                decimal.Decimal `json:"price" gorm:"column:price;type:numeric(12,2)"`
 	CategoryID           *uuid.UUID      `json:"categoryId" gorm:"column:category_id;type:uuid"`
 	OrganizerID          *uuid.UUID      `json:"organizerId" gorm:"column:organizer_id;type:uuid"`

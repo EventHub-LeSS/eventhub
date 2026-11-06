@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestRestoreEventAsDraft_OwnershipAndStatus(t *testing.T) {
@@ -28,7 +30,11 @@ func TestRestoreEventAsDraft_OwnershipAndStatus(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, repo, audits := newTestServiceWithAudit(tc.event)
-			restored, err := svc.RestoreEventAsDraft(auditCtx(audit.EventRestoredAsDraft), orgB.OrganizationID, tc.orgs)
+			eventID := uuid.New()
+			if tc.event != nil {
+				eventID = tc.event.EventID
+			}
+			restored, err := svc.RestoreEventAsDraft(auditCtx(audit.EventRestoredAsDraft), eventID, tc.orgs)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("err=%v want=%v", err, tc.want)
 			}

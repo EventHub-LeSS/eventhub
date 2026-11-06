@@ -113,15 +113,14 @@ func (s *ModerationService) WithdrawEvent(ctx context.Context, eventID uuid.UUID
 			return ErrInvalidStatus
 		}
 		before := event.Status
-		previouslyBlocked := event.WithdrawnByModerator
 		event.WithdrawnByModerator = true
 		event.Status = model.EventStatusCancelled
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
 		}
-		fields := map[string]any{"status": fieldChange(string(before), string(event.Status))}
-		if !previouslyBlocked {
-			fields["withdrawnByModerator"] = fieldChange(false, true)
+		fields := map[string]any{"withdrawnByModerator": fieldChange(false, true)}
+		if before != model.EventStatusCancelled {
+			fields["status"] = fieldChange(string(before), string(event.Status))
 		}
 		changes := model.AuditChanges{"fields": fields, "reason": reason}
 		if err := appendModeratedEventAudit(tx, meta, event, changes); err != nil {

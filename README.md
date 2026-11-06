@@ -527,14 +527,18 @@ weggelassene Felder bleiben unveraendert. Inhaltskorrekturen sind in jedem
 Eventstatus moeglich und veraendern weder Preis, Kapazitaet, Termine,
 Veranstalter noch Status. Die Antwort enthaelt `eventId`, `status`, `changed`.
 
-Zurueckziehen setzt Entwuerfe und veroeffentlichte Events auf `cancelled`.
-Bereits abgesagte Events bleiben unveraendert; abgeschlossene Events ergeben
-`409`. Zurueckgezogene Events verschwinden aus oeffentlichen Listen, Details
+Zurueckziehen setzt Entwuerfe und veroeffentlichte Events auf `cancelled` und
+sperrt sie fuer Veranstalter (`withdrawnByModerator`). Vom Veranstalter bereits
+abgesagte Events behalten den Status `cancelled` und erhalten nachtraeglich
+diese Sperre (`changed=true`); bereits durch Moderation zurueckgezogene Events
+bleiben unveraendert. Abgeschlossene Events ergeben `409`. Zurueckgezogene
+Events verschwinden aus oeffentlichen Listen, Details
 und Empfehlungen. Neue Buchungen und der Abschluss offener Zahlungen sind
 nicht mehr moeglich, bereits bezahlte Tickets sind ungueltig. Buchungen und
 Zahlungen bleiben in der Historie erhalten; es erfolgen keine automatischen
-Rueckerstattungen. Veranstalter koennen abgesagte Events nicht erneut
-veroeffentlichen.
+Rueckerstattungen. Veranstalter koennen durch Moderation zurueckgezogene Events
+weder als Entwurf wiederherstellen noch erneut veroeffentlichen (siehe
+EVENTHUB-290).
 
 Status- und Textaenderungen werden als `event.moderated` mit vorherigen und
 neuen Werten, Begründung und handelndem Konto im Organisations-Audit-Log
@@ -610,6 +614,7 @@ dient der ursprüngliche Erstellungszeitpunkt als stabile Untergrenze.
 Geänderte Erinnerungen werden wieder ungelesen. Auch eine erneute Simulation
 aktualisiert die bestehende Erinnerung. Es gibt weiterhin keinen Versandjob;
 vor einem späteren echten Versand müsste dieser Abgleich ebenfalls erfolgen.
+
 ### Zurückgezogene Veranstaltungen erneut verwenden (EVENTHUB-290)
 
 Veranstalter mit event_manager in der zugehörigen Organisation können beide
@@ -624,8 +629,14 @@ Wege nutzen:
   und veröffentlicht die Veranstaltung direkt erneut.
 
 Der Entwurf bleibt öffentlich unsichtbar und nicht buchbar. Buchungen werden
-weder dupliziert noch reaktiviert; die Kapazitätsprüfung beim Bearbeiten bleibt
-bestehen. Completed-Veranstaltungen dürfen nicht wiederhergestellt oder
+weder dupliziert noch in ihrem Status verändert; die Kapazitätsprüfung beim
+Bearbeiten bleibt bestehen. Die Gültigkeit von Tickets folgt dem Eventstatus:
+Solange die Veranstaltung zurückgezogen oder Entwurf ist, sind Tickets
+ungültig. Nach der erneuten Veröffentlichung gelten bezahlte, bestätigte
+Buchungen wieder als gültige Tickets, und Erinnerungen lassen sich wieder
+erzeugen. Ticketinhaber werden darüber nicht gesondert benachrichtigt; wer in
+der Zwischenzeit storniert hat, bleibt storniert. Completed-Veranstaltungen
+dürfen nicht wiederhergestellt oder
 erneut veröffentlicht werden. Statuswechsel werden unter derselben Event-Sperre
 und atomar mit dem Audit-Eintrag gespeichert; der Eintrag hält Ausgangs- und
 Zielstatus fest (event.restored_as_draft beziehungsweise event.published).

@@ -5,7 +5,7 @@ UPDATE events AS e SET withdrawn_by_moderator = TRUE
 WHERE e.status = 'cancelled' AND EXISTS (
     SELECT 1 FROM audit_logs AS a
     WHERE a.resource_type = 'event' AND a.resource_id = e.event_id::text
-      AND a.action = 'event.moderated'
+      AND a.action = 'event.moderated' AND a.phase = 'completed'
       AND a.changes #>> '{fields,status,to}' = 'cancelled'
 );
 ALTER TABLE events ADD CONSTRAINT events_moderator_withdrawal_status

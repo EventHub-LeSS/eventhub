@@ -39,6 +39,23 @@ func TestModerationWithdrawEvent(t *testing.T) {
 	}
 }
 
+func TestModerationWithdrawEventBlocksOrganizerWithdrawal(t *testing.T) {
+	event := eventOwnedBy(orgB, model.EventStatusCancelled)
+	base, events, entries := newTestServiceWithAudit(event)
+	svc := NewModerationService(base.tx, nil)
+	result, err := svc.WithdrawEvent(auditCtx(audit.EventModerated), event.EventID, "Confirmed fraud")
+	if err != nil || !result.Changed || events.saved == nil || !events.saved.WithdrawnByModerator || events.saved.Status != model.EventStatusCancelled {
+		t.Fatalf("result=%+v err=%v saved=%+v", result, err, events.saved)
+	}
+	fields := singleEntry(t, entries).Changes["fields"].(map[string]any)
+	if _, ok := fields["status"]; ok {
+		t.Fatalf("unchanged status recorded: %+v", fields)
+	}
+	if change := fields["withdrawnByModerator"].(map[string]any); change["from"] != false || change["to"] != true {
+		t.Fatalf("block not recorded: %+v", fields)
+	}
+}
+
 func TestModerationWithdrawEventFailures(t *testing.T) {
 	event := eventOwnedBy(nil, model.EventStatusPublished)
 	base, events, entries := newTestServiceWithAudit(event)

@@ -18,7 +18,7 @@ func TestModeratorWithdrawalMigrationPreservesExistingBlocks(t *testing.T) {
 	// Temporary tables shadow the real tables only on this connection.
 	for _, stmt := range []string{
 		"CREATE TEMP TABLE events (event_id UUID PRIMARY KEY,status TEXT NOT NULL) ON COMMIT DROP",
-		"CREATE TEMP TABLE audit_logs (resource_type TEXT,resource_id TEXT,action TEXT,changes JSONB) ON COMMIT DROP",
+		"CREATE TEMP TABLE audit_logs (resource_type TEXT,resource_id TEXT,action TEXT,phase TEXT,changes JSONB) ON COMMIT DROP",
 	} {
 		if err := tx.Exec(stmt).Error; err != nil {
 			t.Fatal(err)
@@ -26,18 +26,19 @@ func TestModeratorWithdrawalMigrationPreservesExistingBlocks(t *testing.T) {
 	}
 	moderated := uuid.New()
 	for _, row := range []struct {
-		id                      uuid.UUID
-		status, action, changes string
+		id                             uuid.UUID
+		status, action, phase, changes string
 	}{
-		{moderated, "cancelled", "event.moderated", `{"fields":{"status":{"from":"published","to":"cancelled"}}}`},
-		{uuid.New(), "cancelled", "event.cancelled", `{"fields":{"status":{"to":"cancelled"}}}`},
-		{uuid.New(), "cancelled", "event.moderated", `{"fields":{"title":{"to":"Corrected"}}}`},
-		{uuid.New(), "completed", "event.moderated", `{"fields":{"status":{"to":"cancelled"}}}`},
+		{moderated, "cancelled", "event.moderated", "completed", `{"fields":{"status":{"from":"published","to":"cancelled"}}}`},
+		{uuid.New(), "cancelled", "event.cancelled", "completed", `{"fields":{"status":{"to":"cancelled"}}}`},
+		{uuid.New(), "cancelled", "event.moderated", "completed", `{"fields":{"title":{"to":"Corrected"}}}`},
+		{uuid.New(), "cancelled", "event.moderated", "started", `{"fields":{"status":{"to":"cancelled"}}}`},
+		{uuid.New(), "completed", "event.moderated", "completed", `{"fields":{"status":{"to":"cancelled"}}}`},
 	} {
 		if err := tx.Exec("INSERT INTO events (event_id,status) VALUES (?,?)", row.id, row.status).Error; err != nil {
 			t.Fatal(err)
 		}
-		if err := tx.Exec("INSERT INTO audit_logs (resource_type,resource_id,action,changes) VALUES ('event',?,?,?::jsonb)", row.id.String(), row.action, row.changes).Error; err != nil {
+		if err := tx.Exec("INSERT INTO audit_logs (resource_type,resource_id,action,phase,changes) VALUES ('event',?,?,?,?::jsonb)", row.id.String(), row.action, row.phase, row.changes).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
