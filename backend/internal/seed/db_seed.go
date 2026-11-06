@@ -175,53 +175,59 @@ type eventDef struct {
 	category  string
 	orgName   string
 	location  string
+	// image names an embedded seed image; empty means the event has no image.
+	image string
 }
 
 func (s *DBSeeder) seedEvents(_ context.Context) error {
 	log.Println("db: seeding events...")
 	now := time.Now()
+	images, err := seedEventImages()
+	if err != nil {
+		return err
+	}
 	events := []eventDef{
-		{"evt-1", "Summer Beats Festival", "Open-air music festival featuring top DJs and live acts.", 30, 31, 5000, model.EventStatusPublished, "49.90", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-2", "Rock am Ring Preview", "Preview night with legendary rock bands before the main festival.", 45, 46, 30000, model.EventStatusPublished, "89.00", "Music", "Telekom", "Olympiahalle München"},
-		{"evt-3", "Bremen Comedy Night", "An evening of stand-up comedy with national and local talent.", 14, 15, 300, model.EventStatusPublished, "24.50", "Comedy", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-4", "Electronic Dance Festival", "Two-day open-air electronic music festival.", 60, 61, 8000, model.EventStatusDraft, "39.90", "Music", "ACME Events", "Treptower Park Berlin"},
-		{"evt-5", "Food Truck Festival Frankfurt", "Over 50 food trucks serving street food from around the world.", 20, 22, 5000, model.EventStatusPublished, "12.00", "Food & Drink", "Telekom", "Frankfurt Festplatz"},
-		{"evt-6", "Art Exhibition: Modern Visions", "Contemporary art from emerging European artists.", 10, 24, 200, model.EventStatusPublished, "12.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-7", "Indie Night Live", "Up-and-coming indie bands in an intimate setting.", 35, 36, 400, model.EventStatusPublished, "18.00", "Music", "ACME Events", "Musikhalle Hamburg"},
-		{"evt-8", "Open Air Cinema Berlin", "Outdoor film screenings under the stars.", 50, 51, 1500, model.EventStatusDraft, "15.00", "Film", "Telekom", "Treptower Park Berlin"},
-		{"evt-9", "Winter Gala Concert", "Classical music gala with full symphony orchestra.", -5, -4, 600, model.EventStatusCompleted, "65.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-10", "Street Food Festival Bremen", "A weekend of street food, live cooking and local craft beer.", 28, 29, 3000, model.EventStatusCancelled, "8.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-11", "Jazz & Blues Night", "An evening of smooth jazz and blues in a relaxed atmosphere.", 40, 41, 800, model.EventStatusPublished, "32.00", "Music", "Telekom", "Olympiahalle München"},
-		{"evt-12", "Comedy Gala Hamburg", "A night of laughter with five top comedians.", 55, 56, 500, model.EventStatusPublished, "28.00", "Comedy", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-13", "München Marathon Expo", "Expo and registration event ahead of the city marathon.", 18, 19, 10000, model.EventStatusPublished, "25.00", "Sports", "Telekom", "Olympiahalle München"},
-		{"evt-14", "Berlin Beer Festival", "A weekend of craft beer, local breweries and live music.", 25, 27, 6000, model.EventStatusPublished, "14.00", "Food & Drink", "ACME Events", "Treptower Park Berlin"},
-		{"evt-15", "Classical Nights München", "An elegant evening of Mozart and Beethoven with a full orchestra.", 38, 39, 1200, model.EventStatusPublished, "55.00", "Music", "Telekom", "Olympiahalle München"},
-		{"evt-16", "Football Fan Fest Frankfurt", "Live screening of the finals with food trucks and fan zones.", 33, 34, 20000, model.EventStatusPublished, "0.00", "Sports", "Telekom", "Frankfurt Festplatz"},
-		{"evt-17", "Digital Art Expo Bremen", "Interactive digital art installations from emerging creators.", 12, 26, 350, model.EventStatusPublished, "10.00", "Exhibition", "Provadis Hochschule", "Stadthalle Bremen"},
-		{"evt-18", "Outdoor Cinema Hamburg", "Open-air screenings of cult classics by the river.", 48, 49, 800, model.EventStatusDraft, "12.50", "Film", "ACME Events", "Musikhalle Hamburg"},
-		{"evt-19", "Stand-up Showcase Berlin", "A showcase of the funniest new stand-up talent in Germany.", 22, 23, 500, model.EventStatusPublished, "20.00", "Comedy", "ACME Events", "Treptower Park Berlin"},
-		{"evt-20", "Oktoberfest Preview München", "A two-day taste of Oktoberfest with traditional food and beer.", 42, 44, 15000, model.EventStatusPublished, "35.00", "Food & Drink", "Telekom", "Olympiahalle München"},
-		{"evt-21", "Indie Film Marathon Hamburg", "Back-to-back indie film screenings with director Q&As.", 52, 53, 300, model.EventStatusPublished, "9.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-22", "Frankfurt Wine Tasting", "Sample wines from the Rheingau paired with regional specialties.", 16, 17, 250, model.EventStatusPublished, "45.00", "Food & Drink", "Provadis Hochschule", "Frankfurt Festplatz"},
-		{"evt-23", "Esports Championship Berlin", "Two-day esports tournament with international teams and a big prize pool.", 70, 72, 5000, model.EventStatusPublished, "30.00", "Sports", "ACME Events", "Treptower Park Berlin"},
-		{"evt-24", "New Year's Eve Gala Hamburg", "Ring in the new year with a gala dinner, live band and fireworks.", 112, 113, 800, model.EventStatusPublished, "75.00", "Music", "Stadthalle Bremen", "Musikhalle Hamburg"},
-		{"evt-25", "Spring Awakening Concert", "A fresh season opener with orchestral and choral pieces.", 120, 121, 1000, model.EventStatusDraft, "22.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-26", "Vintage Car Exhibition Bremen", "A weekend exhibition of classic cars and restoration workshops.", 8, 9, 600, model.EventStatusCancelled, "18.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
+		{"evt-1", "Summer Beats Festival", "Open-air music festival featuring top DJs and live acts.", 30, 31, 5000, model.EventStatusPublished, "49.90", "Music", "Provadis Hochschule", "Musikhalle Hamburg", "festival"},
+		{"evt-2", "Rock am Ring Preview", "Preview night with legendary rock bands before the main festival.", 45, 46, 30000, model.EventStatusPublished, "89.00", "Music", "Telekom", "Olympiahalle München", "festival"},
+		{"evt-3", "Bremen Comedy Night", "An evening of stand-up comedy with national and local talent.", 14, 15, 300, model.EventStatusPublished, "24.50", "Comedy", "Stadthalle Bremen", "Stadthalle Bremen", "stadthalle-bremen"},
+		{"evt-4", "Electronic Dance Festival", "Two-day open-air electronic music festival.", 60, 61, 8000, model.EventStatusDraft, "39.90", "Music", "ACME Events", "Treptower Park Berlin", "festival"},
+		{"evt-5", "Food Truck Festival Frankfurt", "Over 50 food trucks serving street food from around the world.", 20, 22, 5000, model.EventStatusPublished, "12.00", "Food & Drink", "Telekom", "Frankfurt Festplatz", "festival"},
+		{"evt-6", "Art Exhibition: Modern Visions", "Contemporary art from emerging European artists.", 10, 24, 200, model.EventStatusPublished, "12.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen", "art-gallery"},
+		{"evt-7", "Indie Night Live", "Up-and-coming indie bands in an intimate setting.", 35, 36, 400, model.EventStatusPublished, "18.00", "Music", "ACME Events", "Musikhalle Hamburg", "festival"},
+		{"evt-8", "Open Air Cinema Berlin", "Outdoor film screenings under the stars.", 50, 51, 1500, model.EventStatusDraft, "15.00", "Film", "Telekom", "Treptower Park Berlin", "festival"},
+		{"evt-9", "Winter Gala Concert", "Classical music gala with full symphony orchestra.", -5, -4, 600, model.EventStatusCompleted, "65.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg", "stadthalle-bremen"},
+		{"evt-10", "Street Food Festival Bremen", "A weekend of street food, live cooking and local craft beer.", 28, 29, 3000, model.EventStatusCancelled, "8.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen", "stadthalle-bremen"},
+		{"evt-11", "Jazz & Blues Night", "An evening of smooth jazz and blues in a relaxed atmosphere.", 40, 41, 800, model.EventStatusPublished, "32.00", "Music", "Telekom", "Olympiahalle München", "stadthalle-bremen"},
+		{"evt-12", "Comedy Gala Hamburg", "A night of laughter with five top comedians.", 55, 56, 500, model.EventStatusPublished, "28.00", "Comedy", "Provadis Hochschule", "Musikhalle Hamburg", "stadthalle-bremen"},
+		{"evt-13", "München Marathon Expo", "Expo and registration event ahead of the city marathon.", 18, 19, 10000, model.EventStatusPublished, "25.00", "Sports", "Telekom", "Olympiahalle München", "stadthalle-bremen"},
+		{"evt-14", "Berlin Beer Festival", "A weekend of craft beer, local breweries and live music.", 25, 27, 6000, model.EventStatusPublished, "14.00", "Food & Drink", "ACME Events", "Treptower Park Berlin", "festival"},
+		{"evt-15", "Classical Nights München", "An elegant evening of Mozart and Beethoven with a full orchestra.", 38, 39, 1200, model.EventStatusPublished, "55.00", "Music", "Telekom", "Olympiahalle München", "stadthalle-bremen"},
+		{"evt-16", "Football Fan Fest Frankfurt", "Live screening of the finals with food trucks and fan zones.", 33, 34, 20000, model.EventStatusPublished, "0.00", "Sports", "Telekom", "Frankfurt Festplatz", "festival"},
+		{"evt-17", "Digital Art Expo Bremen", "Interactive digital art installations from emerging creators.", 12, 26, 350, model.EventStatusPublished, "10.00", "Exhibition", "Provadis Hochschule", "Stadthalle Bremen", "art-gallery"},
+		{"evt-18", "Outdoor Cinema Hamburg", "Open-air screenings of cult classics by the river.", 48, 49, 800, model.EventStatusDraft, "12.50", "Film", "ACME Events", "Musikhalle Hamburg", "festival"},
+		{"evt-19", "Stand-up Showcase Berlin", "A showcase of the funniest new stand-up talent in Germany.", 22, 23, 500, model.EventStatusPublished, "20.00", "Comedy", "ACME Events", "Treptower Park Berlin", "stadthalle-bremen"},
+		{"evt-20", "Oktoberfest Preview München", "A two-day taste of Oktoberfest with traditional food and beer.", 42, 44, 15000, model.EventStatusPublished, "35.00", "Food & Drink", "Telekom", "Olympiahalle München", "festival"},
+		{"evt-21", "Indie Film Marathon Hamburg", "Back-to-back indie film screenings with director Q&As.", 52, 53, 300, model.EventStatusPublished, "9.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg", "festival"},
+		{"evt-22", "Frankfurt Wine Tasting", "Sample wines from the Rheingau paired with regional specialties.", 16, 17, 250, model.EventStatusPublished, "45.00", "Food & Drink", "Provadis Hochschule", "Frankfurt Festplatz", "festival"},
+		{"evt-23", "Esports Championship Berlin", "Two-day esports tournament with international teams and a big prize pool.", 70, 72, 5000, model.EventStatusPublished, "30.00", "Sports", "ACME Events", "Treptower Park Berlin", "stadthalle-bremen"},
+		{"evt-24", "New Year's Eve Gala Hamburg", "Ring in the new year with a gala dinner, live band and fireworks.", 112, 113, 800, model.EventStatusPublished, "75.00", "Music", "Stadthalle Bremen", "Musikhalle Hamburg", "festival"},
+		{"evt-25", "Spring Awakening Concert", "A fresh season opener with orchestral and choral pieces.", 120, 121, 1000, model.EventStatusDraft, "22.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg", "stadthalle-bremen"},
+		{"evt-26", "Vintage Car Exhibition Bremen", "A weekend exhibition of classic cars and restoration workshops.", 8, 9, 600, model.EventStatusCancelled, "18.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen", "stadthalle-bremen"},
 
 		// Historische Events für Recommendation-Tests (Kategorie-Affinität, Organizer-Rating)
-		{"evt-h1", "Spring Symphony Hamburg", "Orchestral spring concert with works by Vivaldi and Brahms.", -90, -89, 800, model.EventStatusCompleted, "45.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-h2", "Techno Warehouse Night", "All-night techno event with international DJs.", -75, -74, 1500, model.EventStatusCompleted, "25.00", "Music", "ACME Events", "Treptower Park Berlin"},
-		{"evt-h3", "Jazz Brunch München", "Sunday brunch accompanied by a live jazz trio.", -60, -59, 400, model.EventStatusCompleted, "30.00", "Music", "Telekom", "Olympiahalle München"},
-		{"evt-h4", "Comedy Club Bremen Spring", "Spring edition of the popular Bremen comedy club.", -80, -79, 300, model.EventStatusCompleted, "20.00", "Comedy", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-h5", "Improv Night Berlin", "Improvised comedy based on audience suggestions.", -45, -44, 250, model.EventStatusCompleted, "15.00", "Comedy", "ACME Events", "Treptower Park Berlin"},
-		{"evt-h6", "Street Food Market Frankfurt", "Street food market with regional and international vendors.", -70, -68, 4000, model.EventStatusCompleted, "10.00", "Food & Drink", "Telekom", "Frankfurt Festplatz"},
-		{"evt-h7", "Craft Beer Weekend Bremen", "Tastings from northern German craft breweries.", -50, -48, 2000, model.EventStatusCompleted, "12.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-h8", "City Run Frankfurt", "10k city run with finisher party.", -65, -64, 8000, model.EventStatusCompleted, "20.00", "Sports", "Telekom", "Frankfurt Festplatz"},
-		{"evt-h9", "Beach Volleyball Cup Berlin", "Amateur beach volleyball tournament by the river.", -40, -39, 1000, model.EventStatusCompleted, "8.00", "Sports", "ACME Events", "Treptower Park Berlin"},
-		{"evt-h10", "Photography Exhibition Bremen", "Award-winning documentary photography.", -100, -86, 250, model.EventStatusCompleted, "9.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen"},
-		{"evt-h11", "Design Week Frankfurt", "Product and interaction design showcase by students.", -55, -50, 500, model.EventStatusCompleted, "14.00", "Exhibition", "Provadis Hochschule", "Frankfurt Festplatz"},
-		{"evt-h12", "Short Film Night Hamburg", "Selection of award-winning short films.", -85, -84, 300, model.EventStatusCompleted, "7.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg"},
-		{"evt-h13", "Summer Open Air Cinema Berlin", "Open-air screening of summer blockbusters.", -30, -29, 1200, model.EventStatusCompleted, "11.00", "Film", "ACME Events", "Treptower Park Berlin"},
+		{"evt-h1", "Spring Symphony Hamburg", "Orchestral spring concert with works by Vivaldi and Brahms.", -90, -89, 800, model.EventStatusCompleted, "45.00", "Music", "Provadis Hochschule", "Musikhalle Hamburg", "stadthalle-bremen"},
+		{"evt-h2", "Techno Warehouse Night", "All-night techno event with international DJs.", -75, -74, 1500, model.EventStatusCompleted, "25.00", "Music", "ACME Events", "Treptower Park Berlin", "festival"},
+		{"evt-h3", "Jazz Brunch München", "Sunday brunch accompanied by a live jazz trio.", -60, -59, 400, model.EventStatusCompleted, "30.00", "Music", "Telekom", "Olympiahalle München", "stadthalle-bremen"},
+		{"evt-h4", "Comedy Club Bremen Spring", "Spring edition of the popular Bremen comedy club.", -80, -79, 300, model.EventStatusCompleted, "20.00", "Comedy", "Stadthalle Bremen", "Stadthalle Bremen", "stadthalle-bremen"},
+		{"evt-h5", "Improv Night Berlin", "Improvised comedy based on audience suggestions.", -45, -44, 250, model.EventStatusCompleted, "15.00", "Comedy", "ACME Events", "Treptower Park Berlin", "stadthalle-bremen"},
+		{"evt-h6", "Street Food Market Frankfurt", "Street food market with regional and international vendors.", -70, -68, 4000, model.EventStatusCompleted, "10.00", "Food & Drink", "Telekom", "Frankfurt Festplatz", "festival"},
+		{"evt-h7", "Craft Beer Weekend Bremen", "Tastings from northern German craft breweries.", -50, -48, 2000, model.EventStatusCompleted, "12.00", "Food & Drink", "Stadthalle Bremen", "Stadthalle Bremen", "festival"},
+		{"evt-h8", "City Run Frankfurt", "10k city run with finisher party.", -65, -64, 8000, model.EventStatusCompleted, "20.00", "Sports", "Telekom", "Frankfurt Festplatz", "stadthalle-bremen"},
+		{"evt-h9", "Beach Volleyball Cup Berlin", "Amateur beach volleyball tournament by the river.", -40, -39, 1000, model.EventStatusCompleted, "8.00", "Sports", "ACME Events", "Treptower Park Berlin", "stadthalle-bremen"},
+		{"evt-h10", "Photography Exhibition Bremen", "Award-winning documentary photography.", -100, -86, 250, model.EventStatusCompleted, "9.00", "Exhibition", "Stadthalle Bremen", "Stadthalle Bremen", "art-gallery"},
+		{"evt-h11", "Design Week Frankfurt", "Product and interaction design showcase by students.", -55, -50, 500, model.EventStatusCompleted, "14.00", "Exhibition", "Provadis Hochschule", "Frankfurt Festplatz", "art-gallery"},
+		{"evt-h12", "Short Film Night Hamburg", "Selection of award-winning short films.", -85, -84, 300, model.EventStatusCompleted, "7.00", "Film", "Provadis Hochschule", "Musikhalle Hamburg", "festival"},
+		{"evt-h13", "Summer Open Air Cinema Berlin", "Open-air screening of summer blockbusters.", -30, -29, 1200, model.EventStatusCompleted, "11.00", "Film", "ACME Events", "Treptower Park Berlin", "festival"},
 	}
 	for _, e := range events {
 		id := seedUUID(e.tag)
@@ -250,8 +256,22 @@ func (s *DBSeeder) seedEvents(_ context.Context) error {
 				OrganizerID: &orgID,
 				LocationID:  &locID,
 			}
+			if image, ok := eventImageFor(images, e.image); ok {
+				ev.ImageBase64 = image.base64
+				ev.ImageContentType = image.contentType
+			}
 			if err := s.db.Create(&ev).Error; err != nil {
 				return fmt.Errorf("create event %q: %w", e.title, err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("find event %q: %w", e.title, err)
+		} else if existing.ImageBase64 == nil {
+			if image, ok := eventImageFor(images, e.image); ok {
+				if err := s.db.Model(&model.EventModel{}).
+					Where("event_id = ? AND image_base64 IS NULL", id).
+					Updates(map[string]any{"image_base64": image.base64, "image_content_type": image.contentType}).Error; err != nil {
+					return fmt.Errorf("seed image for event %q: %w", e.title, err)
+				}
 			}
 		}
 	}
