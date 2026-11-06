@@ -13,6 +13,7 @@ import (
 	"backend/internal/keycloakmock"
 	"backend/internal/middleware"
 	"backend/internal/model"
+	"backend/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,7 +23,8 @@ import (
 func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Handler, *keycloakmock.Fake) {
 	t.Helper()
 	fake := keycloakmock.New()
-	h := NewOrganizationHandler(fake.KeycloakService(t), nil, nil, nil)
+	kc := fake.KeycloakService(t)
+	h := NewOrganizationHandler(kc, service.NewOrganizationService(kc, nil, nil), nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

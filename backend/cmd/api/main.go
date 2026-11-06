@@ -96,7 +96,10 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
 	// Initialize Handlers
-	orgHandler := handler.NewOrganizationHandler(keycloakService, service.NewOrganizationService(keycloakService, orgRepo), orgRepo, userRepo)
+	orgService := service.NewOrganizationService(keycloakService, orgRepo, userRepo)
+	orgHandler := handler.NewOrganizationHandler(keycloakService, orgService, orgRepo, userRepo)
+	// EVENTHUB-294: users apply via contact form to become an organizer, admins review.
+	applicationHandler := handler.NewOrganizerApplicationHandler(service.NewOrganizerApplicationService(tx, repository.NewOrganizerApplicationRepository(db), userRepo, orgRepo, orgService), userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
@@ -139,6 +142,9 @@ func main() {
 
 		protected.GET("/recommendations", recommendationsHandler.GetEventRecommendations)
 
+		// EVENTHUB-294: contact form to become an organizer
+		protected.POST("/organizer-applications", applicationHandler.SubmitApplicationHandler)
+
 		// events
 		events := protected.Group("/events")
 		{
@@ -163,6 +169,17 @@ func main() {
 			adminUsers.GET("", userAdminHandler.ListUsers)
 			adminUsers.GET("/:userID/roles", userAdminHandler.GetUserRoles)
 			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
+		}
+
+		// EVENTHUB-294: global admins and org admins of any organization review organizer
+		// applications of others; approval creates the organization with the service account.
+		adminApplications := v1.Group("/admin/organizer-applications")
+		adminApplications.Use(authenticator.Middleware(), middleware.RequireGlobalOrAnyOrganizationRole(middleware.RoleAdmin, middleware.RoleOrganizationAdmin))
+		{
+			adminApplications.GET("", applicationHandler.ListApplicationsHandler)
+			adminApplications.GET("/:applicationId", applicationHandler.GetApplicationHandler)
+			adminApplications.POST("/:applicationId/approve", middleware.Audit(audit.OrganizerApplicationApproved), applicationHandler.ApproveApplicationHandler)
+			adminApplications.POST("/:applicationId/reject", middleware.Audit(audit.OrganizerApplicationRejected), applicationHandler.RejectApplicationHandler)
 		}
 
 		// Platform moderation of user content by global admins and moderators.
@@ -204,6 +221,7 @@ func main() {
 			me.GET("/tickets", ownBookingHandler.ListOwnTicketsHandler)
 			me.GET("/bookings", ownBookingHandler.ListOwnBookingsHandler)
 			me.GET("/bookings/:bookingId", ownBookingHandler.GetOwnBookingHandler)
+			me.GET("/organizer-applications", applicationHandler.ListOwnApplicationsHandler)
 		}
 	}
 	orgs := v1.Group("/organizations")
