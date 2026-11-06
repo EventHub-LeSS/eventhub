@@ -153,6 +153,27 @@ func TestListPublishedEventsLifecycle(t *testing.T) {
 	}
 }
 
+// covers EVENTHUB-296
+func TestListPublishedEventsHidesEndedEvents(t *testing.T) {
+	db := testdb.Open(t)
+	router := newEventRouter(db, nil)
+	ended := seedEventForOrg(t, db, "ended", model.EventStatusPublished)
+	running := seedEventForOrg(t, db, "ended", model.EventStatusPublished)
+	upcoming := seedEventForOrg(t, db, "ended", model.EventStatusPublished)
+	for id, times := range map[uuid.UUID][2]string{
+		ended.eventID:   {"NOW() - interval '2 hours'", "NOW() - interval '1 second'"},
+		running.eventID: {"NOW() - interval '1 hour'", "NOW() + interval '1 hour'"},
+	} {
+		if err := db.Exec("UPDATE events SET start_time = "+times[0]+", end_time = "+times[1]+" WHERE event_id = ?", id).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	events := listPublishedEvents(t, router)
+	if len(events) != 2 || events[0].EventID != running.eventID || events[1].EventID != upcoming.eventID {
+		t.Fatalf("want running and upcoming event, got %+v", events)
+	}
+}
+
 func TestListPublishedEventsOrdering(t *testing.T) {
 	db := testdb.Open(t)
 	first := seedEventForOrg(t, db, "ordering", model.EventStatusPublished)
