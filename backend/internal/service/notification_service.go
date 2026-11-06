@@ -7,11 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	_ "time/tzdata" // Europe/Berlin for cancellation notices on hosts without a time zone database
 
 	"github.com/google/uuid"
 )
 
 var ErrReminderUnavailable = errors.New("reminder requires a confirmed booking of an upcoming published event")
+
+// OccasionEventCancelled marks the notice a ticket holder receives when an event is withdrawn.
+const OccasionEventCancelled = "event_cancelled"
 
 type NotificationService struct {
 	notifications repository.NotificationRepository
@@ -119,4 +123,67 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 		return nil
 	})
 	return
+}
+
+// EVENTHUB-291: notifyEventCancelled tells every ticket holder of a withdrawn event about the
+// cancellation and returns the number of notified users. It must run in the withdraw transaction
+// after the event row is locked: payment confirmation and reminder simulation lock the event first
+// as well, so no booking is confirmed and no reminder is created while ticket holders are read.
+// Each user receives one notice covering all of their confirmed bookings. A republished event
+// (EVENTHUB-290) can be withdrawn again; every withdrawal adds new notices and keeps the earlier
+// ones. The lock and the status check published → cancelled ensure that one withdrawal notifies
+// each user only once. Events that have already begun notify nobody and keep their reminders;
+// otherwise the reminders of the event are deleted, because they would still announce the event.
+func notifyEventCancelled(tx repository.Tx, event *model.EventModel) (int, error) {
+	now, err := tx.Notifications.DatabaseNow()
+	if err != nil {
+		return 0, err
+	}
+	if !event.StartTime.After(now) {
+		return 0, nil
+	}
+	if err := tx.Notifications.DeleteEventReminders(event.EventID); err != nil {
+		return 0, err
+	}
+	holders, err := tx.Bookings.ListConfirmedTicketHolders(event.EventID)
+	if err != nil {
+		return 0, err
+	}
+	if len(holders) == 0 {
+		return 0, nil
+	}
+	venue := ""
+	if event.LocationID != nil {
+		location, err := tx.Notifications.GetLocation(*event.LocationID)
+		if err != nil {
+			return 0, err
+		}
+		if location != nil {
+			name := location.Street
+			if location.AddressAddition != nil {
+				name = *location.AddressAddition
+			}
+			venue = fmt.Sprintf(" in %s, %s", name, location.City)
+		}
+	}
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		return 0, err
+	}
+	start := event.StartTime.In(berlin).Format("02.01.2006, 15:04") + " Uhr"
+	notifications := make([]model.NotificationData, 0, len(holders))
+	for _, holder := range holders {
+		userID, eventID, scheduled := holder.UserID, event.EventID, now
+		notifications = append(notifications, model.NotificationData{
+			NotificationID: uuid.New(), UserID: &userID, EventID: &eventID,
+			Occasion: OccasionEventCancelled, Subject: "Veranstaltung abgesagt: " + event.Title,
+			Content: fmt.Sprintf("%s am %s%s wurde vom Veranstalter abgesagt. Betroffene Tickets: %d. "+
+				"Der Veranstalter meldet sich bei dir wegen der Erstattung.", event.Title, start, venue, holder.Tickets),
+			ScheduledAt: &scheduled, CreatedAt: now, UpdatedAt: now,
+		})
+	}
+	if err := tx.Notifications.CreateAll(notifications); err != nil {
+		return 0, err
+	}
+	return len(notifications), nil
 }

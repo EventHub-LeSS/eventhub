@@ -85,6 +85,9 @@ type EventActionResponse struct {
 // EVENTHUB-82: Veranstaltung zurückziehen
 type EventWithdrawnResponse struct {
 	Message string `json:"message" example:"event withdrawn"`
+	// Number of users with confirmed bookings who received a cancellation notice (EVENTHUB-291);
+	// 0 if the event had already begun.
+	NotifiedUsers int `json:"notifiedUsers" example:"3"`
 }
 
 type EventModerationResponse struct {

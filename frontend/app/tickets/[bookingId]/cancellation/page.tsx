@@ -35,7 +35,12 @@ export default async function CancellationPage({ params }: PageProps) {
     console.error("Loading cancelled booking failed:", error)
   }
 
-  if (booking && booking.bookingStatus !== "cancelled") {
+  // Organizer cancellations keep the booking confirmed; cancelledBy marks them.
+  if (
+    booking &&
+    booking.bookingStatus !== "cancelled" &&
+    !booking.cancelledBy
+  ) {
     notFound()
   }
 

@@ -237,14 +237,23 @@ func (f *fakeLocationRepo) ListSelectable([]uuid.UUID) ([]*model.LocationModel, 
 }
 
 type fakeTransactor struct {
-	events    repository.EventRepository
-	locations repository.LocationRepository
-	orgs      repository.OrganizationRepository
-	audit     repository.AuditLogRepository
+	events        repository.EventRepository
+	locations     repository.LocationRepository
+	orgs          repository.OrganizationRepository
+	audit         repository.AuditLogRepository
+	notifications repository.NotificationRepository
+	bookings      repository.BookingRepository
 }
 
 func (f *fakeTransactor) InTransaction(_ context.Context, fn func(repository.Tx) error) error {
-	return fn(repository.Tx{Events: f.events, Locations: f.locations, Organizations: f.orgs, Audit: f.audit})
+	return fn(repository.Tx{
+		Events:        f.events,
+		Locations:     f.locations,
+		Organizations: f.orgs,
+		Audit:         f.audit,
+		Notifications: f.notifications,
+		Bookings:      f.bookings,
+	})
 }
 
 type fakeAuditRepo struct {
@@ -293,7 +302,11 @@ func newTestServiceWithAudit(event *model.EventModel) (*EventService, *fakeEvent
 		location.LocationID = *event.LocationID
 		locationRepo.byAddress[locationKey(location)] = location
 	}
-	tx := &fakeTransactor{events: eventRepo, locations: locationRepo, orgs: orgRepo, audit: auditRepo}
+	tx := &fakeTransactor{
+		events: eventRepo, orgs: orgRepo, audit: auditRepo,
+		locations:     locationRepo,
+		notifications: &fakeNotificationRepo{}, bookings: &fakeTicketHolderRepo{},
+	}
 	return NewEventService(eventRepo, orgRepo, tx), eventRepo, auditRepo
 }
 
@@ -559,7 +572,7 @@ func TestWithdrawEvent_Ownership(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, repo := newTestService(tt.event)
 
-			err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), uuid.New(), tt.managedOrgs)
+			_, err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), uuid.New(), tt.managedOrgs)
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("expected %v, got %v", tt.wantErr, err)
@@ -578,7 +591,7 @@ func TestWithdrawEvent_PersistsCancelledStatus(t *testing.T) {
 	event := eventOwnedBy(orgB, model.EventStatusPublished)
 	svc, repo := newTestService(event)
 
-	if err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); err != nil {
+	if _, err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.saved == nil || repo.saved.Status != model.EventStatusCancelled {
@@ -592,7 +605,7 @@ func TestWithdrawEvent_OnlyPublishedCanBeWithdrawn(t *testing.T) {
 			event := eventOwnedBy(orgB, status)
 			svc, repo := newTestService(event)
 
-			if err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotPublished) {
+			if _, err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); !errors.Is(err, ErrNotPublished) {
 				t.Fatalf("expected ErrNotPublished, got %v", err)
 			}
 			if repo.saved != nil {

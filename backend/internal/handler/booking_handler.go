@@ -14,7 +14,7 @@ import (
 
 // CancelBooking godoc
 // @Summary      Buchung stornieren
-// @Description  Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Wiederholtes Stornieren gelingt ohne weitere Erstattung.
+// @Description  Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Eine bezahlte Buchung einer vom Veranstalter abgesagten Veranstaltung ist nicht stornierbar (409), die Erstattung übernimmt der Veranstalter. Wiederholtes Stornieren gelingt ohne weitere Erstattung.
 // @Tags         bookings
 // @Produce      json
 // @Param        bookingId path string true "Booking ID"
@@ -23,7 +23,7 @@ import (
 // @Failure      401 {object} model.ErrorResponse
 // @Failure      403 {object} model.ErrorResponse
 // @Failure      404 {object} model.ErrorResponse
-// @Failure      409 {object} model.ErrorResponse "Buchung in diesem Status nicht stornierbar"
+// @Failure      409 {object} model.ErrorResponse "Buchung in diesem Status nicht stornierbar oder Veranstaltung vom Veranstalter abgesagt"
 // @Failure      500 {object} model.ErrorResponse
 // @Security     BearerAuth
 // @Router       /bookings/{bookingId}/cancel [post]

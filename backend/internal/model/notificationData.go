@@ -10,6 +10,7 @@ type NotificationData struct {
 	ReadAt         *time.Time `json:"readAt" gorm:"column:read_at"`
 	Occasion       string     `json:"occasion" gorm:"column:occasion;default:general"`
 	BookingID      *uuid.UUID `json:"bookingId" gorm:"column:booking_id;type:uuid"`
+	EventID        *uuid.UUID `json:"eventId" gorm:"column:event_id;type:uuid"`
 	ScheduledAt    *time.Time `json:"scheduledAt" gorm:"column:scheduled_at"`
 	Simulated      bool       `json:"simulated" gorm:"column:simulated"`
 	NotificationID uuid.UUID  `json:"notificationId" gorm:"column:notification_id;type:uuid;primaryKey"`

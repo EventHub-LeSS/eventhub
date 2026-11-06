@@ -18,6 +18,9 @@ var (
 	ErrEventNotPublished     = errors.New("event is not published")
 	ErrInvalidTicketCount    = errors.New("number of tickets must be positive")
 	ErrBookingNotCancellable = errors.New("booking cannot be cancelled in its current status")
+	// ErrBookingEventCancelled wraps ErrBookingNotCancellable: the organizer withdrew the event of a
+	// paid booking and settles the refund, so the visitor's own cancellation would refund twice.
+	ErrBookingEventCancelled = fmt.Errorf("%w: the event was cancelled by the organizer", ErrBookingNotCancellable)
 )
 
 // CapacityExceededError maps to the CAPACITY_EXCEEDED (409) error code from the API error list.
@@ -46,8 +49,9 @@ func NewBookingService(tx repository.Transactor, bookings repository.BookingRepo
 // payment is a cart item and is cancelled on its own. A booking of a payment is cancelled with
 // the whole payment: while the payment is pending, the checkout is cancelled — nothing was
 // charged — and once it is paid, the booking's line amount is refunded. The payment counts as
-// refunded once every booking of it is cancelled. Repeated cancellation succeeds without
-// another refund.
+// refunded once every booking of it is cancelled. A paid booking of a withdrawn event is not
+// cancellable: the organizer settles its refund. Repeated cancellation succeeds without another
+// refund.
 func (s *BookingService) CancelBooking(ctx context.Context, bookingID, userID uuid.UUID) (*model.BookingModel, error) {
 	// The booking is read without a lock to learn what it belongs to; the transaction locks in
 	// the canonical order of events, bookings, payment.
@@ -97,6 +101,8 @@ func (s *BookingService) cancelReservation(ctx context.Context, bookingID, userI
 // cancelPaidOrPendingBooking cancels one booking of a payment, together with the payment:
 // pending — the checkout is cancelled as a whole and nothing was charged; paid — this booking's
 // line amount is refunded, and the payment is refunded once all of its bookings are cancelled.
+// A paid booking of a withdrawn event stays as it is (ErrBookingEventCancelled), so its tickets
+// keep showing as cancelled by the organizer, who settles the refund.
 func (s *BookingService) cancelPaidOrPendingBooking(ctx context.Context, bookingID, userID, paymentID uuid.UUID) (*model.BookingModel, error) {
 	// The payment view without locks learns the events and bookings to lock; every check runs
 	// again under the locks below.
@@ -111,7 +117,8 @@ func (s *BookingService) cancelPaidOrPendingBooking(ctx context.Context, booking
 
 	var cancelled *model.BookingModel
 	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
-		if _, err := tx.Events.LockEvents(eventIDs); err != nil {
+		events, err := tx.Events.LockEvents(eventIDs)
+		if err != nil {
 			return err
 		}
 		bookings, err := tx.Bookings.LockBookings(bookingIDs)
@@ -161,6 +168,9 @@ func (s *BookingService) cancelPaidOrPendingBooking(ctx context.Context, booking
 			default:
 				return ErrBookingNotCancellable
 			}
+			if event := eventOfBooking(events, target); event != nil && event.Status == model.EventStatusCancelled {
+				return ErrBookingEventCancelled
+			}
 			target.Status = model.BookingStatusCancelled
 			target.ExpiresAt = nil
 			if err := tx.Bookings.UpdateBooking(target); err != nil {
@@ -168,15 +178,21 @@ func (s *BookingService) cancelPaidOrPendingBooking(ctx context.Context, booking
 			}
 			// The refund is the sum of the line amounts of the cancelled bookings, so a
 			// repeated cancellation never refunds twice. The payment counts as refunded once
-			// everything it paid for was cancelled.
+			// every booking of it is cancelled — not when the refund reaches the amount, which
+			// a free booking next to a paid one would reach while the free one is still valid.
 			refund := decimal.Zero
+			allCancelled := true
 			for _, booking := range bookings {
-				if booking.Status == model.BookingStatusCancelled && booking.LineAmount != nil {
+				if booking.Status != model.BookingStatusCancelled {
+					allCancelled = false
+					continue
+				}
+				if booking.LineAmount != nil {
 					refund = refund.Add(*booking.LineAmount)
 				}
 			}
 			payment.RefundAmount = refund
-			if refund.GreaterThanOrEqual(payment.Amount) {
+			if allCancelled {
 				payment.Status = model.PaymentStatusRefunded
 			}
 			if err := tx.Payments.UpdatePayment(payment); err != nil {
@@ -204,6 +220,19 @@ func bookingByID(bookings []*model.BookingModel, bookingID uuid.UUID) *model.Boo
 	for _, booking := range bookings {
 		if booking.BookingID == bookingID {
 			return booking
+		}
+	}
+	return nil
+}
+
+// eventOfBooking finds the event of the booking in the list, or nil.
+func eventOfBooking(events []*model.EventModel, booking *model.BookingModel) *model.EventModel {
+	if booking.EventID == nil {
+		return nil
+	}
+	for _, event := range events {
+		if event.EventID == *booking.EventID {
+			return event
 		}
 	}
 	return nil
