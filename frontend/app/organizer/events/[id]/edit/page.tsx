@@ -3,17 +3,25 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { getSession, requireOrganizer } from "@/features/auth"
-import { DraftForm, getEventCatalog, getOwnEvent } from "@/features/events"
+import {
+  DraftForm,
+  getEventCatalog,
+  getOwnEvent,
+  IMAGE_FAILED_PARAM,
+} from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
 
 export default async function EditEventDraftPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requireOrganizer()
   const session = await getSession()
   const { id } = await params
+  const imageFailed = Boolean((await searchParams)[IMAGE_FAILED_PARAM])
 
   const event = await getOwnEvent(session?.accessToken ?? "", id)
 
@@ -45,7 +53,7 @@ export default async function EditEventDraftPage({
             speichern“.
           </p>
         </div>
-        <DraftForm catalog={catalog} event={event} />
+        <DraftForm catalog={catalog} event={event} imageFailed={imageFailed} />
       </div>
     </div>
   )

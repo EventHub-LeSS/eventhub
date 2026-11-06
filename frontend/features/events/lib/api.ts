@@ -1,6 +1,7 @@
 import "server-only"
 import { getPublishedEvents } from "@/features/catalog"
 import type { EventDraftPayload } from "@/features/events/lib/draft"
+import type { DecodedImage } from "@/features/events/lib/image"
 import type {
   Event,
   EventCatalog,
@@ -127,12 +128,41 @@ export async function updateEvent(
   })
 }
 
-/** EVENTHUB-77 / AK5 */
+/**
+ * EVENTHUB-264: replaces the event's image. The API takes the raw PNG or JPEG
+ * bytes with a matching Content-Type and stores them base64 encoded itself. It
+ * only accepts images for drafts and published events.
+ */
+export async function uploadEventImage(
+  accessToken: string,
+  eventId: string,
+  image: DecodedImage
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}/image`, {
+    accessToken,
+    method: "PUT",
+    headers: { "Content-Type": image.contentType },
+    body: image.bytes,
+  })
+}
+
+/** EVENTHUB-77 / AK5, EVENTHUB-288: also republishes a withdrawn event. */
 export async function publishEvent(
   accessToken: string,
   eventId: string
 ): Promise<void> {
   await apiFetch<{ message: string }>(`/events/${eventId}/publish`, {
+    accessToken,
+    method: "POST",
+  })
+}
+
+/** EVENTHUB-288: turns a withdrawn event back into a draft. */
+export async function restoreEventAsDraft(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<Event>(`/events/${eventId}/restore-draft`, {
     accessToken,
     method: "POST",
   })

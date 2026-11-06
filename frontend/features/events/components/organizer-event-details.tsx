@@ -14,6 +14,8 @@ import { getCurrentUser } from "@/features/auth"
 import { EventActions } from "@/features/events/components/event-actions"
 import { EventStatusBadge } from "@/features/events/components/event-status-badge"
 import { OccupancyGauge } from "@/features/events/components/occupancy-gauge"
+import { ReviewsDashboard } from "@/features/events/components/reviews-dashboard"
+import { getDashboardReviews } from "@/features/events/lib/get-dashboard-reviews"
 import {
   computeOccupancyPercent,
   EMPTY_VALUE,
@@ -100,10 +102,13 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
 
   const { event } = result
   const { location, soldTickets } = event
+  const reviews = await getDashboardReviews([event])
   const roles = user?.organizationRoles ?? []
   // Same rule as the "Bearbeiten" entry of EventActions.
   const canEdit =
-    roles.includes("event_manager") && event.status !== "completed"
+    roles.includes("event_manager") &&
+    event.status !== "completed" &&
+    event.status !== "cancelled"
   const occupancyPercent = computeOccupancyPercent(
     event.availableSeats,
     event.capacity
@@ -159,6 +164,7 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
             eventId={event.eventId}
             eventTitle={event.title}
             status={event.status}
+            withdrawnByModerator={event.withdrawnByModerator}
             showViewDetails={false}
             roles={roles}
           />
@@ -297,6 +303,13 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
           </Card>
         </div>
       </div>
+
+      <ReviewsDashboard
+        reviews={reviews.reviews}
+        failedEvents={reviews.failedEvents}
+        description="Bewertungen der Besucher zu dieser Veranstaltung"
+        showEventTitle={false}
+      />
     </>
   )
 }

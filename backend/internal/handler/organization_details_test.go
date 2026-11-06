@@ -68,7 +68,7 @@ func newOrgDetailsRouter(t *testing.T, principal *middleware.Principal, orgRepo 
 	t.Helper()
 	fake := keycloakmock.New()
 	keycloak := fake.KeycloakService(t)
-	h := NewOrganizationHandler(keycloak, service.NewOrganizationService(keycloak, orgRepo), orgRepo, nil)
+	h := NewOrganizationHandler(keycloak, service.NewOrganizationService(keycloak, orgRepo, nil), orgRepo, nil)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

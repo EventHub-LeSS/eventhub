@@ -10,6 +10,7 @@ export {
   updateDraftAction,
 } from "@/features/events/lib/actions"
 export type { DraftActionResult } from "@/features/events/lib/actions"
+export { IMAGE_FAILED_PARAM } from "@/features/events/lib/image"
 export {
   EMPTY_VALUE,
   formatEventDateTime,
@@ -33,6 +34,9 @@ export type {
 export { DashboardFilters } from "@/features/events/components/dashboard-filters"
 export { OccupancyDashboard } from "@/features/events/components/occupancy-dashboard"
 export { SalesDashboard } from "@/features/events/components/sales-dashboard"
+export { ReviewsDashboard } from "@/features/events/components/reviews-dashboard"
+export { getDashboardReviews } from "@/features/events/lib/get-dashboard-reviews"
+export type { DashboardReview } from "@/features/events/lib/dashboard-reviews"
 export type {
   OrganizerDashboardCategory,
   OrganizerDashboardEvent,
