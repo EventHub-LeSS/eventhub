@@ -2,9 +2,9 @@ package service
 
 import "time"
 
-// SetOrgRoleChangeTimeout overrides orgRoleChangeTimeout for a test and returns a restore func.
-func SetOrgRoleChangeTimeout(d time.Duration) (restore func()) {
-	previous := orgRoleChangeTimeout
-	orgRoleChangeTimeout = d
-	return func() { orgRoleChangeTimeout = previous }
+// SetOrgChangeTimeout overrides orgChangeTimeout for a test and returns a restore func.
+func SetOrgChangeTimeout(d time.Duration) (restore func()) {
+	previous := orgChangeTimeout
+	orgChangeTimeout = d
+	return func() { orgChangeTimeout = previous }
 }

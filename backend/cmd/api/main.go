@@ -96,7 +96,7 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
 	// Initialize Handlers
-	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	orgHandler := handler.NewOrganizationHandler(keycloakService, service.NewOrganizationService(keycloakService, orgRepo), orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
@@ -215,6 +215,10 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
+		// Organization details are read by any member and changed by org admins; the handler
+		// authorizes against the resolved organization like the role endpoint above.
+		orgRoles.GET("/:organizationID", orgHandler.GetOrganization)
+		orgRoles.PUT("/:organizationID", middleware.Audit(audit.OrganizationUpdated), orgHandler.UpdateOrganization)
 		orgRoles.GET("/:organizationID/dashboard", eventHandler.GetSalesDashboardHandler)
 		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
 		// Organization admins read the audit log of their organization; the handler authorizes

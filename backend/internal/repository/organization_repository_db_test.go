@@ -139,3 +139,37 @@ func TestOrganizationRepository_UpdateOrganizationPersistsEveryColumn(t *testing
 		t.Errorf("organization row count %d, want 1: the row must move, not duplicate", count)
 	}
 }
+
+// A details change only moves the mirrored name column; Keycloak owns the identity columns, so a
+// re-resolved organization keeps its references while its name changes.
+func TestOrganizationRepository_UpdateNameMovesOnlyTheName(t *testing.T) {
+	db := testdb.Open(t)
+	repo := NewOrganizationRepository(db)
+
+	org := &model.OrganizationModel{
+		OrganizationID: uuid.New(),
+		KeycloakOrgID:  "kc-naming-test",
+		Alias:          "naming-test",
+		Name:           "Alt",
+	}
+	if err := repo.CreateOrganization(org); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpdateName(org.OrganizationID, "Neu"); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := repo.GetByKeycloakOrgID("kc-naming-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated == nil {
+		t.Fatal("organization not found")
+	}
+	if updated.Name != "Neu" {
+		t.Errorf("name = %q, want %q", updated.Name, "Neu")
+	}
+	if updated.Alias != "naming-test" || updated.KeycloakOrgID != "kc-naming-test" {
+		t.Errorf("identity columns moved: alias %q, keycloakOrgID %q", updated.Alias, updated.KeycloakOrgID)
+	}
+}
