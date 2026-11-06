@@ -19,6 +19,7 @@ type cancelRepo struct {
 	repository.PaymentRepository
 	repository.EventRepository
 	bookings       []*model.BookingModel
+	events         []*model.EventModel
 	updated        []uuid.UUID
 	view           *repository.PaymentView
 	payment        *model.PaymentModel
@@ -59,7 +60,7 @@ func (r *cancelRepo) UpdatePayment(*model.PaymentModel) error {
 	return r.paymentErr
 }
 func (r *cancelRepo) LockEvents([]uuid.UUID) ([]*model.EventModel, error) {
-	return nil, nil
+	return r.events, nil
 }
 
 // cancelTransactor runs the transaction on the fake repos without a database.
@@ -208,6 +209,78 @@ func TestCancelBooking_PaidRefundsTheLineAmount(t *testing.T) {
 			t.Fatalf("each cancellation updates the payment once, got %d", repo.paymentUpdates)
 		}
 	})
+
+	// A free booking adds nothing to the refund: cancelling the paid booking next to it refunds
+	// the whole amount, yet the payment stays paid, so the free tickets stay valid.
+	t.Run("free booking stays valid", func(t *testing.T) {
+		paymentID := uuid.New()
+		free, paid := decimal.Zero, decimal.NewFromInt(20)
+		repo := &cancelRepo{
+			bookings: []*model.BookingModel{
+				{BookingID: uuid.New(), UserID: &owner, PaymentID: &paymentID, Status: model.BookingStatusConfirmed, LineAmount: &free},
+				{BookingID: uuid.New(), UserID: &owner, PaymentID: &paymentID, Status: model.BookingStatusConfirmed, LineAmount: &paid},
+			},
+			payment: &model.PaymentModel{PaymentID: paymentID, Amount: paid, Status: model.PaymentStatusPaid},
+		}
+		repo.view = &repository.PaymentView{Payment: repo.payment, Items: []*repository.PaymentItem{
+			{Booking: repo.bookings[0]}, {Booking: repo.bookings[1]},
+		}}
+		svc := newCancelService(repo)
+
+		if _, err := svc.CancelBooking(context.Background(), repo.bookings[1].BookingID, owner); err != nil {
+			t.Fatal(err)
+		}
+		if repo.payment.Status != model.PaymentStatusPaid || !repo.payment.RefundAmount.Equal(paid) ||
+			repo.bookings[0].Status != model.BookingStatusConfirmed {
+			t.Fatalf("the free booking must stay valid: payment=%+v free=%+v", repo.payment, repo.bookings[0])
+		}
+		if _, err := svc.CancelBooking(context.Background(), repo.bookings[0].BookingID, owner); err != nil {
+			t.Fatal(err)
+		}
+		if repo.payment.Status != model.PaymentStatusRefunded || !repo.payment.RefundAmount.Equal(paid) {
+			t.Fatalf("the payment must count as refunded now: %+v", repo.payment)
+		}
+	})
+}
+
+// The organizer settles the refund of a withdrawn event, so the visitor cannot cancel a paid
+// booking of it anymore; its tickets keep showing as cancelled by the organizer. Repeating the
+// cancellation of a booking cancelled before the withdrawal still succeeds, and a pending
+// checkout of a withdrawn event can still be cancelled, as nothing was charged.
+func TestCancelBooking_WithdrawnEvent(t *testing.T) {
+	owner := uuid.New()
+	for _, tc := range []struct {
+		name          string
+		paymentStatus model.PaymentStatus
+		bookingStatus model.BookingStatus
+		want          error
+		updates       int
+	}{
+		{"paid", model.PaymentStatusPaid, model.BookingStatusConfirmed, ErrBookingEventCancelled, 0},
+		{"cancelled before the withdrawal", model.PaymentStatusRefunded, model.BookingStatusCancelled, nil, 0},
+		{"pending checkout", model.PaymentStatusPending, model.BookingStatusReserved, nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			eventID, paymentID := uuid.New(), uuid.New()
+			line := decimal.NewFromInt(20)
+			repo := &cancelRepo{
+				bookings: []*model.BookingModel{{BookingID: uuid.New(), UserID: &owner, EventID: &eventID,
+					PaymentID: &paymentID, Status: tc.bookingStatus, LineAmount: &line}},
+				events:  []*model.EventModel{{EventID: eventID, Status: model.EventStatusCancelled}},
+				payment: &model.PaymentModel{PaymentID: paymentID, Amount: line, Status: tc.paymentStatus},
+			}
+			repo.view = &repository.PaymentView{Payment: repo.payment, Items: []*repository.PaymentItem{{Booking: repo.bookings[0]}}}
+
+			_, err := newCancelService(repo).CancelBooking(context.Background(), repo.bookings[0].BookingID, owner)
+			if !errors.Is(err, tc.want) || repo.paymentUpdates != tc.updates {
+				t.Fatalf("err=%v paymentUpdates=%d", err, repo.paymentUpdates)
+			}
+			if tc.want != nil && (!errors.Is(err, ErrBookingNotCancellable) || len(repo.updated) != 0 ||
+				repo.bookings[0].Status != model.BookingStatusConfirmed || repo.payment.Status != model.PaymentStatusPaid) {
+				t.Fatalf("a rejected cancellation must change nothing: err=%v updated=%v payment=%+v", err, repo.updated, repo.payment)
+			}
+		})
+	}
 }
 
 // A failed payment update aborts the transaction, so nothing is persisted.

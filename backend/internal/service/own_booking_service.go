@@ -10,9 +10,9 @@ import (
 )
 
 // EVENTHUB-236: Meine Tickets und Buchungshistorie
-// OwnBookingService shows visitors their own bookings: the valid tickets, the booking history and
-// the details of one booking. It only reads. Whether a booking holds valid tickets follows
-// hasValidTickets, the rule of the payment result, so both never contradict each other.
+// OwnBookingService shows visitors their own bookings: the valid and cancelled tickets, the booking
+// history and the details of one booking. It only reads. Whether a booking holds valid tickets
+// follows hasValidTickets, the rule of the payment result, so both never contradict each other.
 type OwnBookingService struct {
 	bookings repository.OwnBookingRepository
 }
@@ -21,9 +21,9 @@ func NewOwnBookingService(bookings repository.OwnBookingRepository) *OwnBookingS
 	return &OwnBookingService{bookings: bookings}
 }
 
-// ListOwnTickets returns the bookings of the user that hold valid tickets: upcoming events first by
-// start time, then past events, the latest first. The rule is applied here and not in SQL, so it
-// exists only once.
+// ListOwnTickets returns the bookings of the user that hold valid tickets or whose paid tickets
+// were cancelled (see ticketsCancelledBy): upcoming events first by start time, then past events,
+// the latest first. The rules are applied here and not in SQL, so they exist only once.
 func (s *OwnBookingService) ListOwnTickets(userID uuid.UUID) ([]model.OwnBookingResponse, error) {
 	bookings, err := s.bookings.ListByUserByEventStart(userID)
 	if err != nil {
@@ -31,7 +31,7 @@ func (s *OwnBookingService) ListOwnTickets(userID uuid.UUID) ([]model.OwnBooking
 	}
 	tickets := make([]model.OwnBookingResponse, 0, len(bookings))
 	for _, booking := range bookings {
-		if resp := ownBookingResponse(booking); resp.TicketsValid {
+		if resp := ownBookingResponse(booking); resp.TicketsValid || resp.CancelledBy != nil {
 			tickets = append(tickets, resp)
 		}
 	}
@@ -79,6 +79,7 @@ func ownBookingResponse(own *repository.OwnBooking) model.OwnBookingResponse {
 		NumberOfTickets: booking.NumberOfTickets,
 		BookingStatus:   shownBookingStatus(booking, own.Now),
 		TicketsValid:    ticketsValid,
+		CancelledBy:     ticketsCancelledBy(&own.BookingPayment),
 		RatingScore:     own.RatingScore,
 		BookedAt:        booking.CreatedAt,
 	}
@@ -129,4 +130,28 @@ func shownBookingStatus(booking *model.BookingModel, now time.Time) model.Bookin
 		return model.BookingStatusExpired
 	}
 	return booking.Status
+}
+
+// ticketsCancelledBy reports who cancelled tickets that had been paid for, or nil. The user
+// cancelled a booking of a paid payment, which refunded its line amount. The organizer withdrew
+// the event of a confirmed booking of a paid payment; the booking itself stays confirmed. A
+// booking the user cancelled stays cancelled by the user even if the event is withdrawn later.
+// Reservations and checkouts cancelled before payment never held tickets and report nil.
+func ticketsCancelledBy(view *repository.BookingPayment) *model.CancelledBy {
+	payment := view.Payment
+	if payment == nil {
+		return nil
+	}
+	var by model.CancelledBy
+	switch {
+	case view.Booking.Status == model.BookingStatusCancelled &&
+		(payment.Status == model.PaymentStatusPaid || payment.Status == model.PaymentStatusRefunded):
+		by = model.CancelledByUser
+	case view.Booking.Status == model.BookingStatusConfirmed && payment.Status == model.PaymentStatusPaid &&
+		view.EventStatus != nil && *view.EventStatus == model.EventStatusCancelled:
+		by = model.CancelledByOrganizer
+	default:
+		return nil
+	}
+	return &by
 }

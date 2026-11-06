@@ -13,6 +13,7 @@ import {
   formatEventPeriod,
   formatLocation,
   formatTicketCount,
+  hasRefund,
   paymentStatusLabels,
 } from "@/features/bookings/lib/format"
 import type { OwnBooking } from "@/features/bookings/lib/types"
@@ -27,7 +28,8 @@ import { Button } from "@/features/shared/components/ui/button"
  */
 export function CancellationDetails({ booking }: { booking: OwnBooking }) {
   const { event } = booking
-  const refunded = booking.paymentStatus === "refunded"
+  const refunded = hasRefund(booking)
+  const byOrganizer = booking.cancelledBy === "organizer"
 
   return (
     <div
@@ -96,12 +98,16 @@ export function CancellationDetails({ booking }: { booking: OwnBooking }) {
             id="cancellation-heading"
             className="text-2xl font-semibold tracking-tight lg:text-3xl"
           >
-            Deine Buchung wurde storniert
+            {byOrganizer
+              ? "Die Veranstaltung wurde abgesagt"
+              : "Deine Buchung wurde storniert"}
           </h1>
           <p className="max-w-prose text-muted-foreground">
-            {refunded
-              ? "Deine Tickets wurden freigegeben und der bezahlte Betrag erstattet."
-              : "Deine Tickets wurden freigegeben."}
+            {byOrganizer
+              ? "Der Veranstalter hat die Veranstaltung abgesagt. Deine Tickets sind nicht mehr gültig."
+              : refunded
+                ? "Deine Tickets wurden freigegeben und der bezahlte Betrag erstattet."
+                : "Deine Tickets wurden freigegeben."}
           </p>
         </div>
 
@@ -144,7 +150,7 @@ export function CancellationDetails({ booking }: { booking: OwnBooking }) {
 }
 
 function RefundSummary({ booking }: { booking: OwnBooking }) {
-  if (booking.paymentStatus === "refunded") {
+  if (hasRefund(booking)) {
     return (
       <section
         aria-labelledby="refund-heading"
@@ -178,6 +184,27 @@ function RefundSummary({ booking }: { booking: OwnBooking }) {
             </dd>
           </div>
         </dl>
+      </section>
+    )
+  }
+
+  if (booking.cancelledBy === "organizer") {
+    return (
+      <section
+        aria-labelledby="refund-heading"
+        className="flex flex-col gap-2 rounded-2xl bg-muted/50 p-6 ring-1 ring-foreground/10 md:p-8"
+      >
+        <h2
+          id="refund-heading"
+          className="text-sm font-medium text-muted-foreground"
+        >
+          Erstattung
+        </h2>
+        <p className="text-2xl font-semibold tracking-tight">Noch offen</p>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          Du hast {formatAmount(booking.amount)} bezahlt. Der Veranstalter
+          meldet sich bei dir wegen der Erstattung.
+        </p>
       </section>
     )
   }

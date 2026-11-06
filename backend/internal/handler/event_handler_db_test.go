@@ -438,7 +438,7 @@ func TestWithdrawEventHandler_WithdrawsOwnPublishedEvent(t *testing.T) {
 	}
 
 	var response model.EventWithdrawnResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || response.Message != "event withdrawn" {
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || response.Message != "event withdrawn" || response.NotifiedUsers != 0 {
 		t.Errorf("unexpected response body: %s", rec.Body.String())
 	}
 

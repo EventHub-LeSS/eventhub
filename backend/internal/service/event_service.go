@@ -394,12 +394,15 @@ func (s *EventService) PublishEvent(ctx context.Context, eventID uuid.UUID, keyc
 	})
 }
 
-func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) error {
+// WithdrawEvent cancels a published event. EVENTHUB-291: in the same transaction, the ticket
+// holders of an upcoming event are notified; the returned number counts the notified users.
+func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) (int, error) {
 	meta, err := audit.MetaFromContext(ctx, audit.EventCancelled)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+	notified := 0
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
 		event, err := tx.Events.LockEvent(eventID)
 		if err != nil {
 			return err
@@ -424,8 +427,15 @@ func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, key
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
 		}
+		if notified, err = notifyEventCancelled(tx, event); err != nil {
+			return err
+		}
 		return appendEventAudit(tx, meta, org, eventID, statusChange(model.EventStatusPublished, model.EventStatusCancelled))
 	})
+	if err != nil {
+		return 0, err
+	}
+	return notified, nil
 }
 
 // eventImageMagic returns the magic bytes identifying the declared image content type, or

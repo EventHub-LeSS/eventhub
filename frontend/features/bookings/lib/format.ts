@@ -112,3 +112,25 @@ export function splitTicketsByEnd<
 
   return { upcoming, past }
 }
+
+/**
+ * Splits the ticket list of the API into cancelled tickets, kept in API order,
+ * and the remaining tickets split by event end (see `splitTicketsByEnd`).
+ */
+export function splitOwnTickets<
+  T extends { cancelledBy?: unknown; event: { endTime: string } | null },
+>(tickets: T[], now: number): { upcoming: T[]; past: T[]; cancelled: T[] } {
+  const cancelled = tickets.filter((ticket) => ticket.cancelledBy)
+  const active = tickets.filter((ticket) => !ticket.cancelledBy)
+
+  return { ...splitTicketsByEnd(active, now), cancelled }
+}
+
+/**
+ * Whether money came back for this booking. Judged by its own refund amount,
+ * not the payment status: a payment of several bookings stays `paid` until
+ * every booking of it is cancelled.
+ */
+export function hasRefund(booking: { refundAmount: string | null }): boolean {
+  return Number(booking.refundAmount) > 0
+}

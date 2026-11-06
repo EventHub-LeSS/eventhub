@@ -93,7 +93,7 @@ func TestPublishAndWithdraw_RecordStatusChange(t *testing.T) {
 	t.Run("withdraw", func(t *testing.T) {
 		event := eventOwnedBy(orgB, model.EventStatusPublished)
 		svc, _, auditRepo := newTestServiceWithAudit(event)
-		if err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); err != nil {
+		if _, err := svc.WithdrawEvent(auditCtx(audit.EventCancelled), event.EventID, []string{"kc-org-b"}); err != nil {
 			t.Fatal(err)
 		}
 		entry := singleEntry(t, auditRepo)
@@ -138,7 +138,8 @@ func TestAuditedEventActions_RequireAuditContext(t *testing.T) {
 			return s.PublishEvent(ctx, uuid.New(), []string{"kc-org-b"})
 		},
 		"withdraw": func(s *EventService, ctx context.Context) error {
-			return s.WithdrawEvent(ctx, uuid.New(), []string{"kc-org-b"})
+			_, err := s.WithdrawEvent(ctx, uuid.New(), []string{"kc-org-b"})
+			return err
 		},
 		"delete": func(s *EventService, ctx context.Context) error {
 			return s.DeleteEvent(ctx, uuid.New(), []string{"kc-org-b"})

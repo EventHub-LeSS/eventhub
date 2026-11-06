@@ -225,9 +225,9 @@ func TestListOwnBookings_DeclinedAndOpenBookings_InHistoryNotInTickets(t *testin
 	}
 }
 
-// B3, C3: a paid booking cancelled through the API leaves the ticket list and shows as cancelled
-// and refunded.
-func TestListOwnBookings_CancelledAfterPayment_CancelledRefundedNotInTickets(t *testing.T) {
+// B3, C3: a paid booking cancelled through the API stays in the ticket list as cancelled by the
+// user, no longer valid, and shows as cancelled and refunded.
+func TestListOwnBookings_CancelledAfterPayment_CancelledRefundedCancelledByUser(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
@@ -235,28 +235,40 @@ func TestListOwnBookings_CancelledAfterPayment_CancelledRefundedNotInTickets(t *
 
 	bookingID := addToCartViaAPI(t, router, event.eventID, 2)
 	payViaAPI(t, router, model.SimulatedPaymentSuccess)
-	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 1 {
+	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 1 || tickets[0].CancelledBy != nil {
 		t.Fatalf("expected the paid ticket before cancelling, got %+v", tickets)
 	}
 	cancelViaAPI(t, router, bookingID)
 
-	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 0 {
-		t.Errorf("a cancelled booking must leave the ticket list, got %+v", tickets)
+	tickets := getOwnBookingList(t, router, "/api/v1/me/tickets")
+	if len(tickets) != 1 || tickets[0].BookingID != bookingID || tickets[0].TicketsValid ||
+		tickets[0].CancelledBy == nil || *tickets[0].CancelledBy != model.CancelledByUser {
+		t.Errorf("a cancelled booking must stay in the ticket list as cancelled by the user, got %+v", tickets)
 	}
 	entry := findOwnBooking(getOwnBookingList(t, router, "/api/v1/me/bookings"), bookingID)
 	if entry == nil || entry.BookingStatus != model.BookingStatusCancelled || entry.TicketsValid ||
 		entry.PaymentStatus == nil || *entry.PaymentStatus != model.PaymentStatusRefunded ||
-		entry.RefundAmount == nil || !entry.RefundAmount.Equal(decimal.NewFromInt(40)) || entry.ExpiresAt != nil {
+		entry.RefundAmount == nil || !entry.RefundAmount.Equal(decimal.NewFromInt(40)) || entry.ExpiresAt != nil ||
+		entry.CancelledBy == nil || *entry.CancelledBy != model.CancelledByUser {
 		t.Errorf("expected cancelled and refunded booking in the history, got %+v", entry)
 	}
 	detail := getOwnBookingDetail(t, router, bookingID)
-	if detail.TicketsValid || detail.BookingStatus != model.BookingStatusCancelled {
+	if detail.TicketsValid || detail.BookingStatus != model.BookingStatusCancelled ||
+		detail.CancelledBy == nil || *detail.CancelledBy != model.CancelledByUser {
 		t.Errorf("details must mark the cancelled booking, got %s", ownBookingJSON(t, detail))
+	}
+
+	// Withdrawing the event afterwards does not turn the cancellation into one by the organizer.
+	withdrawViaAPI(t, db, event.eventID)
+	detail = getOwnBookingDetail(t, router, bookingID)
+	if detail.CancelledBy == nil || *detail.CancelledBy != model.CancelledByUser {
+		t.Errorf("a booking cancelled by the user must stay cancelled by the user, got %s", ownBookingJSON(t, detail))
 	}
 }
 
-// A4, C3 (F5): tickets of an event withdrawn after the payment are no longer valid.
-func TestGetOwnBooking_EventWithdrawnAfterPayment_TicketInvalid(t *testing.T) {
+// A4, C3 (F5): tickets of an event withdrawn after the payment are no longer valid, but stay in
+// the ticket list as cancelled by the organizer.
+func TestGetOwnBooking_EventWithdrawnAfterPayment_TicketInvalidCancelledByOrganizer(t *testing.T) {
 	db := testdb.Open(t)
 	event := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
 	seedBookingUser(t, db, bookingKeycloakUserID)
@@ -266,18 +278,65 @@ func TestGetOwnBooking_EventWithdrawnAfterPayment_TicketInvalid(t *testing.T) {
 	paid := payViaAPI(t, router, model.SimulatedPaymentSuccess)
 	withdrawViaAPI(t, db, event.eventID)
 
-	if tickets := getOwnBookingList(t, router, "/api/v1/me/tickets"); len(tickets) != 0 {
-		t.Errorf("tickets of a withdrawn event must leave the ticket list, got %+v", tickets)
+	tickets := getOwnBookingList(t, router, "/api/v1/me/tickets")
+	if len(tickets) != 1 || tickets[0].BookingID != bookingID || tickets[0].TicketsValid ||
+		tickets[0].CancelledBy == nil || *tickets[0].CancelledBy != model.CancelledByOrganizer {
+		t.Errorf("tickets of a withdrawn event must stay in the ticket list as cancelled by the organizer, got %+v", tickets)
 	}
 	detail := getOwnBookingDetail(t, router, bookingID)
 	if detail.TicketsValid || detail.BookingStatus != model.BookingStatusConfirmed ||
 		detail.PaymentStatus == nil || *detail.PaymentStatus != model.PaymentStatusPaid ||
-		detail.Event == nil || detail.Event.Status != model.EventStatusCancelled {
+		detail.Event == nil || detail.Event.Status != model.EventStatusCancelled ||
+		detail.CancelledBy == nil || *detail.CancelledBy != model.CancelledByOrganizer {
 		t.Errorf("expected invalid ticket of a cancelled event, got %s", ownBookingJSON(t, detail))
+	}
+	if got, want := ownBookingJSON(t, detail), ownBookingJSON(t, tickets[0]); got != want {
+		t.Errorf("details differ from the list entry:\n got  %s\n want %s", got, want)
 	}
 	payment := decodePayment(t, doPaymentRequest(t, router, http.MethodGet, paymentPath(paid.PaymentID), nil))
 	if payment.TicketsValid || payment.Message != detail.Message {
 		t.Errorf("expected the payment result to agree, got ticketsValid=%v message=%q", payment.TicketsValid, payment.Message)
+	}
+
+	// The organizer settles the refund, so the visitor cannot cancel the tickets anymore; they stay
+	// cancelled by the organizer and nothing is refunded twice.
+	rec := doPaymentRequest(t, router, http.MethodPost, "/api/v1/bookings/"+bookingID.String()+"/cancel", nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("cancelling tickets of a withdrawn event: %d %s, want 409", rec.Code, rec.Body.String())
+	}
+	after := getOwnBookingDetail(t, router, bookingID)
+	if after.BookingStatus != model.BookingStatusConfirmed || after.RefundAmount == nil || !after.RefundAmount.IsZero() ||
+		after.CancelledBy == nil || *after.CancelledBy != model.CancelledByOrganizer {
+		t.Errorf("a rejected cancellation must leave the booking cancelled by the organizer, got %s", ownBookingJSON(t, after))
+	}
+}
+
+// A free booking next to a paid one in the same checkout stays a valid ticket when the paid one
+// is cancelled, even though the refund then covers the whole payment amount.
+func TestListOwnTickets_FreeBookingNextToCancelledPaidOne_StaysValid(t *testing.T) {
+	db := testdb.Open(t)
+	free := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	paid := seedEventForOrg(t, db, "org-a", model.EventStatusPublished)
+	if err := db.Exec("UPDATE events SET price = 0 WHERE event_id = ?", free.eventID).Error; err != nil {
+		t.Fatalf("make event free: %v", err)
+	}
+	seedBookingUser(t, db, bookingKeycloakUserID)
+	router := newOwnBookingRouter(db, &middleware.Principal{Subject: bookingKeycloakUserID})
+
+	freeID := addToCartViaAPI(t, router, free.eventID, 1)
+	paidID := addToCartViaAPI(t, router, paid.eventID, 1)
+	payViaAPI(t, router, model.SimulatedPaymentSuccess)
+	cancelViaAPI(t, router, paidID)
+
+	tickets := getOwnBookingList(t, router, "/api/v1/me/tickets")
+	freeTicket, paidTicket := findOwnBooking(tickets, freeID), findOwnBooking(tickets, paidID)
+	if freeTicket == nil || !freeTicket.TicketsValid || freeTicket.CancelledBy != nil ||
+		freeTicket.PaymentStatus == nil || *freeTicket.PaymentStatus != model.PaymentStatusPaid {
+		t.Errorf("the free ticket must stay valid, got %+v", freeTicket)
+	}
+	if paidTicket == nil || paidTicket.TicketsValid || paidTicket.CancelledBy == nil || *paidTicket.CancelledBy != model.CancelledByUser ||
+		paidTicket.RefundAmount == nil || !paidTicket.RefundAmount.Equal(decimal.NewFromInt(20)) {
+		t.Errorf("the paid ticket must be cancelled by the user and refunded, got %+v", paidTicket)
 	}
 }
 
@@ -420,24 +479,44 @@ func TestOwnBookings_AllViews_ShowSameBooking(t *testing.T) {
 	if len(history) != len(states) {
 		t.Fatalf("expected %d bookings in the history, got %d", len(states), len(history))
 	}
-	validInHistory := map[uuid.UUID]string{}
+	ticketsInHistory := map[uuid.UUID]string{}
 	for _, entry := range history {
 		if got, want := ownBookingJSON(t, getOwnBookingDetail(t, router, entry.BookingID)), ownBookingJSON(t, entry); got != want {
 			t.Errorf("details differ from the history:\n got  %s\n want %s", got, want)
 		}
-		if entry.TicketsValid {
-			validInHistory[entry.BookingID] = ownBookingJSON(t, entry)
+		if entry.TicketsValid || entry.CancelledBy != nil {
+			ticketsInHistory[entry.BookingID] = ownBookingJSON(t, entry)
 		}
 	}
+	// The ticket list holds the valid ticket and the paid tickets cancelled by the user or the
+	// organizer, each marked accordingly.
+	wantCancelledBy := map[uuid.UUID]*model.CancelledBy{
+		states["paid"]:                    nil,
+		states["cancelled after payment"]: cancelledByOf(model.CancelledByUser),
+		states["paid, event withdrawn"]:   cancelledByOf(model.CancelledByOrganizer),
+	}
 	tickets := getOwnBookingList(t, router, "/api/v1/me/tickets")
-	if len(tickets) != len(validInHistory) || len(tickets) != 1 || tickets[0].BookingID != states["paid"] {
-		t.Fatalf("expected exactly the paid booking as ticket, got %v", ownBookingIDs(tickets))
+	if len(tickets) != len(ticketsInHistory) || len(tickets) != len(wantCancelledBy) {
+		t.Fatalf("expected the paid, the cancelled and the withdrawn booking as tickets, got %v", ownBookingIDs(tickets))
 	}
 	for _, ticket := range tickets {
-		if ownBookingJSON(t, ticket) != validInHistory[ticket.BookingID] {
+		want, ok := wantCancelledBy[ticket.BookingID]
+		if !ok {
+			t.Errorf("unexpected ticket %s", ownBookingJSON(t, ticket))
+			continue
+		}
+		if (want == nil) != (ticket.CancelledBy == nil) || (want != nil && *want != *ticket.CancelledBy) ||
+			ticket.TicketsValid != (want == nil) {
+			t.Errorf("expected cancelledBy %v and ticketsValid %v, got %s", want, want == nil, ownBookingJSON(t, ticket))
+		}
+		if ownBookingJSON(t, ticket) != ticketsInHistory[ticket.BookingID] {
 			t.Errorf("ticket differs from its history entry: %s", ownBookingJSON(t, ticket))
 		}
 	}
+}
+
+func cancelledByOf(by model.CancelledBy) *model.CancelledBy {
+	return &by
 }
 
 // B3, D2 (F4): a reservation that ran out is shown as expired although it is stored as reserved,

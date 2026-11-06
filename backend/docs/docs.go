@@ -248,7 +248,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Wiederholtes Stornieren gelingt ohne weitere Erstattung.",
+                "description": "Storniert eine Buchung des Aufrufers und gibt deren Tickets frei. Eine Reservierung ohne Zahlung ist ein Warenkorb-Item und wird für sich storniert. Eine Buchung mit Zahlung wird mit dem ganzen Zahlungsvorgang storniert: Während die Zahlung offen ist, wird der gesamte Checkout storniert — es wurde nichts abgebucht — und nachdem sie bezahlt wurde, wird der Zeilenbetrag der Buchung zurückerstattet; der Zahlungsvorgang gilt als erstattet, sobald alle seine Buchungen storniert sind. Eine bezahlte Buchung einer vom Veranstalter abgesagten Veranstaltung ist nicht stornierbar (409), die Erstattung übernimmt der Veranstalter. Wiederholtes Stornieren gelingt ohne weitere Erstattung.",
                 "produces": [
                     "application/json"
                 ],
@@ -297,7 +297,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Buchung in diesem Status nicht stornierbar",
+                        "description": "Buchung in diesem Status nicht stornierbar oder Veranstaltung vom Veranstalter abgesagt",
                         "schema": {
                             "$ref": "#/definitions/model.ErrorResponse"
                         }
@@ -1912,7 +1912,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Withdraws a published event so that it is no longer bookable. Requires the event_manager role in the organization that owns the event. Only events in status published can be withdrawn; the event status becomes cancelled.",
+                "description": "Withdraws a published event so that it is no longer bookable. Requires the event_manager role in the organization that owns the event. Only events in status published can be withdrawn; the event status becomes cancelled. If the event has not begun yet, every user with a confirmed booking receives one in-app notification (occasion event_cancelled, eventId set, bookingId null) covering all of their confirmed bookings of the event, and the reminders of the event are deleted. An event that was republished after a withdrawal notifies its ticket holders again when it is withdrawn again; earlier notices are kept. notifiedUsers counts the notified users. Bookings and payments stay unchanged; the notification tells the users that the organizer will contact them about the refund. The status change, notifications and audit entry are saved together or not at all.",
                 "produces": [
                     "application/json"
                 ],
@@ -2153,7 +2153,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Liefert die gültigen Tickets des Aufrufers: nur Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es keine gültigen Tickets gibt.",
+                "description": "Liefert die gültigen und die stornierten Tickets des Aufrufers. Gültig sind Buchungen mit ticketsValid true, also bezahlt, bestätigt und für ein veröffentlichtes oder abgeschlossenes Event. Storniert sind bezahlte Tickets mit cancelledBy: organizer, wenn der Veranstalter das Event abgesagt hat, oder user, wenn der Aufrufer die Buchung nach der Bezahlung storniert hat; sie haben ticketsValid false. Warenkorb-Reservierungen und vor der Bezahlung abgebrochene Checkouts erscheinen nicht. Kommende Events zuerst nach Startzeit aufsteigend, danach vergangene nach Startzeit absteigend; ein Event gilt als kommend, bis es nach der Datenbankuhr geendet hat. Jeder Eintrag enthält bookingId für GET /me/bookings/{bookingId} und ratingScore, den Score, mit dem der Aufrufer das Event bewertet hat, oder null, wenn noch nicht bewertet; die Bewertung zählt pro Nutzer und Event. Ticketliste, Buchungshistorie, Ticketdetails und GET /bookings/{bookingId}/payment wenden dieselbe Gültigkeitsregel an. Ein leeres Array, wenn es weder gültige noch stornierte Tickets gibt.",
                 "produces": [
                     "application/json"
                 ],
@@ -2663,7 +2663,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent.",
+                "description": "Returns only the authenticated user's notifications, newest first. The response contains items, page, limit and total; empty pages return items: []. readAt is null for unread notifications. Simulated reminder content and scheduledAt are refreshed from current event and location data before display; changed reminders become unread. Simulation is immediately visible, even before scheduledAt; no email is sent. Cancellation notices (occasion event_cancelled, EVENTHUB-291) are created when an upcoming event with own confirmed bookings is withdrawn; they reference the event via eventId, their scheduledAt is the time of the withdrawal and they are not refreshed.",
                 "produces": [
                     "application/json"
                 ],
@@ -3908,6 +3908,17 @@ const docTemplate = `{
                 "BookingStatusExpired"
             ]
         },
+        "model.CancelledBy": {
+            "type": "string",
+            "enum": [
+                "organizer",
+                "user"
+            ],
+            "x-enum-varnames": [
+                "CancelledByOrganizer",
+                "CancelledByUser"
+            ]
+        },
         "model.CartItemResponse": {
             "type": "object",
             "properties": {
@@ -4353,6 +4364,11 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "event withdrawn"
+                },
+                "notifiedUsers": {
+                    "description": "Number of users with confirmed bookings who received a cancellation notice (EVENTHUB-291);\n0 if the event had already begun.",
+                    "type": "integer",
+                    "example": 3
                 }
             }
         },
@@ -4569,6 +4585,9 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
+                "eventId": {
+                    "type": "string"
+                },
                 "notificationId": {
                     "type": "string"
                 },
@@ -4759,6 +4778,18 @@ const docTemplate = `{
                     "allOf": [
                         {
                             "$ref": "#/definitions/model.BookingStatus"
+                        }
+                    ]
+                },
+                "cancelledBy": {
+                    "description": "Set when paid tickets were cancelled: organizer when the event of a confirmed and paid\nbooking was withdrawn, user when the user cancelled the booking after paying for it. A\nbooking the user cancelled stays user even if the event is withdrawn later. Omitted\notherwise, also for cart reservations and checkouts cancelled before payment.",
+                    "enum": [
+                        "organizer",
+                        "user"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.CancelledBy"
                         }
                     ]
                 },

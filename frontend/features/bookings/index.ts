@@ -1,5 +1,5 @@
 export { OwnTickets } from "@/features/bookings/components/own-tickets"
-export { formatAmount, splitTicketsByEnd } from "@/features/bookings/lib/format"
+export { formatAmount, splitOwnTickets } from "@/features/bookings/lib/format"
 export { parseTicketView } from "@/features/bookings/lib/validation"
 export { CancellationDetails } from "@/features/bookings/components/cancellation-details"
 export {
@@ -18,6 +18,7 @@ export type {
 } from "@/features/bookings/lib/actions"
 export type {
   BookingStatus,
+  CancelledBy,
   OwnBooking,
   OwnBookingEvent,
   OwnBookingLocation,
