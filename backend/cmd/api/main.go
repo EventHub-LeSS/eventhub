@@ -168,6 +168,10 @@ func main() {
 		{
 			moderation.GET("/ratings", moderationHandler.ListRatingsHandler)
 			moderation.PUT("/ratings/:ratingId/visibility", middleware.Audit(audit.RatingVisibilityChanged), moderationHandler.SetRatingVisibilityHandler)
+			moderation.GET("/events", moderationHandler.ListEventsHandler)
+			moderation.GET("/events/:eventId", moderationHandler.GetEventHandler)
+			moderation.PATCH("/events/:eventId/content", middleware.Audit(audit.EventModerated), moderationHandler.EditEventContentHandler)
+			moderation.POST("/events/:eventId/withdraw", middleware.Audit(audit.EventModerated), moderationHandler.WithdrawEventHandler)
 		}
 
 		// bookings

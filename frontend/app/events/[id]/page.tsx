@@ -13,6 +13,7 @@ import {
   parseReviewPage,
 } from "@/features/catalog";
 import { Button } from "@/features/shared/components/ui/button";
+import { formatAddress } from "@/features/shared/lib/location";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -97,13 +98,9 @@ export default async function EventDetailPage({
     organizerRating.status === "ok"
       ? organizerRating.summary.averageRating
       : null;
-  const street = [location.street, location.houseNumber]
-    .filter(Boolean)
-    .join(" ");
-  const address = [
-    [location.name, street].filter(Boolean).join(", "),
-    `${location.postalCode} ${location.city}`,
-  ].join(", ");
+  const address = location.accessible
+    ? `${formatAddress(location)} (barrierefrei)`
+    : formatAddress(location);
 
   // The rating summary is non-critical: without it only the category is
   // shown above the title, the rest of the page works regardless.

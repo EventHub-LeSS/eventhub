@@ -1,18 +1,16 @@
+import type { EventAddress } from "@/features/shared/lib/location"
+
 /**
  * Mirrors the cart models of the backend (see
  * backend/internal/model/cart.go): the cart of a user is every live
  * reservation without a payment. Each item holds its seats until
  * expiresAt (15 minutes); afterwards it is gone and the seats are free
  * again.
+ *
+ * The location of a cart or payment item mirrors `model.PublishedEventLocation`,
+ * like the locations of events and own bookings.
  */
-export interface CartLocation {
-  locationId: string
-  name: string
-  city: string
-  postalCode: string
-  street: string
-  houseNumber: string | null
-}
+export type CartLocation = EventAddress
 
 /** Mirrors `model.OwnBookingEvent`: the event of a cart item or payment item. */
 export interface CartEvent {

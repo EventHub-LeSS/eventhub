@@ -55,6 +55,15 @@ definitions:
       username:
         type: string
     type: object
+  handler.EventModerationRequest:
+    properties:
+      reason:
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - reason
+    type: object
   handler.RatingVisibilityRequest:
     properties:
       hidden:
@@ -530,6 +539,15 @@ definitions:
       updatedAt:
         type: string
     type: object
+  model.EventModerationResponse:
+    properties:
+      changed:
+        type: boolean
+      eventId:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+    type: object
   model.EventRating:
     properties:
       authorName:
@@ -623,6 +641,64 @@ definitions:
     - city
     - postalCode
     - street
+    type: object
+  model.ModerateEventContentRequest:
+    properties:
+      description:
+        type: string
+      reason:
+        maxLength: 1000
+        minLength: 1
+        type: string
+      title:
+        type: string
+    required:
+    - reason
+    type: object
+  model.ModeratedEvent:
+    properties:
+      capacity:
+        type: integer
+      categoryId:
+        type: string
+      createdAt:
+        type: string
+      description:
+        type: string
+      endTime:
+        type: string
+      eventId:
+        type: string
+      locationId:
+        type: string
+      organizationName:
+        type: string
+        x-nullable: true
+      organizerId:
+        type: string
+      price:
+        type: number
+      startTime:
+        type: string
+      status:
+        $ref: '#/definitions/model.EventStatus'
+      title:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  model.ModeratedEventPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.ModeratedEvent'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
     type: object
   model.ModeratedRating:
     properties:
@@ -2529,6 +2605,220 @@ paths:
       summary: Meine Tickets
       tags:
       - bookings
+  /moderation/events:
+    get:
+      description: All event statuses and full descriptions, including withdrawn events.
+        Requires admin or moderator. Newest first; organizationId is the local organization
+        UUID.
+      parameters:
+      - description: Event status
+        enum:
+        - draft
+        - published
+        - cancelled
+        - completed
+        in: query
+        name: status
+        type: string
+      - description: Organization UUID
+        in: query
+        name: organizationId
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ModeratedEventPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List events for moderation
+      tags:
+      - moderation
+  /moderation/events/{eventId}:
+    get:
+      description: Full event content in any status. Requires admin or moderator.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ModeratedEvent'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Inspect an event for moderation
+      tags:
+      - moderation
+  /moderation/events/{eventId}/content:
+    patch:
+      consumes:
+      - application/json
+      description: Requires admin or moderator and a reason of 1-1000 characters after
+        trimming. Supply title (3-200 characters after trimming), description (0-5000
+        characters; empty clears it), or both. Other event fields and status stay
+        unchanged. Works in any status. Changes, previous values, reason and actor
+        are recorded atomically. An unchanged request returns changed=false without
+        an audit entry.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Content correction and reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.ModerateEventContentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventModerationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Correct problematic event text
+      tags:
+      - moderation
+  /moderation/events/{eventId}/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Requires admin or moderator and a reason of 1-1000 characters after
+        trimming. Draft and published events become cancelled and disappear from public
+        lists, details and recommendations. New bookings and payment completion are
+        rejected; existing bookings and payments remain in the history and tickets
+        are invalid. No automatic refunds. Completed events return 409. Already cancelled
+        events return changed=false without another audit entry. The status change,
+        reason and actor are recorded atomically.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Moderation reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.EventModerationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventModerationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Withdraw a problematic event
+      tags:
+      - moderation
   /moderation/ratings:
     get:
       description: Returns a page of all ratings including their text, newest first,
