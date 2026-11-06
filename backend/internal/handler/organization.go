@@ -14,8 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
-	"github.com/henning-kln/gocloak"
 )
 
 type OrganizationHandler struct {
@@ -70,16 +68,14 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 		return
 	}
 
-	org := gocloak.OrganizationRepresentation{
-		Name:  &req.InternalName,
-		Alias: &req.DisplayName,
-	}
-
-	keycloakOrgID, adminKeycloakUserID, err := h.keycloakService.CreateOrganization(c.Request.Context(), principal.AccessToken, org, req.OrgAdmin)
+	created, err := h.orgService.CreateOrganization(c.Request.Context(), principal.AccessToken, req)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, service.ErrOrganizationExists) {
+		switch {
+		case errors.Is(err, service.ErrOrganizationExists):
 			status = http.StatusConflict
+		case errors.Is(err, service.ErrOrgAdminNotSynced):
+			status = http.StatusBadRequest
 		}
 		c.JSON(status, model.ErrorResponse{
 			Type:   "about:blank",
@@ -89,104 +85,7 @@ func (h *OrganizationHandler) CreateOrganization(c *gin.Context) {
 		})
 		return
 	}
-
-	adminUser, err := h.userRepo.GetByKeycloakUserID(adminKeycloakUserID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusInternalServerError),
-			Status: http.StatusInternalServerError,
-			Detail: "organization created in Keycloak but failed to look up admin user in database: " + err.Error(),
-		})
-		return
-	}
-	if adminUser == nil {
-		c.JSON(http.StatusBadRequest, model.ErrorResponse{
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusBadRequest),
-			Status: http.StatusBadRequest,
-			Detail: "org admin user not found in API database, run sync first",
-		})
-		return
-	}
-
-	// Keycloak just created the organization with a new ID. A row from an earlier Keycloak
-	// generation may still exist in the database (realm re-imports re-create organizations
-	// with new IDs); reconcile that row instead of inserting a duplicate that would split
-	// the organization's events and memberships across copies.
-	existing, err := h.orgRepo.GetByAnyRef(keycloakOrgID, req.DisplayName, req.InternalName)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusInternalServerError),
-			Status: http.StatusInternalServerError,
-			Detail: "failed to look up organization in database: " + err.Error(),
-		})
-		return
-	}
-
-	orgUUID := uuid.New()
-	if existing != nil {
-		orgUUID = existing.OrganizationID
-		// The submitted create form is the new truth for the reconciled row: the contact
-		// columns move as well, not only the Keycloak-owned identity columns.
-		existing.KeycloakOrgID = keycloakOrgID
-		existing.Alias = req.DisplayName
-		existing.Name = req.InternalName
-		existing.ContactEmail = req.ContactEmail
-		existing.ContactPhoneNumber = req.ContactPhoneNumber
-		existing.Street = req.Street
-		existing.HouseNumber = req.HouseNumber
-		existing.PostalCode = req.PostalCode
-		existing.City = req.City
-		existing.CountryCode = req.CountryCode
-		if err := h.orgRepo.UpdateOrganization(existing); err != nil {
-			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-				Type:   "about:blank",
-				Title:  http.StatusText(http.StatusInternalServerError),
-				Status: http.StatusInternalServerError,
-				Detail: "organization created in Keycloak but failed to update the existing database row: " + err.Error(),
-			})
-			return
-		}
-	} else {
-		err = h.orgRepo.CreateOrganization(&model.OrganizationModel{
-			OrganizationID:     orgUUID,
-			KeycloakOrgID:      keycloakOrgID,
-			Alias:              req.DisplayName,
-			Name:               req.InternalName,
-			ContactEmail:       req.ContactEmail,
-			ContactPhoneNumber: req.ContactPhoneNumber,
-			Street:             req.Street,
-			HouseNumber:        req.HouseNumber,
-			PostalCode:         req.PostalCode,
-			City:               req.City,
-			CountryCode:        req.CountryCode,
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-				Type:   "about:blank",
-				Title:  http.StatusText(http.StatusInternalServerError),
-				Status: http.StatusInternalServerError,
-				Detail: "organization created in Keycloak but failed to insert into database: " + err.Error(),
-			})
-			return
-		}
-	}
-
-	err = h.orgRepo.AddMembership(&model.OrganizationMembershipModel{
-		UserID:         adminUser.UserID,
-		OrganizationID: orgUUID,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, model.ErrorResponse{
-			Type:   "about:blank",
-			Title:  http.StatusText(http.StatusInternalServerError),
-			Status: http.StatusInternalServerError,
-			Detail: "organization created in Keycloak and database but failed to add membership: " + err.Error(),
-		})
-		return
-	}
+	keycloakOrgID := created.KeycloakOrgID
 
 	c.JSON(http.StatusCreated, model.CreateOrganizationResponse{
 		ID:      keycloakOrgID,

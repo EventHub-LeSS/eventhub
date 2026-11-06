@@ -199,6 +199,12 @@ definitions:
       message:
         type: string
     type: object
+  model.ApproveOrganizerApplicationRequest:
+    properties:
+      reason:
+        maxLength: 1000
+        type: string
+    type: object
   model.AuditChanges:
     additionalProperties: {}
     type: object
@@ -856,6 +862,70 @@ definitions:
     - RoleOrganizationAdmin
     - RoleEventManager
     - RoleFinanceViewer
+  model.OrganizerApplicationModel:
+    properties:
+      applicationId:
+        type: string
+      city:
+        type: string
+      contactEmail:
+        type: string
+      contactPhoneNumber:
+        type: string
+      countryCode:
+        type: string
+      createdAt:
+        type: string
+      decidedAt:
+        type: string
+      decidedBy:
+        type: string
+      decisionReason:
+        type: string
+      houseNumber:
+        type: string
+      message:
+        type: string
+      organizationAlias:
+        type: string
+      organizationId:
+        type: string
+      organizationName:
+        type: string
+      postalCode:
+        type: string
+      status:
+        $ref: '#/definitions/model.OrganizerApplicationStatus'
+      street:
+        type: string
+      updatedAt:
+        type: string
+      userId:
+        type: string
+    type: object
+  model.OrganizerApplicationPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.OrganizerApplicationModel'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  model.OrganizerApplicationStatus:
+    enum:
+    - pending
+    - approved
+    - rejected
+    type: string
+    x-enum-varnames:
+    - OrganizerApplicationPending
+    - OrganizerApplicationApproved
+    - OrganizerApplicationRejected
   model.OrganizerRatingSummary:
     properties:
       averageRating:
@@ -1158,6 +1228,16 @@ definitions:
       ratingId:
         type: string
     type: object
+  model.RejectOrganizerApplicationRequest:
+    properties:
+      reason:
+        example: Bitte geben Sie ein Impressum an.
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - reason
+    type: object
   model.SalesDashboardEventResponse:
     properties:
       availableSeats:
@@ -1185,6 +1265,55 @@ definitions:
         type: string
       soldTickets:
         type: integer
+    type: object
+  model.SubmitOrganizerApplicationRequest:
+    properties:
+      city:
+        maxLength: 100
+        type: string
+      contactEmail:
+        example: info@stadtfest-bremen.de
+        type: string
+      contactPhoneNumber:
+        maxLength: 50
+        type: string
+      countryCode:
+        example: DE
+        maxLength: 2
+        minLength: 2
+        type: string
+      houseNumber:
+        maxLength: 20
+        type: string
+      message:
+        description: Message tells the reviewers who the applicant is and which events
+          they plan.
+        maxLength: 5000
+        minLength: 10
+        type: string
+      organizationAlias:
+        description: |-
+          OrganizationAlias identifies the organization in tokens and URLs: 3-50 lowercase letters,
+          digits and hyphens, starting and ending with a letter or digit.
+        example: stadtfest-bremen
+        type: string
+      organizationName:
+        description: OrganizationName is the display name of the organization to create.
+        example: Stadtfest Bremen e.V.
+        maxLength: 200
+        minLength: 2
+        type: string
+      postalCode:
+        maxLength: 20
+        type: string
+      street:
+        maxLength: 200
+        type: string
+    required:
+    - contactEmail
+    - message
+    - organizationAlias
+    - organizationName
     type: object
   model.UpdateEventRequest:
     properties:
@@ -1274,6 +1403,215 @@ paths:
       summary: Health check
       tags:
       - system
+  /admin/organizer-applications:
+    get:
+      description: Requires the global admin role or the org_admin role in any organization.
+        Oldest first, so reviewers work through the queue.
+      parameters:
+      - description: Review state
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizerApplicationPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List organizer applications for review
+      tags:
+      - organizer-applications
+  /admin/organizer-applications/{applicationId}:
+    get:
+      description: Requires the global admin role or the org_admin role in any organization.
+      parameters:
+      - description: Application UUID
+        in: path
+        name: applicationId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizerApplicationModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Inspect an organizer application
+      tags:
+      - organizer-applications
+  /admin/organizer-applications/{applicationId}/approve:
+    post:
+      consumes:
+      - application/json
+      description: Requires the global admin role or the org_admin role in any organization;
+        reviewers cannot approve their own application (403). Creates the requested
+        organization with the backend service account in Keycloak and in the API database
+        with the applicant as org_admin, marks the application approved, records the
+        decision in the audit log of the new organization and notifies the applicant.
+        An optional reason (at most 1000 characters) is passed on to the applicant.
+        The applicant sees the organization after logging in again.
+      parameters:
+      - description: Application UUID
+        in: path
+        name: applicationId
+        required: true
+        type: string
+      - description: Optional note
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/model.ApproveOrganizerApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizerApplicationModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Already decided, or the organization alias or name is taken
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve an organizer application
+      tags:
+      - organizer-applications
+  /admin/organizer-applications/{applicationId}/reject:
+    post:
+      consumes:
+      - application/json
+      description: Requires the global admin role or the org_admin role in any organization;
+        reviewers cannot reject their own application (403). Requires a reason of
+        1-1000 characters after trimming, which the applicant is told. The decision
+        is recorded in the platform audit log.
+      parameters:
+      - description: Application UUID
+        in: path
+        name: applicationId
+        required: true
+        type: string
+      - description: Reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.RejectOrganizerApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizerApplicationModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Already decided
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Reject an organizer application
+      tags:
+      - organizer-applications
   /admin/users:
     get:
       description: Returns a database page of shared users ordered by userId ascending,
@@ -2815,6 +3153,36 @@ paths:
       summary: Ticketdetails einer eigenen Buchung
       tags:
       - bookings
+  /me/organizer-applications:
+    get:
+      description: All organizer applications of the authenticated user with their
+        review state, newest first.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.OrganizerApplicationModel'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List own organizer applications
+      tags:
+      - organizer-applications
   /me/tickets:
     get:
       description: 'Liefert die gültigen und die stornierten Tickets des Aufrufers.
@@ -3625,6 +3993,55 @@ paths:
       summary: Get organizer rating summary
       tags:
       - organizations
+  /organizer-applications:
+    post:
+      consumes:
+      - application/json
+      description: Contact form of the authenticated user to become an organizer.
+        The application waits for review by a global admin or an org admin of any
+        organization; approval creates the organization with the applicant as org_admin.
+        Only one application per user can be pending. The alias must be 3-50 lowercase
+        letters, digits or hyphens and start and end with a letter or digit.
+      parameters:
+      - description: Contact form
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SubmitOrganizerApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/model.OrganizerApplicationModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: An application is already pending, or the organization alias
+            or name is taken
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Apply to become an organizer
+      tags:
+      - organizer-applications
   /payments/{paymentId}:
     get:
       description: 'Liefert den gespeicherten Zahlungsvorgang des Aufrufers: den Summenbetrag,
