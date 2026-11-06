@@ -2401,10 +2401,12 @@ paths:
         If the event has not begun yet, every user with a confirmed booking receives
         one in-app notification (occasion event_cancelled, eventId set, bookingId
         null) covering all of their confirmed bookings of the event, and the reminders
-        of the event are deleted. notifiedUsers counts the notified users. Bookings
-        and payments stay unchanged; the notification tells the users that the organizer
-        will contact them about the refund. The status change, notifications and audit
-        entry are saved together or not at all.
+        of the event are deleted. An event that was republished after a withdrawal
+        notifies its ticket holders again when it is withdrawn again; earlier notices
+        are kept. notifiedUsers counts the notified users. Bookings and payments stay
+        unchanged; the notification tells the users that the organizer will contact
+        them about the refund. The status change, notifications and audit entry are
+        saved together or not at all.
       parameters:
       - description: Event ID
         in: path

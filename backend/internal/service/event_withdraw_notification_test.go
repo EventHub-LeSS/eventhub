@@ -260,6 +260,46 @@ func TestWithdrawEvent_NotificationFailureAbortsWithdraw(t *testing.T) {
 	}
 }
 
+func TestWithdrawEvent_NotifiesAgainAfterRepublish(t *testing.T) {
+	event := upcomingEvent(withdrawNow.Add(24 * time.Hour))
+	anna, ben, carla := uuid.New(), uuid.New(), uuid.New()
+	f := newWithdrawFixture(event, model.TicketHolder{UserID: anna, Tickets: 2}, model.TicketHolder{UserID: ben, Tickets: 1})
+	if _, err := f.withdraw(event); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.PublishEvent(auditCtx(audit.EventPublished), event.EventID, []string{"kc-org-b"}); err != nil {
+		t.Fatalf("republish: %v", err)
+	}
+	// Between the withdrawals, ben cancelled his booking and carla booked.
+	f.bookings.holders = []model.TicketHolder{{UserID: anna, Tickets: 2}, {UserID: carla, Tickets: 4}}
+
+	notified, err := f.withdraw(event)
+	if err != nil {
+		t.Fatalf("second withdraw: %v", err)
+	}
+	if notified != 2 || len(f.notifications.created) != 4 {
+		t.Fatalf("notified = %d, created = %d, want 2 new of 4", notified, len(f.notifications.created))
+	}
+	if f.events.saved.Status != model.EventStatusCancelled || len(f.audit.entries) != 3 || len(f.notifications.deletedReminders) != 2 {
+		t.Fatalf("second withdraw incomplete: status %s, %d audit entries, %d reminder deletions",
+			f.events.saved.Status, len(f.audit.entries), len(f.notifications.deletedReminders))
+	}
+	firstIDs := map[uuid.UUID]bool{}
+	for _, n := range f.notifications.created[:2] {
+		firstIDs[n.NotificationID] = true
+	}
+	tickets := map[uuid.UUID]string{}
+	for _, n := range f.notifications.created[2:] {
+		if firstIDs[n.NotificationID] {
+			t.Error("the second withdrawal must create new notices")
+		}
+		tickets[*n.UserID] = n.Content
+	}
+	if len(tickets) != 2 || !strings.Contains(tickets[anna], "Betroffene Tickets: 2.") || !strings.Contains(tickets[carla], "Betroffene Tickets: 4.") {
+		t.Fatalf("second withdrawal notified %v, want anna and carla", tickets)
+	}
+}
+
 func TestWithdrawEvent_RejectedWithdrawNotifiesNobody(t *testing.T) {
 	for _, status := range []model.EventStatus{model.EventStatusDraft, model.EventStatusCancelled, model.EventStatusCompleted} {
 		t.Run(string(status), func(t *testing.T) {

@@ -43,21 +43,33 @@ func createReminder(t *testing.T, db *gorm.DB, user, booking uuid.UUID) uuid.UUI
 	return note.NotificationID
 }
 
-func cancellationNotices(t *testing.T, db *gorm.DB, event uuid.UUID) map[uuid.UUID]model.NotificationData {
+// cancellationNoticesByUser returns the cancellation notices of the event per recipient, oldest first.
+func cancellationNoticesByUser(t *testing.T, db *gorm.DB, event uuid.UUID) map[uuid.UUID][]model.NotificationData {
 	t.Helper()
 	var notes []model.NotificationData
-	if err := db.Where("event_id = ? AND occasion = ?", event, service.OccasionEventCancelled).Find(&notes).Error; err != nil {
+	if err := db.Where("event_id = ? AND occasion = ?", event, service.OccasionEventCancelled).
+		Order("created_at, notification_id").Find(&notes).Error; err != nil {
 		t.Fatal(err)
 	}
-	byUser := map[uuid.UUID]model.NotificationData{}
+	byUser := map[uuid.UUID][]model.NotificationData{}
 	for _, note := range notes {
 		if note.UserID == nil {
 			t.Fatal("cancellation notice without recipient")
 		}
-		if _, dup := byUser[*note.UserID]; dup {
-			t.Fatalf("user %s was notified twice", *note.UserID)
+		byUser[*note.UserID] = append(byUser[*note.UserID], note)
+	}
+	return byUser
+}
+
+// cancellationNotices returns the notices of an event that was withdrawn once: one per recipient.
+func cancellationNotices(t *testing.T, db *gorm.DB, event uuid.UUID) map[uuid.UUID]model.NotificationData {
+	t.Helper()
+	byUser := map[uuid.UUID]model.NotificationData{}
+	for user, notes := range cancellationNoticesByUser(t, db, event) {
+		if len(notes) != 1 {
+			t.Fatalf("user %s was notified %d times", user, len(notes))
 		}
-		byUser[*note.UserID] = note
+		byUser[user] = notes[0]
 	}
 	return byUser
 }
@@ -212,20 +224,24 @@ func TestWithdrawEventHandler_NotificationFailureRollsBackDatabase(t *testing.T)
 	user := seedBookingUser(t, db, "withdraw-rollback")
 	booking := createTicketBooking(t, db, &user, event.eventID, model.BookingStatusConfirmed, 1)
 	reminder := createReminder(t, db, user, booking)
-	// An existing notice violates the unique index, so saving the notices fails.
-	existing := model.NotificationData{
-		NotificationID: uuid.New(), UserID: &user, EventID: &event.eventID,
-		Occasion: service.OccasionEventCancelled, Subject: "alt", Content: "alt",
+	// A constraint that rejects cancellation notices makes saving them fail.
+	const reject = "test_reject_event_cancelled"
+	dropReject := func() {
+		if err := db.Exec("ALTER TABLE notification_data DROP CONSTRAINT IF EXISTS " + reject).Error; err != nil {
+			t.Error(err)
+		}
 	}
-	if err := db.Create(&existing).Error; err != nil {
+	dropReject()
+	if err := db.Exec("ALTER TABLE notification_data ADD CONSTRAINT " + reject + " CHECK (occasion <> 'event_cancelled') NOT VALID").Error; err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(dropReject)
 
 	rec := postWithdraw(t, newEventRouter(db, principalManaging("kc-org-b")), event.eventID.String())
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if strings.Contains(rec.Body.String(), "idx_notification_event_cancelled") {
+	if strings.Contains(rec.Body.String(), reject) {
 		t.Error("database details leaked")
 	}
 	if status := eventStatus(t, db, event.eventID); status != model.EventStatusPublished {
@@ -234,8 +250,8 @@ func TestWithdrawEventHandler_NotificationFailureRollsBackDatabase(t *testing.T)
 	if !notificationExists(t, db, reminder) {
 		t.Error("failed withdraw deleted reminders")
 	}
-	if notices := cancellationNotices(t, db, event.eventID); len(notices) != 1 || notices[user].NotificationID != existing.NotificationID {
-		t.Errorf("failed withdraw changed notices: %+v", notices)
+	if notices := cancellationNoticesByUser(t, db, event.eventID); len(notices) != 0 {
+		t.Errorf("failed withdraw saved notices: %+v", notices)
 	}
 	var audits int64
 	if err := db.Model(&model.AuditLogModel{}).Where("resource_id = ?", event.eventID.String()).Count(&audits).Error; err != nil {
@@ -243,5 +259,69 @@ func TestWithdrawEventHandler_NotificationFailureRollsBackDatabase(t *testing.T)
 	}
 	if audits != 0 {
 		t.Errorf("failed withdraw recorded %d audit entries", audits)
+	}
+}
+
+// EVENTHUB-290 lets organizers publish a withdrawn event again; withdrawing it once more must
+// succeed and notify the ticket holders again.
+func TestWithdrawEventHandler_RepublishedEventNotifiesAgainDatabase(t *testing.T) {
+	for name, republish := range map[string]func(*testing.T, http.Handler, string){
+		"published directly": func(t *testing.T, router http.Handler, id string) {
+			if rec := postPublish(t, router, id); rec.Code != http.StatusOK {
+				t.Fatalf("republish: %d %s", rec.Code, rec.Body.String())
+			}
+		},
+		"restored as draft first": func(t *testing.T, router http.Handler, id string) {
+			if rec := postRestoreDraft(router, id); rec.Code != http.StatusOK {
+				t.Fatalf("restore: %d %s", rec.Code, rec.Body.String())
+			}
+			if rec := postPublish(t, router, id); rec.Code != http.StatusOK {
+				t.Fatalf("republish: %d %s", rec.Code, rec.Body.String())
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db := testdb.Open(t)
+			event := seedEventForOrg(t, db, "kc-org-b", model.EventStatusPublished)
+			id := event.eventID.String()
+			router := newEventRouter(db, principalManaging("kc-org-b"))
+			anna := seedBookingUser(t, db, "rewithdraw-anna")
+			ben := seedBookingUser(t, db, "rewithdraw-ben")
+			annaBooking := createTicketBooking(t, db, &anna, event.eventID, model.BookingStatusConfirmed, 2)
+
+			if response := withdrawResponse(t, postWithdraw(t, router, id)); response.NotifiedUsers != 1 {
+				t.Fatalf("first withdraw notified %d users, want 1", response.NotifiedUsers)
+			}
+			first := cancellationNotices(t, db, event.eventID)[anna]
+			if err := db.Model(&model.NotificationData{}).Where("notification_id = ?", first.NotificationID).
+				Update("read_at", time.Now()).Error; err != nil {
+				t.Fatal(err)
+			}
+
+			republish(t, router, id)
+			createTicketBooking(t, db, &ben, event.eventID, model.BookingStatusConfirmed, 1)
+			reminder := createReminder(t, db, anna, annaBooking)
+
+			if response := withdrawResponse(t, postWithdraw(t, router, id)); response.NotifiedUsers != 2 {
+				t.Fatalf("second withdraw notified %d users, want 2", response.NotifiedUsers)
+			}
+			if status := eventStatus(t, db, event.eventID); status != model.EventStatusCancelled {
+				t.Fatalf("second withdraw left status %s", status)
+			}
+			notices := cancellationNoticesByUser(t, db, event.eventID)
+			if len(notices) != 2 || len(notices[anna]) != 2 || len(notices[ben]) != 1 {
+				t.Fatalf("notices per user: anna %d, ben %d, users %d", len(notices[anna]), len(notices[ben]), len(notices))
+			}
+			kept, again := notices[anna][0], notices[anna][1]
+			if kept.NotificationID != first.NotificationID || kept.ReadAt == nil || kept.Content != first.Content {
+				t.Errorf("the first notice must stay unchanged: %+v", kept)
+			}
+			if again.ReadAt != nil || !again.CreatedAt.After(kept.CreatedAt) || !strings.Contains(again.Content, "Betroffene Tickets: 2.") {
+				t.Errorf("unexpected second notice: %+v", again)
+			}
+			if notificationExists(t, db, reminder) {
+				t.Error("reminders created after republishing must be deleted")
+			}
+		})
 	}
 }

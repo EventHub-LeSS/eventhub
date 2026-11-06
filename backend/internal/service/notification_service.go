@@ -129,9 +129,11 @@ func (s *NotificationService) SimulateReminder(ctx context.Context, bookingID, u
 // cancellation and returns the number of notified users. It must run in the withdraw transaction
 // after the event row is locked: payment confirmation and reminder simulation lock the event first
 // as well, so no booking is confirmed and no reminder is created while ticket holders are read.
-// Each user receives one notice covering all of their confirmed bookings. Events that have already
-// begun notify nobody and keep their reminders; otherwise the reminders of the event are deleted,
-// because they would still announce the event.
+// Each user receives one notice covering all of their confirmed bookings. A republished event
+// (EVENTHUB-290) can be withdrawn again; every withdrawal adds new notices and keeps the earlier
+// ones. The lock and the status check published → cancelled ensure that one withdrawal notifies
+// each user only once. Events that have already begun notify nobody and keep their reminders;
+// otherwise the reminders of the event are deleted, because they would still announce the event.
 func notifyEventCancelled(tx repository.Tx, event *model.EventModel) (int, error) {
 	now, err := tx.Notifications.DatabaseNow()
 	if err != nil {

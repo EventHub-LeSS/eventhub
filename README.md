@@ -647,6 +647,13 @@ Geänderte Erinnerungen werden wieder ungelesen. Auch eine erneute Simulation
 aktualisiert die bestehende Erinnerung. Es gibt weiterhin keinen Versandjob;
 vor einem späteren echten Versand müsste dieser Abgleich ebenfalls erfolgen.
 
+**Absagen (EVENTHUB-291):** Zieht ein Veranstalter eine noch nicht begonnene
+Veranstaltung zurück, erhält jeder Nutzer mit bestätigten Buchungen eine
+Benachrichtigung mit occasion event_cancelled und eventId (Migration 000015);
+die Erinnerungen der Veranstaltung werden gelöscht. Wird die Veranstaltung
+erneut veröffentlicht (EVENTHUB-290) und wieder zurückgezogen, erhalten die dann
+aktuellen Ticketinhaber eine neue Absage; frühere Absagen bleiben unverändert.
+
 ### Zurückgezogene Veranstaltungen erneut verwenden (EVENTHUB-290)
 
 Veranstalter mit event_manager in der zugehörigen Organisation können beide
