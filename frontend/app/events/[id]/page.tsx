@@ -12,6 +12,7 @@ import {
   getPublishedEventDetails,
   parseReviewPage,
 } from "@/features/catalog";
+import { EventImage } from "@/features/shared/components/event-image";
 import { Button } from "@/features/shared/components/ui/button";
 import { formatAddress } from "@/features/shared/lib/location";
 
@@ -132,21 +133,26 @@ export default async function EventDetailPage({
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
         <div className="flex min-w-0 flex-col gap-6">
-          {/* Image placeholder: until real pictures exist, a light purple
-              banner marks where the event image will appear. */}
-          <div
-            className="relative aspect-video overflow-hidden rounded-xl"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(45deg, #f5f3ff 0 22px, #ede9fe 22px 44px)",
-            }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center p-4">
-              <span className="rounded-full border border-purple-200 bg-white/85 px-4 py-1.5 text-sm font-medium text-muted-foreground">
-                Bild: {category.category}-Veranstaltung
-              </span>
-            </div>
-          </div>
+          {/* EVENTHUB-264: the event image; events without one keep the
+              light purple banner. */}
+          <EventImage
+            eventId={event.eventId}
+            alt={event.title}
+            className="aspect-video rounded-xl"
+            fallback={
+              <div
+                className="absolute inset-0 flex items-center justify-center p-4"
+                style={{
+                  backgroundImage:
+                    "repeating-linear-gradient(45deg, #f5f3ff 0 22px, #ede9fe 22px 44px)",
+                }}
+              >
+                <span className="rounded-full border border-purple-200 bg-white/85 px-4 py-1.5 text-sm font-medium text-muted-foreground">
+                  Bild: {category.category}-Veranstaltung
+                </span>
+              </div>
+            }
+          />
 
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 
 import {
   saveDraftAction,
@@ -13,11 +13,16 @@ import {
   toDraft,
   withLocation,
 } from "@/features/events/lib/draft"
+import {
+  IMAGE_CONTENT_TYPES,
+  validateImageFile,
+} from "@/features/events/lib/image"
 import type {
   Event,
   EventCatalog,
   EventLocation,
 } from "@/features/events/lib/types"
+import { EventImage } from "@/features/shared/components/event-image"
 import { Button } from "@/features/shared/components/ui/button"
 import { Checkbox } from "@/features/shared/components/ui/checkbox"
 import {
@@ -63,15 +68,30 @@ interface DraftFormProps {
   catalog: EventCatalog
   /** Present when an existing draft is edited instead of a new one created. */
   event?: Event
+  /** The draft was just created, but storing its image failed. */
+  imageFailed?: boolean
 }
 
-export function DraftForm({ catalog, event }: DraftFormProps) {
+export function DraftForm({ catalog, event, imageFailed }: DraftFormProps) {
   const [draft, setDraft] = useState<EventDraft>(() =>
     event ? toDraft(event, catalog.locations) : emptyDraft
   )
   const [errors, setErrors] = useState<DraftErrors>({})
   const [message, setMessage] = useState<string>()
   const [isPending, startTransition] = useTransition()
+  /** EVENTHUB-264: the picked image, sent to the action as a File. */
+  const [imageFile, setImageFile] = useState<File>()
+  const [image, setImage] = useState<string>()
+  const [imageError, setImageError] = useState<string | undefined>(() =>
+    imageFailed
+      ? "Der Entwurf wurde gespeichert, das Bild aber nicht. Bitte wähle es erneut aus."
+      : undefined
+  )
+  const imageInput = useRef<HTMLInputElement>(null)
+
+  // The API only takes images for drafts and published events.
+  const imageAllowed =
+    !event || event.status === "draft" || event.status === "published"
 
   function update<K extends keyof EventDraft>(key: K, value: EventDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -91,16 +111,60 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
     }))
   }
 
+  function clearImage() {
+    setImage(undefined)
+    setImageFile(undefined)
+
+    if (imageInput.current) {
+      imageInput.current.value = ""
+    }
+  }
+
+  /** Checks the picked file and reads it as a data URL for the preview. */
+  function pickImage(changed: React.ChangeEvent<HTMLInputElement>) {
+    const file = changed.target.files?.[0]
+
+    setImage(undefined)
+    setImageFile(undefined)
+    setImageError(undefined)
+
+    if (!file) {
+      return
+    }
+
+    const error = validateImageFile(file)
+
+    if (error) {
+      setImageError(error)
+      clearImage()
+      return
+    }
+
+    const reader = new FileReader()
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        setImage(reader.result)
+        setImageFile(file)
+      }
+    })
+    reader.addEventListener("error", () => {
+      setImageError("Das Bild konnte nicht gelesen werden.")
+      clearImage()
+    })
+    reader.readAsDataURL(file)
+  }
+
   function handleSubmit(submitEvent: React.FormEvent<HTMLFormElement>) {
     submitEvent.preventDefault()
     setMessage(undefined)
 
     startTransition(async () => {
       const result = event
-        ? await updateDraftAction(event.eventId, draft)
-        : await saveDraftAction(draft)
+        ? await updateDraftAction(event.eventId, draft, imageFile)
+        : await saveDraftAction(draft, imageFile)
 
       setErrors(result.errors ?? {})
+      setImageError(result.imageError)
       setMessage(result.message)
     })
   }
@@ -145,6 +209,63 @@ export function DraftForm({ catalog, event }: DraftFormProps) {
           aria-invalid={Boolean(errors.description)}
         />
       </Field>
+
+      {imageAllowed && (
+        <Field
+          id="image"
+          label="Bild"
+          error={imageError}
+          hint={
+            event
+              ? "Optional. PNG oder JPEG, höchstens 2 MB. Ein neues Bild ersetzt das bisherige."
+              : "Optional. PNG oder JPEG, höchstens 2 MB."
+          }
+        >
+          <input
+            ref={imageInput}
+            id="image"
+            type="file"
+            accept={IMAGE_CONTENT_TYPES.join(",")}
+            className={`${fieldClass} h-auto py-1.5 file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-sm file:font-medium`}
+            onChange={pickImage}
+            aria-invalid={Boolean(imageError)}
+          />
+          {!image &&
+            event?.status === "published" && (
+              // The API only serves images of published events, so a draft's
+              // stored image cannot be shown yet.
+              <EventImage
+                eventId={event.eventId}
+                alt="Aktuelles Bild der Veranstaltung"
+                className="h-48 rounded-lg border"
+                fallback={
+                  <div className="flex size-full items-center justify-center bg-muted text-sm text-muted-foreground">
+                    Noch kein Bild hinterlegt
+                  </div>
+                }
+              />
+            )}
+          {image && (
+            <div className="flex flex-col items-start gap-2">
+              {/* A local data URL preview, next/image has nothing to optimize here. */}
+              {/* oxlint-disable-next-line nextjs/no-img-element */}
+              <img
+                src={image}
+                alt="Vorschau des gewählten Bildes"
+                className="max-h-48 w-full rounded-lg border object-cover"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearImage}
+              >
+                Bild entfernen
+              </Button>
+            </div>
+          )}
+        </Field>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="startTime" label="Beginn" error={errors.startTime}>
