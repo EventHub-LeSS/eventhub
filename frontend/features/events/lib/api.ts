@@ -1,6 +1,7 @@
 import "server-only"
 import { getPublishedEvents } from "@/features/catalog"
 import type { EventDraftPayload } from "@/features/events/lib/draft"
+import type { DecodedImage } from "@/features/events/lib/image"
 import type {
   Event,
   EventCatalog,
@@ -124,6 +125,24 @@ export async function updateEvent(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  })
+}
+
+/**
+ * EVENTHUB-264: replaces the event's image. The API takes the raw PNG or JPEG
+ * bytes with a matching Content-Type and stores them base64 encoded itself. It
+ * only accepts images for drafts and published events.
+ */
+export async function uploadEventImage(
+  accessToken: string,
+  eventId: string,
+  image: DecodedImage
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/events/${eventId}/image`, {
+    accessToken,
+    method: "PUT",
+    headers: { "Content-Type": image.contentType },
+    body: image.bytes,
   })
 }
 

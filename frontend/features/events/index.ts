@@ -10,6 +10,7 @@ export {
   updateDraftAction,
 } from "@/features/events/lib/actions"
 export type { DraftActionResult } from "@/features/events/lib/actions"
+export { IMAGE_FAILED_PARAM } from "@/features/events/lib/image"
 export {
   EMPTY_VALUE,
   formatEventDateTime,
