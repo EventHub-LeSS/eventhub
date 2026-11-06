@@ -9,6 +9,7 @@ import {
   createDraft,
   deleteEvent,
   EventApiError,
+  getOwnEvent,
   publishEvent,
   restoreEventAsDraft,
   updateEvent,
@@ -210,6 +211,19 @@ export async function publishDraftAction(
   const { accessToken } = await authorize()
 
   try {
+    // The form requires a start in the future, but the API publishes events
+    // whose start has passed, e.g. a withdrawn one that was never edited.
+    const event = await getOwnEvent(accessToken, eventId)
+
+    if (event && Date.parse(event.startTime) <= Date.now()) {
+      return {
+        message:
+          event.status === "cancelled"
+            ? "Der Beginn liegt in der Vergangenheit. Stelle die Veranstaltung als Entwurf wieder her und wähle einen neuen Termin."
+            : "Der Beginn liegt in der Vergangenheit. Wähle unter „Bearbeiten“ einen neuen Termin, bevor du veröffentlichst.",
+      }
+    }
+
     await publishEvent(accessToken, eventId)
   } catch (error) {
     return failed(error)
