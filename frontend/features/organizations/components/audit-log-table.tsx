@@ -18,6 +18,7 @@ const actionLabel: Record<AuditAction, string> = {
   "event.created": "Veranstaltung erstellt",
   "event.updated": "Veranstaltung bearbeitet",
   "event.published": "Veranstaltung veröffentlicht",
+  "event.restored_as_draft": "Veranstaltung als Entwurf wiederhergestellt",
   "event.cancelled": "Veranstaltung abgesagt",
   "event.deleted": "Veranstaltung gelöscht",
   "rating.visibility_changed": "Sichtbarkeit einer Bewertung geändert",

@@ -103,7 +103,9 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
   const roles = user?.organizationRoles ?? []
   // Same rule as the "Bearbeiten" entry of EventActions.
   const canEdit =
-    roles.includes("event_manager") && event.status !== "completed"
+    roles.includes("event_manager") &&
+    event.status !== "completed" &&
+    event.status !== "cancelled"
   const occupancyPercent = computeOccupancyPercent(
     event.availableSeats,
     event.capacity
@@ -159,6 +161,7 @@ export async function OrganizerEventDetails({ eventId }: { eventId: string }) {
             eventId={event.eventId}
             eventTitle={event.title}
             status={event.status}
+            withdrawnByModerator={event.withdrawnByModerator}
             showViewDetails={false}
             roles={roles}
           />

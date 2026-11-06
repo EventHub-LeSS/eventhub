@@ -146,12 +146,23 @@ export async function uploadEventImage(
   })
 }
 
-/** EVENTHUB-77 / AK5 */
+/** EVENTHUB-77 / AK5, EVENTHUB-288: also republishes a withdrawn event. */
 export async function publishEvent(
   accessToken: string,
   eventId: string
 ): Promise<void> {
   await apiFetch<{ message: string }>(`/events/${eventId}/publish`, {
+    accessToken,
+    method: "POST",
+  })
+}
+
+/** EVENTHUB-288: turns a withdrawn event back into a draft. */
+export async function restoreEventAsDraft(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  await apiFetch<Event>(`/events/${eventId}/restore-draft`, {
     accessToken,
     method: "POST",
   })
