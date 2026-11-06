@@ -2,6 +2,7 @@
 
 import {
   CompassIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   MenuIcon,
   ShieldCheckIcon,
@@ -81,6 +82,11 @@ export function Navbar({ user }: NavbarProps) {
           label: "Moderation",
           href: "/admin/moderation",
           icon: ShieldCheckIcon,
+        },
+        {
+          label: "Berechtigungen",
+          href: "/admin/permissions",
+          icon: KeyRoundIcon,
         },
       ]
     : navigationByRole[role]
