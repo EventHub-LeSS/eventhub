@@ -5,8 +5,10 @@ package keycloakmock
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -273,6 +275,92 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 		groupID, userID := r.PathValue("groupID"), r.PathValue("userID")
 		f.Revokes = append(f.Revokes, groupID+"/"+userID)
 		delete(f.GroupMembers[groupID], userID)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	// Organization creation (EVENTHUB-294): like Keycloak, the new ID is returned in the Location
+	// header and a taken alias or name is a conflict.
+	mux.HandleFunc("POST /admin/realms/eventhub/organizations", admin(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name  string `json:"name"`
+			Alias string `json:"alias"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		if _, taken := f.OrgAliases[body.Alias]; taken {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		for _, name := range f.OrgNames {
+			if name == body.Name {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
+		}
+		orgID := "org-" + uuid.NewString()
+		f.OrgAliases[body.Alias] = orgID
+		f.OrgNames[orgID] = body.Name
+		f.OrgGroups[orgID] = map[string]string{}
+		f.OrgMembers[orgID] = map[string]bool{}
+		w.Header().Set("Location", r.URL.Path+"/"+orgID)
+		w.WriteHeader(http.StatusCreated)
+	}))
+
+	mux.HandleFunc("POST /admin/realms/eventhub/organizations/{orgID}/groups", admin(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		groups, ok := f.OrgGroups[r.PathValue("orgID")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		groupID := "g-" + uuid.NewString()
+		groups[body.Name] = groupID
+		w.Header().Set("Location", r.URL.Path+"/"+groupID)
+		w.WriteHeader(http.StatusCreated)
+	}))
+
+	mux.HandleFunc("POST /admin/realms/eventhub/organizations/{orgID}/members", admin(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		userID := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		members, ok := f.OrgMembers[r.PathValue("orgID")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		members[userID] = true
+		w.WriteHeader(http.StatusCreated)
+	}))
+
+	mux.HandleFunc("DELETE /admin/realms/eventhub/organizations/{orgID}", admin(func(w http.ResponseWriter, r *http.Request) {
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		orgID := r.PathValue("orgID")
+		for alias, id := range f.OrgAliases {
+			if id == orgID {
+				delete(f.OrgAliases, alias)
+			}
+		}
+		delete(f.OrgNames, orgID)
+		delete(f.OrgGroups, orgID)
+		delete(f.OrgMembers, orgID)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
