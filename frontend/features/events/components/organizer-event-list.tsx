@@ -69,6 +69,7 @@ export async function OrganizerEventList() {
                 eventId={event.eventId}
                 eventTitle={event.title}
                 status={event.status}
+                withdrawnByModerator={event.withdrawnByModerator}
                 roles={user?.organizationRoles ?? []}
               />
             </li>

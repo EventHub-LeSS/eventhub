@@ -10,6 +10,7 @@ import {
   deleteEvent,
   EventApiError,
   publishEvent,
+  restoreEventAsDraft,
   updateEvent,
   uploadEventImage,
   withdrawEvent,
@@ -51,10 +52,49 @@ async function authorize(): Promise<{
   return { user, accessToken: session.accessToken }
 }
 
+/** The API's reasons for refusing an event action, in German for the organizer. */
+const apiRefusals: Record<string, string> = {
+  "event is incomplete":
+    "Die Veranstaltung ist unvollständig. Titel, Beginn, Ende nach dem Beginn, Kapazität, Kategorie und Ort müssen angegeben sein.",
+  "this event is already published":
+    "Diese Veranstaltung ist bereits veröffentlicht.",
+  "only draft or cancelled events can be published":
+    "Nur Entwürfe und zurückgezogene Veranstaltungen können veröffentlicht werden.",
+  "only cancelled events can be restored as draft":
+    "Nur zurückgezogene Veranstaltungen können als Entwurf wiederhergestellt werden.",
+  "events withdrawn by moderation cannot be restored or republished by organizers":
+    "Diese Veranstaltung wurde von der Moderation zurückgezogen. Du kannst sie weder wiederherstellen noch erneut veröffentlichen.",
+  "only published events can be withdrawn":
+    "Nur veröffentlichte Veranstaltungen können zurückgezogen werden.",
+  "invalid event status":
+    "Diese Veranstaltung kann in ihrem aktuellen Status nicht bearbeitet werden.",
+  "event not found": "Diese Veranstaltung gibt es nicht mehr.",
+  forbidden: "Du darfst Veranstaltungen dieser Organisation nicht verwalten.",
+  "missing organization role":
+    "Du darfst Veranstaltungen dieser Organisation nicht verwalten.",
+}
+
+/** The only API message with a number in it, from lowering the capacity. */
+const CAPACITY_BELOW_OCCUPIED = /^capacity must not be lower than the (\d+) /
+
+/** The API answers in English; anything not translated gets a general message. */
+function inGerman(error: EventApiError): string {
+  const occupied = CAPACITY_BELOW_OCCUPIED.exec(error.message)?.[1]
+
+  if (occupied) {
+    return `Die Kapazität darf nicht unter den ${occupied} bereits verkauften oder reservierten Tickets liegen.`
+  }
+
+  return (
+    apiRefusals[error.message] ??
+    "Die Anfrage ist fehlgeschlagen. Bitte versuche es später erneut."
+  )
+}
+
 /** Turns an expected API rejection into a form message, rethrows the rest. */
 function failed(error: unknown): DraftActionResult {
   if (error instanceof EventApiError) {
-    return { message: error.message }
+    return { message: inGerman(error) }
   }
 
   throw error
@@ -152,7 +192,7 @@ export async function updateDraftAction(
     } catch (error) {
       if (error instanceof EventApiError) {
         return {
-          imageError: `Die Änderungen wurden gespeichert, das Bild aber nicht: ${error.message}`,
+          imageError: `Die Änderungen wurden gespeichert, das Bild aber nicht: ${inGerman(error)}`,
         }
       }
 
@@ -163,7 +203,7 @@ export async function updateDraftAction(
   redirect(DRAFTS_PATH)
 }
 
-/** EVENTHUB-77 / AK5: publish a draft. */
+/** EVENTHUB-77 / AK5: publish a draft, EVENTHUB-288 or a withdrawn event. */
 export async function publishDraftAction(
   eventId: string
 ): Promise<DraftActionResult> {
@@ -171,6 +211,23 @@ export async function publishDraftAction(
 
   try {
     await publishEvent(accessToken, eventId)
+  } catch (error) {
+    return failed(error)
+  }
+
+  revalidatePath(DRAFTS_PATH)
+
+  return {}
+}
+
+/** EVENTHUB-288: turn a withdrawn event back into a draft to edit it. */
+export async function restoreDraftAction(
+  eventId: string
+): Promise<DraftActionResult> {
+  const { accessToken } = await authorize()
+
+  try {
+    await restoreEventAsDraft(accessToken, eventId)
   } catch (error) {
     return failed(error)
   }
