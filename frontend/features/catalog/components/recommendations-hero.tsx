@@ -46,6 +46,8 @@ function usePrefersReducedMotion() {
 export function RecommendationsHero({ events }: RecommendationsHeroProps) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  /** Event currently shown without its image; its category becomes the fallback label. */
+  const [missingImageId, setMissingImageId] = useState<string | null>(null)
   const sectionRef = useRef<HTMLElement>(null)
   const reducedMotion = usePrefersReducedMotion()
   const rotating = events.length > 1 && !paused && !reducedMotion
@@ -113,14 +115,17 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
       >
 
         <div className="absolute inset-0 bg-black/15 mask-fade-left" />
-        <span className="relative font-mono text-sm tracking-widest text-muted-foreground uppercase">
-          {event.category.category}
-        </span>
+        {missingImageId === event.eventId && (
+          <span className="relative font-mono text-sm tracking-widest text-muted-foreground uppercase">
+            {event.category.category}
+          </span>
+        )}
         <EventImage
           key={event.eventId}
           eventId={event.eventId}
           sizes="(min-width: 1280px) 768px, 60vw"
           className="animate-in mask-fade-left opacity-90 duration-500 fade-in"
+          onMissing={() => setMissingImageId(event.eventId)}
         />
       </div>
 

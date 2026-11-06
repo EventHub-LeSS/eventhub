@@ -9,9 +9,16 @@ interface EventImageProps {
   eventId: string
   sizes: string
   className?: string
+  /** Called once when the event has no image, so callers can show a fallback. */
+  onMissing?: () => void
 }
 
-export function EventImage({ eventId, sizes, className }: EventImageProps) {
+export function EventImage({
+  eventId,
+  sizes,
+  className,
+  onMissing,
+}: EventImageProps) {
   const [failed, setFailed] = useState(false)
 
   if (failed) {
@@ -25,7 +32,10 @@ export function EventImage({ eventId, sizes, className }: EventImageProps) {
       fill
       sizes={sizes}
       className={cn("object-cover", className)}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true)
+        onMissing?.()
+      }}
     />
   )
 }
