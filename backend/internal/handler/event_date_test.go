@@ -67,7 +67,7 @@ func TestPublishedEventsDateDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, calendarDay := range []string{"2026-10-06", "2026-03-29", "2026-10-25"} {
+	for _, calendarDay := range []string{"2030-10-08", "2030-03-31", "2030-10-27"} {
 		t.Run(calendarDay, func(t *testing.T) {
 			db := testdb.Open(t)
 			day, err := time.ParseInLocation(time.DateOnly, calendarDay, location)
