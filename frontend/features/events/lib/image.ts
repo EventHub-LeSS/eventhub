@@ -1,7 +1,8 @@
 /**
- * EVENTHUB-264: the event image. The browser reads the picked file as a data URL
- * string, which the server action decodes again and sends to the API as raw
- * bytes. The rules mirror the backend's PUT /events/{id}/image so a problem
+ * EVENTHUB-264: the event image. The browser passes the picked file to the
+ * server action as a File, which reads it and sends the raw bytes to the API.
+ * (A base64 string argument would hit React's 1,000,000 character limit for
+ * action arguments, so images above ~730 KB failed.) The rules mirror the backend's PUT /events/{id}/image so a problem
  * shows up in the form instead of as a failed request.
  */
 
@@ -50,28 +51,26 @@ export interface DecodedImage {
 }
 
 /**
- * Turns the data URL from the form back into the raw image. The string comes
- * from the client, so type, size and content are all checked again.
+ * Reads the image file from the form into raw bytes. The file comes from the
+ * client, so type, size and content are all checked again.
  */
-export function decodeImageDataUrl(
-  dataUrl: string
-): DecodedImage | { error: string } {
-  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]*)$/.exec(dataUrl)
-
-  if (!match || !isImageContentType(match[1])) {
+export async function readImageFile(
+  file: unknown
+): Promise<DecodedImage | { error: string }> {
+  if (!(file instanceof Blob) || !isImageContentType(file.type)) {
     return { error: IMAGE_WRONG_TYPE }
   }
 
-  const contentType = match[1]
-  const bytes = Uint8Array.from(Buffer.from(match[2], "base64"))
-
-  if (bytes.length === 0) {
-    return { error: IMAGE_WRONG_TYPE }
-  }
-
-  if (bytes.length > MAX_IMAGE_BYTES) {
+  if (file.size > MAX_IMAGE_BYTES) {
     return { error: IMAGE_TOO_LARGE }
   }
+
+  if (file.size === 0) {
+    return { error: IMAGE_WRONG_TYPE }
+  }
+
+  const contentType = file.type
+  const bytes = new Uint8Array(await file.arrayBuffer())
 
   const magic = MAGIC_BYTES[contentType]
 

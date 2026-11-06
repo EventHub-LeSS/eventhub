@@ -22,8 +22,8 @@ import {
 } from "@/features/events/lib/draft"
 import {
   type DecodedImage,
-  decodeImageDataUrl,
   IMAGE_FAILED_PARAM,
+  readImageFile,
 } from "@/features/events/lib/image"
 
 const DRAFTS_PATH = "/organizer/events"
@@ -61,15 +61,15 @@ function failed(error: unknown): DraftActionResult {
 }
 
 /**
- * Validates the form and decodes the optional image (a data URL string) in one
- * go, so all problems are reported together and nothing is sent before.
+ * Validates the form and reads the optional image file in one go, so all
+ * problems are reported together and nothing is sent before.
  */
-function checkInput(
+async function checkInput(
   draft: EventDraft,
-  image?: string
-): { result?: DraftActionResult; decodedImage?: DecodedImage } {
+  image?: File
+): Promise<{ result?: DraftActionResult; decodedImage?: DecodedImage }> {
   const errors = validateDraft(draft)
-  const decoded = image ? decodeImageDataUrl(image) : undefined
+  const decoded = image ? await readImageFile(image) : undefined
   const imageError = decoded && "error" in decoded ? decoded.error : undefined
 
   if (Object.keys(errors).length > 0 || imageError) {
@@ -84,9 +84,9 @@ function checkInput(
 /** EVENTHUB-77 / AK1: save a new event as a draft, EVENTHUB-264 with its image. */
 export async function saveDraftAction(
   draft: EventDraft,
-  image?: string
+  image?: File
 ): Promise<DraftActionResult> {
-  const { result, decodedImage } = checkInput(draft, image)
+  const { result, decodedImage } = await checkInput(draft, image)
 
   if (result) {
     return result
@@ -128,9 +128,9 @@ export async function saveDraftAction(
 export async function updateDraftAction(
   eventId: string,
   draft: EventDraft,
-  image?: string
+  image?: File
 ): Promise<DraftActionResult> {
-  const { result, decodedImage } = checkInput(draft, image)
+  const { result, decodedImage } = await checkInput(draft, image)
 
   if (result) {
     return result

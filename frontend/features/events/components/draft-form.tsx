@@ -79,7 +79,8 @@ export function DraftForm({ catalog, event, imageFailed }: DraftFormProps) {
   const [errors, setErrors] = useState<DraftErrors>({})
   const [message, setMessage] = useState<string>()
   const [isPending, startTransition] = useTransition()
-  /** EVENTHUB-264: the picked image as a data URL, sent as a string. */
+  /** EVENTHUB-264: the picked image, sent to the action as a File. */
+  const [imageFile, setImageFile] = useState<File>()
   const [image, setImage] = useState<string>()
   const [imageError, setImageError] = useState<string | undefined>(() =>
     imageFailed
@@ -112,17 +113,19 @@ export function DraftForm({ catalog, event, imageFailed }: DraftFormProps) {
 
   function clearImage() {
     setImage(undefined)
+    setImageFile(undefined)
 
     if (imageInput.current) {
       imageInput.current.value = ""
     }
   }
 
-  /** Checks the picked file and reads it as a data URL for preview and upload. */
+  /** Checks the picked file and reads it as a data URL for the preview. */
   function pickImage(changed: React.ChangeEvent<HTMLInputElement>) {
     const file = changed.target.files?.[0]
 
     setImage(undefined)
+    setImageFile(undefined)
     setImageError(undefined)
 
     if (!file) {
@@ -141,6 +144,7 @@ export function DraftForm({ catalog, event, imageFailed }: DraftFormProps) {
     reader.addEventListener("load", () => {
       if (typeof reader.result === "string") {
         setImage(reader.result)
+        setImageFile(file)
       }
     })
     reader.addEventListener("error", () => {
@@ -156,8 +160,8 @@ export function DraftForm({ catalog, event, imageFailed }: DraftFormProps) {
 
     startTransition(async () => {
       const result = event
-        ? await updateDraftAction(event.eventId, draft, image)
-        : await saveDraftAction(draft, image)
+        ? await updateDraftAction(event.eventId, draft, imageFile)
+        : await saveDraftAction(draft, imageFile)
 
       setErrors(result.errors ?? {})
       setImageError(result.imageError)
