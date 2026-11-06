@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Migration 000015 (EVENTHUB-291) lets cancellation notices reference their event. An event can be
+// Migration 000016 (EVENTHUB-291) lets cancellation notices reference their event. An event can be
 // withdrawn several times (EVENTHUB-290), so a user may hold several notices for the same event.
 func TestNotificationEventMigrationAllowsRepeatedCancellations(t *testing.T) {
 	db := testdb.Open(t)
@@ -26,7 +26,7 @@ func TestNotificationEventMigrationAllowsRepeatedCancellations(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	up, err := os.ReadFile("../../migrations/000015_notification_event.up.sql")
+	up, err := os.ReadFile("../../migrations/000016_notification_event.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestNotificationEventMigrationAllowsRepeatedCancellations(t *testing.T) {
 		t.Fatalf("%d notices still reference the deleted event", referencing)
 	}
 
-	down, err := os.ReadFile("../../migrations/000015_notification_event.down.sql")
+	down, err := os.ReadFile("../../migrations/000016_notification_event.down.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
