@@ -28,21 +28,41 @@ func NewRatingService(ratingRepo repository.RatingRepository, eventRepo reposito
 }
 
 func (s *RatingService) GetEventRatingSummary(eventID uuid.UUID) (*model.EventRatingSummary, error) {
-	event, err := s.eventRepo.GetEventByID(eventID)
-	if err != nil {
+	if err := s.requirePublicRatedEvent(eventID); err != nil {
 		return nil, err
-	}
-	// Published events expose summaries like their public details. Completed
-	// events expose summaries once ended; drafts and cancellations remain private.
-	if event == nil || (event.Status != model.EventStatusPublished &&
-		(event.Status != model.EventStatusCompleted || event.EndTime.After(time.Now()))) {
-		return nil, ErrEventNotFound
 	}
 	average, count, err := s.ratingRepo.GetEventRatingSummary(eventID)
 	if err != nil {
 		return nil, err
 	}
 	return &model.EventRatingSummary{EventID: eventID, AverageRating: average, RatingCount: count}, nil
+}
+
+// ListEventRatings returns one page of the ratings that GetEventRatingSummary counts.
+func (s *RatingService) ListEventRatings(eventID uuid.UUID, page, limit int) (*model.EventRatingPage, error) {
+	if err := s.requirePublicRatedEvent(eventID); err != nil {
+		return nil, err
+	}
+	items, total, err := s.ratingRepo.ListEventRatings(eventID, page, limit)
+	if err != nil {
+		return nil, err
+	}
+	return &model.EventRatingPage{Items: items, Page: page, Limit: limit, Total: total}, nil
+}
+
+// requirePublicRatedEvent returns ErrEventNotFound unless the event's ratings are public.
+func (s *RatingService) requirePublicRatedEvent(eventID uuid.UUID) error {
+	event, err := s.eventRepo.GetEventByID(eventID)
+	if err != nil {
+		return err
+	}
+	// Published events expose ratings like their public details. Completed
+	// events expose ratings once ended; drafts and cancellations remain private.
+	if event == nil || (event.Status != model.EventStatusPublished &&
+		(event.Status != model.EventStatusCompleted || event.EndTime.After(time.Now()))) {
+		return ErrEventNotFound
+	}
+	return nil
 }
 
 func (s *RatingService) GetOrganizerRatingSummary(organizationID uuid.UUID) (*model.OrganizerRatingSummary, error) {
