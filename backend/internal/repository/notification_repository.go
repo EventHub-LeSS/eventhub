@@ -17,6 +17,10 @@ type NotificationRepository interface {
 	RefreshReminder(uuid.UUID, uuid.UUID) error
 	GetReminder(uuid.UUID, uuid.UUID) (*model.NotificationData, error)
 	Create(*model.NotificationData) error
+	// CreateAll inserts the notifications in batches; an empty slice inserts nothing.
+	CreateAll([]model.NotificationData) error
+	// DeleteEventReminders removes the reminders of all bookings of the event.
+	DeleteEventReminders(eventID uuid.UUID) error
 	GetLocation(uuid.UUID) (*model.LocationModel, error)
 	DatabaseNow() (time.Time, error)
 }
@@ -106,6 +110,21 @@ func (r *notificationRepository) GetReminder(bookingID, userID uuid.UUID) (*mode
 }
 func (r *notificationRepository) Create(notification *model.NotificationData) error {
 	return r.db.Create(notification).Error
+}
+
+// notificationBatchSize keeps a batch well below the PostgreSQL limit of 65535 bind parameters.
+const notificationBatchSize = 500
+
+func (r *notificationRepository) CreateAll(notifications []model.NotificationData) error {
+	if len(notifications) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(&notifications, notificationBatchSize).Error
+}
+func (r *notificationRepository) DeleteEventReminders(eventID uuid.UUID) error {
+	return r.db.Exec(
+		"DELETE FROM notification_data WHERE occasion = 'event_reminder' AND booking_id IN (SELECT booking_id FROM bookings WHERE event_id = ?)",
+		eventID).Error
 }
 func (r *notificationRepository) GetLocation(id uuid.UUID) (*model.LocationModel, error) {
 	var location model.LocationModel

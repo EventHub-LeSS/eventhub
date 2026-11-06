@@ -153,16 +153,20 @@ export async function getAvailableSeats(
 
 /**
  * EVENTHUB-82: takes a published event off sale. The API moves it to
- * "cancelled" and leaves its bookings untouched.
+ * "cancelled" and leaves its bookings untouched. EVENTHUB-291: ticket holders
+ * of an upcoming event are notified; notifiedUsers counts them.
  */
 export async function withdrawEvent(
   accessToken: string,
   eventId: string
 ): Promise<void> {
-  await apiFetch<{ message: string }>(`/events/${eventId}/withdraw`, {
-    accessToken,
-    method: "POST",
-  })
+  await apiFetch<{ message: string; notifiedUsers: number }>(
+    `/events/${eventId}/withdraw`,
+    {
+      accessToken,
+      method: "POST",
+    }
+  )
 }
 
 /**

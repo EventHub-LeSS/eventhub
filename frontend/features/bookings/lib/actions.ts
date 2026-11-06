@@ -55,6 +55,19 @@ export async function cancelBookingAction(
     return { cancelled: true }
   } catch (error) {
     if (error instanceof BookingApiError) {
+      if (
+        error.status === 409 &&
+        /cancelled by the organizer/.test(error.message)
+      ) {
+        // The page still showed the ticket as valid; the refresh moves it to
+        // the cancelled ones.
+        revalidatePath("/tickets")
+        return {
+          message:
+            "Die Veranstaltung wurde vom Veranstalter abgesagt. Er meldet sich bei dir wegen der Erstattung.",
+        }
+      }
+
       return { message: cancelErrorMessage(error) }
     }
 

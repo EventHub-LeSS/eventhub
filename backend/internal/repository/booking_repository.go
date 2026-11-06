@@ -46,6 +46,9 @@ type BookingRepository interface {
 	DeleteBooking(bookingID uuid.UUID) error
 	// CountOccupiedTickets sums the tickets of confirmed bookings and live reservations of the event.
 	CountOccupiedTickets(eventID uuid.UUID) (int64, error)
+	// ListConfirmedTicketHolders sums the tickets of confirmed bookings of the event per user.
+	// Bookings without a user are skipped.
+	ListConfirmedTicketHolders(eventID uuid.UUID) ([]model.TicketHolder, error)
 }
 
 type bookingRepository struct {
@@ -170,4 +173,18 @@ func countOccupiedTickets(db *gorm.DB, eventID uuid.UUID) (int64, error) {
 		Select("COALESCE(SUM(number_of_tickets), 0)").
 		Scan(&occupied).Error
 	return occupied, err
+}
+
+func (r *bookingRepository) ListConfirmedTicketHolders(eventID uuid.UUID) ([]model.TicketHolder, error) {
+	holders := make([]model.TicketHolder, 0)
+	err := r.db.Model(&model.BookingModel{}).
+		Select("user_id, SUM(number_of_tickets) AS tickets").
+		Where("event_id = ? AND status = ? AND user_id IS NOT NULL", eventID, model.BookingStatusConfirmed).
+		Group("user_id").
+		Order("user_id").
+		Scan(&holders).Error
+	if err != nil {
+		return nil, err
+	}
+	return holders, nil
 }

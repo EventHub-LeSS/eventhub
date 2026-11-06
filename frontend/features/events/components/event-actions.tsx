@@ -200,7 +200,8 @@ export function EventActions({
             <DialogDescription>
               &quot;{eventTitle}&quot; ist dann nicht mehr buchbar und
               verschwindet aus der Veranstaltungssuche. Bestehende Buchungen
-              bleiben erhalten. Das kann nicht rückgängig gemacht werden.
+              bleiben erhalten. Alle Ticketinhaber werden benachrichtigt. Das
+              kann nicht rückgängig gemacht werden.
             </DialogDescription>
           </DialogHeader>
 

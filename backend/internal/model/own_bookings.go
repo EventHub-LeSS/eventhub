@@ -7,6 +7,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// CancelledBy tells who cancelled tickets that had been paid for.
+type CancelledBy string
+
+const (
+	// CancelledByOrganizer: the organizer withdrew the event of a confirmed and paid booking.
+	CancelledByOrganizer CancelledBy = "organizer"
+	// CancelledByUser: the user cancelled the booking after paying for it.
+	CancelledByUser CancelledBy = "user"
+)
+
 // EVENTHUB-236: Meine Tickets und Buchungshistorie
 // OwnBookingResponse is a booking of the caller as the ticket list, the booking history and the
 // ticket details show it. All three read the same data and apply the validity rule of PaymentResponse.
@@ -27,6 +37,11 @@ type OwnBookingResponse struct {
 	// True only when the payment is paid, the booking is confirmed and the event is published or
 	// completed, like ticketsValid of GET /bookings/{bookingId}/payment.
 	TicketsValid bool `json:"ticketsValid"`
+	// Set when paid tickets were cancelled: organizer when the event of a confirmed and paid
+	// booking was withdrawn, user when the user cancelled the booking after paying for it. A
+	// booking the user cancelled stays user even if the event is withdrawn later. Omitted
+	// otherwise, also for cart reservations and checkouts cancelled before payment.
+	CancelledBy *CancelledBy `json:"cancelledBy,omitempty" enums:"organizer,user"`
 	// Score the caller gave the event of this booking; null while it is not rated yet. The rating
 	// counts per user and event, not per booking.
 	RatingScore *int `json:"ratingScore"`
