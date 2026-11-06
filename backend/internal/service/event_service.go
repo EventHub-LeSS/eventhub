@@ -14,13 +14,15 @@ import (
 )
 
 var (
-	ErrForbidden        = errors.New("forbidden")
-	ErrEventNotFound    = errors.New("event not found")
-	ErrInvalidStatus    = errors.New("invalid event status")
-	ErrIncomplete       = errors.New("event is incomplete")
-	ErrNotDraft         = errors.New("only draft events can be published")
-	ErrNotPublished     = errors.New("only published events can be withdrawn")
-	ErrAlreadyPublished = errors.New("this event is already published")
+	ErrForbidden            = errors.New("forbidden")
+	ErrEventNotFound        = errors.New("event not found")
+	ErrInvalidStatus        = errors.New("invalid event status")
+	ErrIncomplete           = errors.New("event is incomplete")
+	ErrNotDraft             = errors.New("only draft or cancelled events can be published")
+	ErrNotCancelled         = errors.New("only cancelled events can be restored as draft")
+	ErrModerationWithdrawal = errors.New("events withdrawn by moderation cannot be restored or republished by organizers")
+	ErrNotPublished         = errors.New("only published events can be withdrawn")
+	ErrAlreadyPublished     = errors.New("this event is already published")
 	// ErrNotDeletable means the event is not a draft. Published, cancelled and completed events stay.
 	ErrNotDeletable = errors.New("only draft events can be deleted")
 	// ErrHasBookings means the event has bookings in some status. They belong to the booking
@@ -364,20 +366,24 @@ func (s *EventService) PublishEvent(ctx context.Context, eventID uuid.UUID, keyc
 		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
 		}
+		if event.WithdrawnByModerator {
+			return ErrModerationWithdrawal
+		}
 		if event.Status == model.EventStatusPublished {
 			return ErrAlreadyPublished
 		}
-		if event.Status != model.EventStatusDraft {
+		if event.Status != model.EventStatusDraft && event.Status != model.EventStatusCancelled {
 			return ErrNotDraft
 		}
 		if !isEventComplete(event) {
 			return ErrIncomplete
 		}
+		previousStatus := event.Status
 		event.Status = model.EventStatusPublished
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
 		}
-		return appendEventAudit(tx, meta, org, eventID, statusChange(model.EventStatusDraft, model.EventStatusPublished))
+		return appendEventAudit(tx, meta, org, eventID, statusChange(previousStatus, model.EventStatusPublished))
 	})
 }
 
@@ -582,4 +588,52 @@ func (s *EventService) GetSalesDashboard(
 	}
 
 	return dashboard, nil
+}
+
+// RestoreEventAsDraft implements EVENTHUB-290 without copying the event or its bookings.
+// The event lock serializes restoration with publishing, editing and withdrawal.
+func (s *EventService) RestoreEventAsDraft(ctx context.Context, eventID uuid.UUID, keycloakOrgIDs []string) (*model.EventModel, error) {
+	meta, err := audit.MetaFromContext(ctx, audit.EventRestoredAsDraft)
+	if err != nil {
+		return nil, err
+	}
+	var restored *model.EventModel
+	err = s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+		if event.WithdrawnByModerator {
+			return ErrModerationWithdrawal
+		}
+		if event.Status != model.EventStatusCancelled {
+			return ErrNotCancelled
+		}
+		event.Status = model.EventStatusDraft
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		if err := appendEventAudit(tx, meta, org, eventID, statusChange(model.EventStatusCancelled, model.EventStatusDraft)); err != nil {
+			return err
+		}
+		restored = event
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return restored, nil
 }
