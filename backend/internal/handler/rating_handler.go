@@ -6,6 +6,7 @@ import (
 	"backend/internal/service"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -108,6 +109,41 @@ func (h *RatingHandler) GetEventRatingSummaryHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, summary)
+}
+
+// 297: Öffentliche Bewertungstexte eines Events.
+// @Summary      List event ratings
+// @Description  Public page of the ratings counted by GET /events/{eventId}/rating-summary, newest first: visible ratings with scores 1–5 linked to confirmed bookings of this event, so total equals ratingCount. Ratings without text are included with an empty text. authorName is only the reviewer's first name and null if the reviewer is unknown or has no first name. Published events and ended completed events expose ratings; drafts and cancelled events return 404.
+// @Tags         events
+// @Produce      json
+// @Param        eventId  path   string  true   "Event UUID"
+// @Param        page     query  int     false  "Page number (1-indexed)" default(1) minimum(1)
+// @Param        limit    query  int     false  "Page size (1-100)" default(50) minimum(1) maximum(100)
+// @Success      200 {object} model.EventRatingPage
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /events/{eventId}/ratings [get]
+func (h *RatingHandler) ListEventRatingsHandler(c *gin.Context) {
+	eventID, err := uuid.Parse(c.Param("eventId"))
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, "eventId must be a valid UUID")
+		return
+	}
+	page, limit, err := parsePageLimit(c)
+	if err == nil && page-1 > math.MaxInt/limit {
+		err = errors.New("page is too large")
+	}
+	if err != nil {
+		writeProblem(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := h.ratingService.ListEventRatings(eventID, page, limit)
+	if err != nil {
+		writeEventActionError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // EVENTHUB-239: Bewertungsdurchschnitt für Organisator/Veranstalter.

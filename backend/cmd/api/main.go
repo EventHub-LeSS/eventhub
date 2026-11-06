@@ -120,6 +120,7 @@ func main() {
 		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
 		v1.GET("/events/:eventId/image", eventHandler.GetEventImageHandler)
 		v1.GET("/events/:eventId/rating-summary", ratingHandler.GetEventRatingSummaryHandler)
+		v1.GET("/events/:eventId/ratings", ratingHandler.ListEventRatingsHandler)
 		v1.GET("/organizations/:organizationID/rating-summary", ratingHandler.GetOrganizerRatingSummaryHandler)
 
 		// DEBUG routes — disabled in production

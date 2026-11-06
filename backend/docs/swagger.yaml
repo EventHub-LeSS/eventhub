@@ -550,6 +550,33 @@ definitions:
       status:
         $ref: '#/definitions/model.EventStatus'
     type: object
+  model.EventRating:
+    properties:
+      authorName:
+        type: string
+        x-nullable: true
+      createdAt:
+        type: string
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+    type: object
+  model.EventRatingPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.EventRating'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   model.EventRatingSummary:
     properties:
       averageRating:
@@ -2037,6 +2064,55 @@ paths:
           schema:
             $ref: '#/definitions/model.ErrorResponse'
       summary: Get event rating summary
+      tags:
+      - events
+  /events/{eventId}/ratings:
+    get:
+      description: 'Public page of the ratings counted by GET /events/{eventId}/rating-summary,
+        newest first: visible ratings with scores 1–5 linked to confirmed bookings
+        of this event, so total equals ratingCount. Ratings without text are included
+        with an empty text. authorName is only the reviewer''s first name and null
+        if the reviewer is unknown or has no first name. Published events and ended
+        completed events expose ratings; drafts and cancelled events return 404.'
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventRatingPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: List event ratings
       tags:
       - events
   /events/{eventId}/sold-tickets:
