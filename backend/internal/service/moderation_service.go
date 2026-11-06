@@ -106,19 +106,23 @@ func (s *ModerationService) WithdrawEvent(ctx context.Context, eventID uuid.UUID
 		if event == nil {
 			return ErrEventNotFound
 		}
-		if event.Status == model.EventStatusCancelled {
+		if event.Status == model.EventStatusCancelled && event.WithdrawnByModerator {
 			return nil
 		}
-		if event.Status != model.EventStatusDraft && event.Status != model.EventStatusPublished {
+		if event.Status != model.EventStatusDraft && event.Status != model.EventStatusPublished && event.Status != model.EventStatusCancelled {
 			return ErrInvalidStatus
 		}
 		before := event.Status
+		event.WithdrawnByModerator = true
 		event.Status = model.EventStatusCancelled
 		if err := tx.Events.UpdateEvent(event); err != nil {
 			return err
 		}
-		changes := statusChange(before, event.Status)
-		changes["reason"] = reason
+		fields := map[string]any{"withdrawnByModerator": fieldChange(false, true)}
+		if before != model.EventStatusCancelled {
+			fields["status"] = fieldChange(string(before), string(event.Status))
+		}
+		changes := model.AuditChanges{"fields": fields, "reason": reason}
 		if err := appendModeratedEventAudit(tx, meta, event, changes); err != nil {
 			return err
 		}
