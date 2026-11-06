@@ -35,6 +35,312 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/organizer-applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires the global admin role or the org_admin role in any organization. Oldest first, so reviewers work through the queue.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "List organizer applications for review",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "Review state",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Page size",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerApplicationPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/organizer-applications/{applicationId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires the global admin role or the org_admin role in any organization.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "Inspect an organizer application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID",
+                        "name": "applicationId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerApplicationModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/organizer-applications/{applicationId}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "Approve an organizer application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID",
+                        "name": "applicationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional note",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/model.ApproveOrganizerApplicationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerApplicationModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Already decided, or the organization alias or name is taken",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/organizer-applications/{applicationId}/reject": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "Reject an organizer application",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Application UUID",
+                        "name": "applicationId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.RejectOrganizerApplicationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerApplicationModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Already decided",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users": {
             "get": {
                 "security": [
@@ -2146,6 +2452,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/me/organizer-applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "All organizer applications of the authenticated user with their review state, newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "List own organizer applications",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OrganizerApplicationModel"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/me/tickets": {
             "get": {
                 "security": [
@@ -3256,6 +3608,75 @@ const docTemplate = `{
                 }
             }
         },
+        "/organizer-applications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Contact form of the authenticated user to become an organizer. The application waits for review by a global admin or an org admin of any organization; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizer-applications"
+                ],
+                "summary": "Apply to become an organizer",
+                "parameters": [
+                    {
+                        "description": "Contact form",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.SubmitOrganizerApplicationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/model.OrganizerApplicationModel"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "An application is already pending, or the organization alias or name is taken",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/payments/{paymentId}": {
             "get": {
                 "security": [
@@ -3785,6 +4206,15 @@ const docTemplate = `{
                 },
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "model.ApproveOrganizerApplicationRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000
                 }
             }
         },
@@ -4714,6 +5144,101 @@ const docTemplate = `{
                 "RoleFinanceViewer"
             ]
         },
+        "model.OrganizerApplicationModel": {
+            "type": "object",
+            "properties": {
+                "applicationId": {
+                    "type": "string"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "contactEmail": {
+                    "type": "string"
+                },
+                "contactPhoneNumber": {
+                    "type": "string"
+                },
+                "countryCode": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "decidedAt": {
+                    "type": "string"
+                },
+                "decidedBy": {
+                    "type": "string"
+                },
+                "decisionReason": {
+                    "type": "string"
+                },
+                "houseNumber": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "organizationAlias": {
+                    "type": "string"
+                },
+                "organizationId": {
+                    "type": "string"
+                },
+                "organizationName": {
+                    "type": "string"
+                },
+                "postalCode": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/model.OrganizerApplicationStatus"
+                },
+                "street": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "userId": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OrganizerApplicationPage": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.OrganizerApplicationModel"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.OrganizerApplicationStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "approved",
+                "rejected"
+            ],
+            "x-enum-varnames": [
+                "OrganizerApplicationPending",
+                "OrganizerApplicationApproved",
+                "OrganizerApplicationRejected"
+            ]
+        },
         "model.OrganizerRatingSummary": {
             "type": "object",
             "properties": {
@@ -5131,6 +5656,20 @@ const docTemplate = `{
                 }
             }
         },
+        "model.RejectOrganizerApplicationRequest": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "example": "Bitte geben Sie ein Impressum an."
+                }
+            }
+        },
         "model.SalesDashboardEventResponse": {
             "type": "object",
             "properties": {
@@ -5170,6 +5709,65 @@ const docTemplate = `{
                 },
                 "soldTickets": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.SubmitOrganizerApplicationRequest": {
+            "type": "object",
+            "required": [
+                "contactEmail",
+                "message",
+                "organizationAlias",
+                "organizationName"
+            ],
+            "properties": {
+                "city": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "contactEmail": {
+                    "type": "string",
+                    "example": "info@stadtfest-bremen.de"
+                },
+                "contactPhoneNumber": {
+                    "type": "string",
+                    "maxLength": 50
+                },
+                "countryCode": {
+                    "type": "string",
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "example": "DE"
+                },
+                "houseNumber": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "message": {
+                    "description": "Message tells the reviewers who the applicant is and which events they plan.",
+                    "type": "string",
+                    "maxLength": 5000,
+                    "minLength": 10
+                },
+                "organizationAlias": {
+                    "description": "OrganizationAlias identifies the organization in tokens and URLs: 3-50 lowercase letters,\ndigits and hyphens, starting and ending with a letter or digit.",
+                    "type": "string",
+                    "example": "stadtfest-bremen"
+                },
+                "organizationName": {
+                    "description": "OrganizationName is the display name of the organization to create.",
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "example": "Stadtfest Bremen e.V."
+                },
+                "postalCode": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "street": {
+                    "type": "string",
+                    "maxLength": 200
                 }
             }
         },
