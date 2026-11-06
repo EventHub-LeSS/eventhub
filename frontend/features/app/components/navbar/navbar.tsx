@@ -3,6 +3,7 @@
 import {
   ClipboardCheckIcon,
   CompassIcon,
+  KeyRoundIcon,
   LayoutDashboardIcon,
   MenuIcon,
   ShieldCheckIcon,
@@ -13,6 +14,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { Brand } from "@/features/app/components/navbar/brand"
+import { ThemeMenu } from "@/features/app/components/navbar/theme-menu"
 import { UserMenu } from "@/features/app/components/navbar/user-menu"
 import type { SessionUser, UserRole } from "@/features/auth"
 import { CartButton } from "@/features/cart"
@@ -92,6 +94,11 @@ export function Navbar({ user }: NavbarProps) {
             href: "/admin/moderation",
             icon: ShieldCheckIcon,
           },
+          {
+            label: "Berechtigungen",
+            href: "/admin/permissions",
+            icon: KeyRoundIcon,
+          },
         ]
       : []),
   ]
@@ -133,16 +140,19 @@ export function Navbar({ user }: NavbarProps) {
               <UserMenu user={user} />
             </>
           ) : (
-            <div className="hidden items-center gap-1 md:flex">
-              <form method="get" action="/api/auth/login">
-                <Button type="submit" variant="outline">
-                  Anmelden
-                </Button>
-              </form>
-              <form method="get" action="/api/auth/register">
-                <Button type="submit">Registrieren</Button>
-              </form>
-            </div>
+            <>
+              <div className="hidden items-center gap-1 md:flex">
+                <form method="get" action="/api/auth/login">
+                  <Button type="submit" variant="outline">
+                    Anmelden
+                  </Button>
+                </form>
+                <form method="get" action="/api/auth/register">
+                  <Button type="submit">Registrieren</Button>
+                </form>
+              </div>
+              <ThemeMenu />
+            </>
           )}
           <Sheet>
             <SheetTrigger

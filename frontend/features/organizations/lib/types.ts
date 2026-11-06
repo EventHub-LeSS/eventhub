@@ -37,6 +37,7 @@ export type AuditAction =
   | "event.created"
   | "event.updated"
   | "event.published"
+  | "event.restored_as_draft"
   | "event.cancelled"
   | "event.deleted"
   | "rating.visibility_changed"

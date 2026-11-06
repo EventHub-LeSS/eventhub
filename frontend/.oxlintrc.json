@@ -50,6 +50,30 @@
   },
   "overrides": [
     {
+      "files": ["features/permissions/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.?/",
+                "message": "Use \"@/...\" path aliases instead of relative imports."
+              },
+              {
+                "group": [
+                  "@/features/*/**",
+                  "!@/features/shared/**",
+                  "!@/features/permissions/**"
+                ],
+                "message": "Import other features through their public \"index.ts\"."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["features/moderation/**"],
       "rules": {
         "no-restricted-imports": [

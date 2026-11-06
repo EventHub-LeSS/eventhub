@@ -15,6 +15,8 @@ export interface Event {
   endTime: string
   capacity: number
   status: EventStatus
+  /** EVENTHUB-290: organizers can neither restore nor republish such an event. */
+  withdrawnByModerator: boolean
   price: string
   categoryId: string | null
   organizerId: string | null
