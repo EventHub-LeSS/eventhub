@@ -140,6 +140,10 @@ func (f *fakeOrgRepo) UpdateOrganization(*model.OrganizationModel) error {
 	return nil
 }
 
+func (f *fakeOrgRepo) UpdateName(uuid.UUID, string) error {
+	return nil
+}
+
 func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	return f.orgs[id], nil
 }

@@ -374,7 +374,7 @@ func TestConfigureOrganizationMemberRoles_DropsRejectedServiceAccountToken(t *te
 }
 
 func TestConfigureOrganizationMemberRoles_TimesOutAndReleasesTheLock(t *testing.T) {
-	defer service.SetOrgRoleChangeTimeout(100 * time.Millisecond)()
+	defer service.SetOrgChangeTimeout(100 * time.Millisecond)()
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
 
