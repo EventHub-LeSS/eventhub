@@ -14,7 +14,10 @@ export type {
 export { EventReviews } from "@/features/catalog/components/event-reviews"
 export { getEventRatings } from "@/features/catalog/lib/get-event-ratings"
 export type { EventRatingsResult } from "@/features/catalog/lib/get-event-ratings"
-export { parseReviewPage } from "@/features/catalog/lib/event-ratings"
+export {
+  isEventRatingsPage,
+  parseReviewPage,
+} from "@/features/catalog/lib/event-ratings"
 export type {
   EventRating,
   EventRatingsPage,

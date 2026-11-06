@@ -3,9 +3,11 @@ import Link from "next/link"
 
 import {
   DashboardFilters,
+  getDashboardReviews,
   getOrganizerDashboardData,
   OccupancyDashboard,
   parseDashboardFilters,
+  ReviewsDashboard,
   SalesDashboard,
 } from "@/features/events"
 import { getSession, requireOrganizer } from "@/features/auth"
@@ -75,9 +77,12 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
   const filters = parseDashboardFilters(await searchParams)
   const dashboard = await getOrganizerDashboardData(filters)
 
-  const { canViewFinance } = user.activeOrganization && session?.accessToken
-    ? await getUserFinancialRights(session.accessToken, user.activeOrganization)
-    : { canViewFinance: false }
+  const [{ canViewFinance }, reviews] = await Promise.all([
+    user.activeOrganization && session?.accessToken
+      ? getUserFinancialRights(session.accessToken, user.activeOrganization)
+      : { canViewFinance: false },
+    dashboard.status === "ok" ? getDashboardReviews(dashboard.events) : null,
+  ])
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -156,6 +161,13 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
           <OccupancyDashboard events={dashboard.events} />
           {canViewFinance && <SalesDashboard events={dashboard.events} />}
         </div>
+      )}
+
+      {dashboard.status === "ok" && dashboard.events.length > 0 && reviews && (
+        <ReviewsDashboard
+          reviews={reviews.reviews}
+          failedEvents={reviews.failedEvents}
+        />
       )}
     </div>
   )

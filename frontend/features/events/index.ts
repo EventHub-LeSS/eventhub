@@ -34,6 +34,9 @@ export type {
 export { DashboardFilters } from "@/features/events/components/dashboard-filters"
 export { OccupancyDashboard } from "@/features/events/components/occupancy-dashboard"
 export { SalesDashboard } from "@/features/events/components/sales-dashboard"
+export { ReviewsDashboard } from "@/features/events/components/reviews-dashboard"
+export { getDashboardReviews } from "@/features/events/lib/get-dashboard-reviews"
+export type { DashboardReview } from "@/features/events/lib/dashboard-reviews"
 export type {
   OrganizerDashboardCategory,
   OrganizerDashboardEvent,
