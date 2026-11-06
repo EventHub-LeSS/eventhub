@@ -38,8 +38,28 @@ type EventModel struct {
 	CategoryID           *uuid.UUID      `json:"categoryId" gorm:"column:category_id;type:uuid"`
 	OrganizerID          *uuid.UUID      `json:"organizerId" gorm:"column:organizer_id;type:uuid"`
 	LocationID           *uuid.UUID      `json:"locationId" gorm:"column:location_id;type:uuid"`
+	ImageBase64          *string         `json:"-" gorm:"column:image_base64"`
+	ImageContentType     *string         `json:"-" gorm:"column:image_content_type"`
 	CreatedAt            time.Time       `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt            time.Time       `json:"updatedAt" gorm:"column:updated_at;autoUpdateTime"`
+}
+
+// Image content types an event image may have.
+const (
+	ImageContentTypePNG  = "image/png"
+	ImageContentTypeJPEG = "image/jpeg"
+)
+
+// MaxEventImageBytes is the largest raw image size the upload route accepts.
+const MaxEventImageBytes = 2 << 20 // 2 MiB
+
+// IsValidEventImageContentType reports whether the MIME type is a supported event image type.
+func IsValidEventImageContentType(contentType string) bool {
+	switch contentType {
+	case ImageContentTypePNG, ImageContentTypeJPEG:
+		return true
+	}
+	return false
 }
 
 func (EventModel) TableName() string { return "events" }

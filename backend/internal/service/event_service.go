@@ -4,7 +4,9 @@ import (
 	"backend/internal/audit"
 	"backend/internal/model"
 	"backend/internal/repository"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
@@ -33,6 +35,11 @@ var (
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
 	// ErrUnknownReference means the event references a category or location that does not exist.
 	ErrUnknownReference = repository.ErrUnknownReference
+	// ErrNoImage means the event has no image stored.
+	ErrNoImage = errors.New("event has no image")
+	// ErrUnsupportedImage means the uploaded bytes are not the PNG or JPEG the
+	// declared Content-Type says, or the Content-Type itself is not supported.
+	ErrUnsupportedImage = errors.New("image must be a PNG or JPEG image")
 )
 
 // CapacityBelowOccupiedError means an update would lower the capacity of an event below the tickets
@@ -429,6 +436,98 @@ func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, key
 		return 0, err
 	}
 	return notified, nil
+}
+
+// eventImageMagic returns the magic bytes identifying the declared image content type, or
+// false for unsupported types. The bytes themselves are checked against them too, so a client
+// cannot label arbitrary data as an image.
+func eventImageMagic(contentType string) ([]byte, bool) {
+	switch contentType {
+	case model.ImageContentTypePNG:
+		return []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, true
+	case model.ImageContentTypeJPEG:
+		return []byte{0xFF, 0xD8, 0xFF}, true
+	}
+	return nil, false
+}
+
+// SetEventImage stores the image of an event as base64. contentType is the Content-Type the
+// client declared for the raw image bytes; only PNG and JPEG are accepted, and the bytes must
+// start with the magic bytes of their type. The change is recorded in the audit log.
+func (s *EventService) SetEventImage(
+	ctx context.Context,
+	eventID uuid.UUID,
+	keycloakOrgIDs []string,
+	contentType string,
+	rawImage []byte,
+) error {
+	meta, err := audit.MetaFromContext(ctx, audit.EventImageChanged)
+	if err != nil {
+		return err
+	}
+	magic, ok := eventImageMagic(contentType)
+	if !ok || !bytes.HasPrefix(rawImage, magic) {
+		return ErrUnsupportedImage
+	}
+
+	imageBase64 := base64.StdEncoding.EncodeToString(rawImage)
+
+	return s.tx.InTransaction(ctx, func(tx repository.Tx) error {
+		event, err := tx.Events.LockEvent(eventID)
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			return ErrEventNotFound
+		}
+		if event.OrganizerID == nil {
+			return ErrForbidden
+		}
+		org, err := tx.Organizations.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if !managesOrganization(org, keycloakOrgIDs) {
+			return ErrForbidden
+		}
+		switch event.Status {
+		case model.EventStatusDraft, model.EventStatusPublished:
+		default:
+			return ErrInvalidStatus
+		}
+		hadImage := event.ImageBase64 != nil
+
+		event.ImageBase64 = &imageBase64
+		event.ImageContentType = &contentType
+		if err := tx.Events.UpdateEvent(event); err != nil {
+			return err
+		}
+		// Only the fact that the image changed is recorded, never its content.
+		return appendEventAudit(tx, meta, org, eventID, model.AuditChanges{
+			"image": fieldChange(hadImage, true),
+		})
+	})
+}
+
+// GetEventImage returns the stored image of a published event, already decoded back to its
+// original PNG or JPEG bytes together with the MIME type for the response Content-Type.
+// Unpublished events are treated like unknown ones, like the public details route.
+func (s *EventService) GetEventImage(eventID uuid.UUID) (string, []byte, error) {
+	event, err := s.eventRepo.GetEventByID(eventID)
+	if err != nil {
+		return "", nil, err
+	}
+	if event == nil || event.Status != model.EventStatusPublished {
+		return "", nil, ErrEventNotFound
+	}
+	if event.ImageBase64 == nil || event.ImageContentType == nil {
+		return "", nil, ErrNoImage
+	}
+	decoded, err := base64.StdEncoding.DecodeString(*event.ImageBase64)
+	if err != nil {
+		return "", nil, fmt.Errorf("decode event image: %w", err)
+	}
+	return *event.ImageContentType, decoded, nil
 }
 
 func (s *EventService) GetEventStatistics(
