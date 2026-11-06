@@ -28,14 +28,17 @@ const (
 	OrganizationUpdated           Action = "organization.updated"
 	RatingVisibilityChanged       Action = "rating.visibility_changed"
 	EventModerated                Action = "event.moderated"
+	OrganizerApplicationApproved  Action = "organizer_application.approved"
+	OrganizerApplicationRejected  Action = "organizer_application.rejected"
 )
 
 // Resource types of audited objects.
 const (
-	ResourceEvent              = "event"
-	ResourceOrganizationMember = "organization_member"
-	ResourceOrganization       = "organization"
-	ResourceRating             = "rating"
+	ResourceEvent                = "event"
+	ResourceOrganizationMember   = "organization_member"
+	ResourceOrganization         = "organization"
+	ResourceRating               = "rating"
+	ResourceOrganizerApplication = "organizer_application"
 )
 
 // ScopePlatform is the organization_id of entries that cannot be attributed to an organization,

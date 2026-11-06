@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/henning-kln/gocloak"
 )
 
 // OrgNameChange is the outcome of an organization name change: the resolved organization and the
@@ -27,12 +30,14 @@ var ErrOrganizationNotInDatabase = errors.New("organization is not synchronized 
 type OrganizationService struct {
 	keycloak *KeycloakService
 	orgRepo  repository.OrganizationRepository
+	userRepo repository.UserRepository
 }
 
-func NewOrganizationService(keycloak *KeycloakService, orgRepo repository.OrganizationRepository) *OrganizationService {
+func NewOrganizationService(keycloak *KeycloakService, orgRepo repository.OrganizationRepository, userRepo repository.UserRepository) *OrganizationService {
 	return &OrganizationService{
 		keycloak: keycloak,
 		orgRepo:  orgRepo,
+		userRepo: userRepo,
 	}
 }
 
@@ -146,4 +151,108 @@ func (s *OrganizationService) UpdateOrganizationName(ctx context.Context, keyclo
 // nameResult collects the resulting name for the result entry of the audit trail.
 func nameResult(change *OrgNameChange) model.AuditChanges {
 	return model.AuditChanges{"name": change.Name}
+}
+
+// ErrOrgAdminNotSynced means the organization was created in Keycloak but its admin has no row in
+// the API database yet, so the membership cannot be mirrored.
+var ErrOrgAdminNotSynced = errors.New("org admin user not found in API database, run sync first")
+
+// CreatedOrganization is the outcome of CreateOrganization.
+type CreatedOrganization struct {
+	KeycloakOrgID  string
+	OrganizationID uuid.UUID
+	AdminUserID    uuid.UUID
+}
+
+// CreateOrganizationAsService is CreateOrganization with the backend service account, for callers
+// whose own token cannot manage Keycloak organizations, e.g. org admins approving an organizer
+// application.
+func (s *OrganizationService) CreateOrganizationAsService(ctx context.Context, req model.CreateOrganizationRequest) (created *CreatedOrganization, err error) {
+	token, err := s.keycloak.adminToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { s.keycloak.dropAdminTokenIfRejected(err) }()
+	return s.CreateOrganization(ctx, token, req)
+}
+
+// CreateOrganization creates the organization in Keycloak with its role groups and the given
+// admin (username or email) as org_admin, then mirrors it into the API database together with
+// the admin's membership. accessToken must be allowed to manage organizations in Keycloak.
+//
+// Keycloak just created the organization with a new ID. A row from an earlier Keycloak
+// generation may still exist in the database (realm re-imports re-create organizations with new
+// IDs); that row is reconciled instead of inserting a duplicate that would split the
+// organization's events and memberships across copies.
+//
+// It returns ErrOrganizationExists when the alias or name is taken and ErrOrgAdminNotSynced when
+// the admin is unknown to the API database.
+func (s *OrganizationService) CreateOrganization(ctx context.Context, accessToken string, req model.CreateOrganizationRequest) (*CreatedOrganization, error) {
+	org := gocloak.OrganizationRepresentation{
+		Name:  &req.InternalName,
+		Alias: &req.DisplayName,
+	}
+	keycloakOrgID, adminKeycloakUserID, err := s.keycloak.CreateOrganization(ctx, accessToken, org, req.OrgAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	adminUser, err := s.userRepo.GetByKeycloakUserID(adminKeycloakUserID)
+	if err != nil {
+		return nil, fmt.Errorf("organization created in Keycloak but failed to look up admin user in database: %w", err)
+	}
+	if adminUser == nil {
+		return nil, ErrOrgAdminNotSynced
+	}
+
+	existing, err := s.orgRepo.GetByAnyRef(keycloakOrgID, req.DisplayName, req.InternalName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up organization in database: %w", err)
+	}
+
+	orgUUID := uuid.New()
+	if existing != nil {
+		orgUUID = existing.OrganizationID
+		// The submitted create form is the new truth for the reconciled row: the contact
+		// columns move as well, not only the Keycloak-owned identity columns.
+		existing.KeycloakOrgID = keycloakOrgID
+		existing.Alias = req.DisplayName
+		existing.Name = req.InternalName
+		existing.ContactEmail = req.ContactEmail
+		existing.ContactPhoneNumber = req.ContactPhoneNumber
+		existing.Street = req.Street
+		existing.HouseNumber = req.HouseNumber
+		existing.PostalCode = req.PostalCode
+		existing.City = req.City
+		existing.CountryCode = req.CountryCode
+		if err := s.orgRepo.UpdateOrganization(existing); err != nil {
+			return nil, fmt.Errorf("organization created in Keycloak but failed to update the existing database row: %w", err)
+		}
+	} else {
+		err = s.orgRepo.CreateOrganization(&model.OrganizationModel{
+			OrganizationID:     orgUUID,
+			KeycloakOrgID:      keycloakOrgID,
+			Alias:              req.DisplayName,
+			Name:               req.InternalName,
+			ContactEmail:       req.ContactEmail,
+			ContactPhoneNumber: req.ContactPhoneNumber,
+			Street:             req.Street,
+			HouseNumber:        req.HouseNumber,
+			PostalCode:         req.PostalCode,
+			City:               req.City,
+			CountryCode:        req.CountryCode,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("organization created in Keycloak but failed to insert into database: %w", err)
+		}
+	}
+
+	err = s.orgRepo.AddMembership(&model.OrganizationMembershipModel{
+		UserID:         adminUser.UserID,
+		OrganizationID: orgUUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("organization created in Keycloak and database but failed to add membership: %w", err)
+	}
+	return &CreatedOrganization{KeycloakOrgID: keycloakOrgID, OrganizationID: orgUUID, AdminUserID: adminUser.UserID}, nil
 }
