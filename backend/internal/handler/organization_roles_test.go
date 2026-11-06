@@ -22,7 +22,7 @@ import (
 func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Handler, *keycloakmock.Fake) {
 	t.Helper()
 	fake := keycloakmock.New()
-	h := NewOrganizationHandler(fake.KeycloakService(t), nil, nil)
+	h := NewOrganizationHandler(fake.KeycloakService(t), nil, nil, nil)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

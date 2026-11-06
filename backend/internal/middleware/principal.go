@@ -69,6 +69,24 @@ func (p *Principal) HasOrganizationRoleIn(organizationID string, role Organizati
 	return false
 }
 
+// IsOrganizationMember reports whether the principal belongs to the given organization in any
+// role. Tokens may leave the claim without an organization ID, so a member's references carry
+// only the alias; the resolved organization offers both references and either one matches.
+func (p *Principal) IsOrganizationMember(organizationID, organizationAlias string) bool {
+	if p == nil {
+		return false
+	}
+	for _, org := range p.Organizations {
+		if org == nil {
+			continue
+		}
+		if org.ID == organizationID || org.Alias == organizationAlias {
+			return true
+		}
+	}
+	return false
+}
+
 // OrganizationIDs returns the IDs of all organizations the principal is a member of, whatever its roles.
 func (p *Principal) OrganizationIDs() []string {
 	if p == nil {
