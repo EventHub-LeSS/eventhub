@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  ClipboardCheckIcon,
   CompassIcon,
   LayoutDashboardIcon,
   MenuIcon,
@@ -74,16 +75,27 @@ function activeHref(pathname: string, links: NavLink[]) {
 export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
-  const links = user?.isAdmin
-    ? [
-        ...navigationByRole[role],
-        {
-          label: "Moderation",
-          href: "/admin/moderation",
-          icon: ShieldCheckIcon,
-        },
-      ]
-    : navigationByRole[role]
+  const extraLinks: NavLink[] = [
+    ...(user?.canReviewApplications || user?.isAdmin
+      ? [
+          {
+            label: "Anträge",
+            href: "/admin/organizer-applications",
+            icon: ClipboardCheckIcon,
+          },
+        ]
+      : []),
+    ...(user?.isAdmin
+      ? [
+          {
+            label: "Moderation",
+            href: "/admin/moderation",
+            icon: ShieldCheckIcon,
+          },
+        ]
+      : []),
+  ]
+  const links = [...navigationByRole[role], ...extraLinks]
   const active = activeHref(pathname, links)
 
   return (

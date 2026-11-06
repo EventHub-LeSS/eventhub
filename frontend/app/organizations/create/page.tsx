@@ -1,77 +1,74 @@
-import { QuoteIcon, SparklesIcon } from "lucide-react";
+import Link from "next/link"
 
-import { requireAdmin } from "@/features/auth";
-import { CreateOrganizationForm } from "@/features/organizations";
+import { requireSession } from "@/features/auth"
+import { CreateOrganizationForm } from "@/features/organizations"
+import { Button } from "@/features/shared/components/ui/button"
 
-/**
- * Split layout: a banner explaining what an organization is for on the left,
- * the form on the right. Below lg the banner shrinks to its headline above
- * the form, so the form stays within reach on small screens.
- */
 export default async function CreateOrganizationPage() {
-  const user = await requireAdmin();
+  const user = await requireSession()
 
   return (
-    <div className="grid flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <aside className="relative flex flex-col justify-between gap-6 overflow-hidden rounded-2xl bg-muted/40 p-5 ring-1 ring-border lg:p-8">
-        {/* A faint glow and fading dot grid, purely visual. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-32 -right-32 size-80 rounded-full bg-purple-500/10 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 text-foreground/15 [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, currentColor 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-          }}
-        />
-
-        <div className="relative flex flex-col gap-4">
-          <span className="inline-flex w-fit items-center gap-1.5 text-xs font-medium tracking-wider text-muted-foreground uppercase">
-            <SparklesIcon
-              className="size-3.5 text-purple-500"
-              aria-hidden="true"
-            />
+    <main className="mx-auto grid w-full max-w-screen-xl flex-1 grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+      <aside className="flex flex-col justify-between gap-6 rounded-2xl border border-border bg-muted/40 p-5 lg:p-8">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm font-medium text-muted-foreground">
             EventHub für Veranstalter
-          </span>
+          </p>
           <div className="flex flex-col gap-2">
-            <p className="text-2xl font-bold tracking-tight text-balance lg:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-balance">
               Deine Organisation. Deine Events.
-            </p>
+            </h2>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Eine Organisation bündelt dein Team, eure Veranstaltungen und alle
-              Verkäufe an einem Ort.
+              Jeder Nutzer kann über dieses Kontaktformular eine eigene
+              Organisation beantragen. Nach Prüfung und Freigabe durch einen
+              EventHub-Administrator wird deine Organisation angelegt und dein
+              Konto als Veranstalter eingetragen.
             </p>
           </div>
+          <ol className="flex flex-col gap-2 text-sm text-muted-foreground">
+            <li>1. Organisationsdaten und Vorhaben im Formular erfassen</li>
+            <li>2. Prüfung durch einen EventHub-Administrator</li>
+            <li>
+              3. Automatische Erstellung der Organisation & Eintragung als
+              Veranstalter
+            </li>
+          </ol>
         </div>
 
-        <figure className="relative hidden flex-col gap-3 lg:flex">
-          <QuoteIcon
-            className="size-8 fill-purple-500/15 text-purple-500"
-            aria-hidden="true"
-          />
-          <blockquote className="text-2xl font-semibold tracking-tight text-balance xl:text-3xl">
-            Teile deine Veranstaltungen mit der Welt.
-          </blockquote>
-        </figure>
+        {(user.canReviewApplications || user.isAdmin) && (
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm">
+            <p className="font-medium">Anträge prüfen</p>
+            <p className="text-xs text-muted-foreground">
+              Als Administrator kannst du offene Bewerbungen anderer Nutzer
+              einsehen und freigeben.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              render={<Link href="/admin/organizer-applications" />}
+              nativeButton={false}
+            >
+              Zur Antragsprüfung
+            </Button>
+          </div>
+        )}
       </aside>
 
-      <div className="flex justify-center lg:items-center">
+      <div className="flex justify-center lg:items-start">
         <div className="flex w-full max-w-4xl flex-col gap-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Organisation erstellen
+              Organisation beantragen
             </h1>
             <p className="text-sm text-muted-foreground">
-              Leg los und schaffe Großartiges.
+              Fülle das Kontaktformular aus, um deine Organisation zur Freigabe
+              einzureichen.
             </p>
           </div>
           <CreateOrganizationForm defaultOrgAdmin={user.email} />
         </div>
       </div>
-    </div>
-  );
+    </main>
+  )
 }

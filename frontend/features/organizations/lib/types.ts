@@ -41,6 +41,8 @@ export type AuditAction =
   | "event.deleted"
   | "rating.visibility_changed"
   | "organization.member_roles_changed"
+  | "organizer_application.approved"
+  | "organizer_application.rejected"
 
 export type AuditPhase = "completed" | "started" | "succeeded" | "incomplete"
 
@@ -52,7 +54,11 @@ export interface AuditLogEntry {
   actorUsername: string
   organizationId: string
   action: AuditAction
-  resourceType: "event" | "organization_member" | "rating"
+  resourceType:
+    | "event"
+    | "organization_member"
+    | "rating"
+    | "organizer_application"
   resourceId: string
   phase: AuditPhase
   changes: Record<string, unknown>

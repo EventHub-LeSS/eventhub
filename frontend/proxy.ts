@@ -30,7 +30,11 @@ function externalOrigin(request: NextRequest) {
 }
 
 function authenticationRequired(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/api/moderation/")) {
+  if (
+    request.nextUrl.pathname.startsWith("/api/moderation/") ||
+    request.nextUrl.pathname.startsWith("/api/admin/") ||
+    request.nextUrl.pathname.startsWith("/api/organizations/applications")
+  ) {
     return NextResponse.json(
       { detail: "Anmeldung erforderlich." },
       { status: 401 }
@@ -129,6 +133,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/admin/:path*",
+    "/api/admin/:path*",
     "/api/moderation/:path*",
     "/tickets/:path*",
     "/cart/:path*",

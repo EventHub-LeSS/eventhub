@@ -22,6 +22,7 @@ import { cn } from "@/features/shared/lib/utils"
 const occasionLabels: Record<string, string> = {
   event_reminder: "Erinnerung",
   event_cancelled: "Absage",
+  organizer_application: "Bewerbung",
   general: "Allgemein",
 }
 

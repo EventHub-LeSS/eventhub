@@ -7,6 +7,16 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import {
+  applicationQuery,
+  isOrganizerApplication,
+  isOrganizerApplicationList,
+  isOrganizerApplicationPage,
+  type OrganizerApplication,
+  type OrganizerApplicationFilters,
+  type OrganizerApplicationPage,
+  type SubmitOrganizerApplicationPayload,
+} from "@/features/organizations/lib/applications"
 import type { OrganizationPayload } from "@/features/organizations/lib/organization"
 import type {
   AuditLogPage,
@@ -325,4 +335,142 @@ async function removeMember(alias: string, username: string): Promise<void> {
     const body = await response.json().catch(() => null)
     throw new Error(errorMessage(body, response.status))
   }
+}
+
+const ownApplicationsKey = ["organizer-applications", "mine"] as const
+const adminApplicationsKey = ["organizer-applications", "admin"] as const
+
+async function applicationRequest<T>(
+  url: string,
+  validate: (body: unknown) => body is T,
+  payload?: unknown
+): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: payload !== undefined ? "POST" : "GET",
+      ...(payload !== undefined
+        ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        : {}),
+      cache: "no-store",
+    })
+  } catch {
+    throw new Error(
+      "Die Verbindung ist fehlgeschlagen. Bitte versuche es erneut."
+    )
+  }
+
+  const body: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status))
+  }
+  if (!validate(body)) {
+    throw new Error("Die Serverantwort ist unvollständig.")
+  }
+
+  return body
+}
+
+export function useMyOrganizerApplications(enabled = true) {
+  return useQuery<OrganizerApplication[], Error>({
+    queryKey: ownApplicationsKey,
+    queryFn: () =>
+      applicationRequest(
+        "/api/organizations/applications",
+        isOrganizerApplicationList
+      ),
+    enabled,
+    retry: false,
+  })
+}
+
+export function useSubmitOrganizerApplication() {
+  const queryClient = useQueryClient()
+
+  return useMutation<
+    OrganizerApplication,
+    Error,
+    SubmitOrganizerApplicationPayload
+  >({
+    mutationFn: (payload) =>
+      applicationRequest(
+        "/api/organizations/applications",
+        isOrganizerApplication,
+        payload
+      ),
+    onSuccess: (created) => {
+      queryClient.setQueryData<OrganizerApplication[]>(
+        ownApplicationsKey,
+        (current) => (current ? [created, ...current] : [created])
+      )
+      void queryClient.invalidateQueries({
+        queryKey: ["organizer-applications"],
+      })
+    },
+  })
+}
+
+export function useOrganizerApplications(filters: OrganizerApplicationFilters) {
+  return useQuery<OrganizerApplicationPage, Error>({
+    queryKey: [...adminApplicationsKey, filters],
+    queryFn: () =>
+      applicationRequest(
+        `/api/admin/organizer-applications?${applicationQuery(filters)}`,
+        isOrganizerApplicationPage
+      ),
+    retry: false,
+  })
+}
+
+export function useDecideOrganizerApplication() {
+  const queryClient = useQueryClient()
+
+  return useMutation<
+    OrganizerApplication,
+    Error,
+    {
+      applicationId: string
+      action: "approve" | "reject"
+      reason?: string
+    }
+  >({
+    mutationFn: ({ applicationId, action, reason }) =>
+      applicationRequest(
+        `/api/admin/organizer-applications/${applicationId}/${action}`,
+        isOrganizerApplication,
+        reason !== undefined ? { reason } : {}
+      ),
+    onSuccess: async (updated) => {
+      await queryClient.cancelQueries({ queryKey: adminApplicationsKey })
+      for (const [key] of queryClient.getQueriesData<OrganizerApplicationPage>({
+        queryKey: adminApplicationsKey,
+      })) {
+        const filters = key[2] as OrganizerApplicationFilters | undefined
+        const statusFilter = filters?.status
+        queryClient.setQueryData<OrganizerApplicationPage>(key, (page) => {
+          if (!page) return page
+          const items = page.items
+            .map((item) =>
+              item.applicationId === updated.applicationId ? updated : item
+            )
+            .filter(
+              (item) =>
+                statusFilter === undefined || item.status === statusFilter
+            )
+          return {
+            ...page,
+            items,
+            total: Math.max(0, page.total - (page.items.length - items.length)),
+          }
+        })
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ["organizer-applications"],
+      })
+      void queryClient.invalidateQueries({ queryKey: ["organization"] })
+    },
+  })
 }
