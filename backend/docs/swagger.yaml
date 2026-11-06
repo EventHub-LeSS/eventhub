@@ -1934,6 +1934,103 @@ paths:
       summary: Get available seats
       tags:
       - events
+  /events/{eventId}/image:
+    get:
+      description: Serves the image of a published event as binary data with the Content-Type
+        it was uploaded with (image/png or image/jpeg). Public like the event details;
+        unpublished events and events without an image return 404.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - image/png
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get event image
+      tags:
+      - events
+    put:
+      consumes:
+      - image/png
+      - image/jpeg
+      description: Replaces the image of an event with the PNG or JPEG bytes sent
+        as the raw request body; the Content-Type header must declare image/png or
+        image/jpeg. The image is served at GET /events/{eventId}/image. Requires the
+        event_manager role in the organization that owns the event. Only events in
+        status draft or published can be edited. A body exceeding 2 MiB is refused
+        with 413, a body that is empty or does not start with the magic bytes of the
+        declared image type with 400 or 415.
+      parameters:
+      - description: Event ID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - description: Raw PNG or JPEG image bytes
+        in: body
+        name: image
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventActionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "413":
+          description: Image exceeds 2 MiB
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "415":
+          description: Content-Type must be image/png or image/jpeg
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload event image
+      tags:
+      - events
   /events/{eventId}/rating-summary:
     get:
       description: Public average score and review count. Only visible ratings with

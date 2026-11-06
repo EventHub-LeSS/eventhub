@@ -1171,6 +1171,141 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/{eventId}/image": {
+            "get": {
+                "description": "Serves the image of a published event as binary data with the Content-Type it was uploaded with (image/png or image/jpeg). Public like the event details; unpublished events and events without an image return 404.",
+                "produces": [
+                    "image/png",
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Get event image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event UUID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the image of an event with the PNG or JPEG bytes sent as the raw request body; the Content-Type header must declare image/png or image/jpeg. The image is served at GET /events/{eventId}/image. Requires the event_manager role in the organization that owns the event. Only events in status draft or published can be edited. A body exceeding 2 MiB is refused with 413, a body that is empty or does not start with the magic bytes of the declared image type with 400 or 415.",
+                "consumes": [
+                    "image/png",
+                    "image/jpeg"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "Upload event image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "eventId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Raw PNG or JPEG image bytes",
+                        "name": "image",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.EventActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Image exceeds 2 MiB",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Content-Type must be image/png or image/jpeg",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/{eventId}/rating-summary": {
             "get": {
                 "description": "Public average score and review count. Only visible ratings with scores 1–5 linked to confirmed bookings of this event count; ticket quantities do not weight reviews. No valid ratings returns averageRating=null and ratingCount=0. Published events and ended completed events expose summaries; drafts and cancelled events return 404. Averages are not rounded.",

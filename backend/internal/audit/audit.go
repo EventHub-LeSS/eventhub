@@ -23,6 +23,7 @@ const (
 	EventRestoredAsDraft          Action = "event.restored_as_draft"
 	EventCancelled                Action = "event.cancelled"
 	EventDeleted                  Action = "event.deleted"
+	EventImageChanged             Action = "event.image_changed"
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
 	OrganizationUpdated           Action = "organization.updated"
 	RatingVisibilityChanged       Action = "rating.visibility_changed"
