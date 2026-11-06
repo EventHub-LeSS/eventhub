@@ -4,6 +4,7 @@ import {
   EllipsisIcon,
   EyeIcon,
   PencilIcon,
+  RotateCcwIcon,
   SendIcon,
   Trash2Icon,
   UndoIcon,
@@ -16,6 +17,7 @@ import type { OrganizationRole } from "@/features/auth"
 import { DeleteDraftDialog } from "@/features/events/components/delete-draft-dialog"
 import {
   publishDraftAction,
+  restoreDraftAction,
   withdrawEventAction,
 } from "@/features/events/lib/actions"
 import type { EventStatus } from "@/features/events/lib/types"
@@ -41,6 +43,7 @@ interface EventActionsProps {
   /** Only used to tell the menu buttons of a list apart for screen readers. */
   eventTitle: string
   status: EventStatus
+  withdrawnByModerator: boolean
   /** The detail page is the link target itself, so it leaves that entry out. */
   showViewDetails?: boolean
   /** Roles in the event's organization; actions the API would refuse are left out. */
@@ -50,14 +53,15 @@ interface EventActionsProps {
 /**
  * "Details anzeigen" links to the detail page, "Publish" calls the same action as
  * the drafts list's standalone button. "Withdraw" asks for confirmation first,
- * because a withdrawn event cannot be published again, and so does "Delete" for
- * drafts, because a deleted draft is gone for good. "Edit" still only needs
- * an onClick handler once its action exists.
+ * because ticket holders are notified, and so does "Delete" for drafts,
+ * because a deleted draft is gone for good. A withdrawn event is edited by
+ * restoring it as a draft first, or published again right away (EVENTHUB-288).
  */
 export function EventActions({
   eventId,
   eventTitle,
   status,
+  withdrawnByModerator,
   showViewDetails = true,
   roles,
 }: EventActionsProps) {
@@ -69,20 +73,20 @@ export function EventActions({
   const [isWithdrawing, startWithdraw] = useTransition()
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 
-  function handlePublish() {
+  function handleStatusAction(action: typeof publishDraftAction) {
     if (isPending) return
 
     setError(undefined)
     startTransition(async () => {
-      const result = await publishDraftAction(eventId)
+      const result = await action(eventId)
 
       if (result.message) {
         setError(result.message)
         return
       }
 
-      // publishDraftAction only revalidates the drafts list; this component
-      // also renders on the event detail page, which needs its own refresh.
+      // The action only revalidates the drafts list; this component also
+      // renders on the event detail page, which needs its own refresh.
       router.refresh()
     })
   }
@@ -114,10 +118,14 @@ export function EventActions({
   // Mirrors the API: event managers manage events, org admins may also delete
   // drafts. A finance viewer only gets "Details anzeigen".
   const canManage = roles.includes("event_manager")
+  // The API refuses to edit withdrawn events; they are restored as a draft
+  // first. Events withdrawn by moderation can't be restored or republished.
+  const canEdit = canManage && status !== "cancelled"
+  const canReuse = canManage && status === "cancelled" && !withdrawnByModerator
   const canDelete =
     status === "draft" && (canManage || roles.includes("org_admin"))
 
-  if (!showViewDetails && !canManage && !canDelete) {
+  if (!showViewDetails && !canEdit && !canReuse && !canDelete) {
     return null
   }
 
@@ -142,14 +150,32 @@ export function EventActions({
                 <EyeIcon />
                 Details anzeigen
               </DropdownMenuItem>
-              {(canManage || canDelete) && <DropdownMenuSeparator />}
+              {(canEdit || canReuse || canDelete) && <DropdownMenuSeparator />}
             </>
           )}
           {canManage && status === "draft" && (
-            <DropdownMenuItem onClick={handlePublish}>
+            <DropdownMenuItem
+              onClick={() => handleStatusAction(publishDraftAction)}
+            >
               <SendIcon />
               Veröffentlichen
             </DropdownMenuItem>
+          )}
+          {canReuse && (
+            <>
+              <DropdownMenuItem
+                onClick={() => handleStatusAction(restoreDraftAction)}
+              >
+                <RotateCcwIcon />
+                Als Entwurf wiederherstellen
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleStatusAction(publishDraftAction)}
+              >
+                <SendIcon />
+                Erneut veröffentlichen
+              </DropdownMenuItem>
+            </>
           )}
           {canManage && status === "published" && (
             <DropdownMenuItem onClick={() => handleWithdrawOpenChange(true)}>
@@ -157,7 +183,7 @@ export function EventActions({
               Zurückziehen
             </DropdownMenuItem>
           )}
-          {canManage && (
+          {canEdit && (
             <DropdownMenuItem
               disabled={status === "completed"}
               className={
@@ -200,8 +226,9 @@ export function EventActions({
             <DialogDescription>
               &quot;{eventTitle}&quot; ist dann nicht mehr buchbar und
               verschwindet aus der Veranstaltungssuche. Bestehende Buchungen
-              bleiben erhalten. Alle Ticketinhaber werden benachrichtigt. Das
-              kann nicht rückgängig gemacht werden.
+              bleiben erhalten. Alle Ticketinhaber werden benachrichtigt. Du
+              kannst sie später als Entwurf wiederherstellen oder erneut
+              veröffentlichen.
             </DialogDescription>
           </DialogHeader>
 
