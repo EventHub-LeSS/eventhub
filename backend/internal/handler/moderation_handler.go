@@ -159,7 +159,7 @@ func (h *ModerationHandler) EditEventContentHandler(c *gin.Context) {
 
 // WithdrawEventHandler godoc
 // @Summary      Withdraw a problematic event
-// @Description  Requires admin or moderator and a reason of 1-1000 characters after trimming. Draft and published events become cancelled and disappear from public lists, details and recommendations. New bookings and payment completion are rejected; existing bookings and payments remain in the history and tickets are invalid. No automatic refunds. Completed events return 409. Already cancelled events return changed=false without another audit entry. The status change, reason and actor are recorded atomically.
+// @Description  Requires admin or moderator and a reason of 1-1000 characters after trimming. Draft and published events become cancelled and disappear from public lists, details and recommendations. New bookings and payment completion are rejected; existing bookings and payments remain in the history and tickets are invalid. No automatic refunds. Completed events return 409. Events already withdrawn by moderation return changed=false without another audit entry. Events previously withdrawn by their organizer receive a moderation block so they cannot be restored or republished by organizers. The status change, reason and actor are recorded atomically.
 // @Tags         moderation
 // @Security     BearerAuth
 // @Accept       json

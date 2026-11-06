@@ -20,6 +20,7 @@ const (
 	EventCreated                  Action = "event.created"
 	EventUpdated                  Action = "event.updated"
 	EventPublished                Action = "event.published"
+	EventRestoredAsDraft          Action = "event.restored_as_draft"
 	EventCancelled                Action = "event.cancelled"
 	EventDeleted                  Action = "event.deleted"
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
