@@ -5,15 +5,19 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/features/auth";
 import { AddToCartForm, formatAmount } from "@/features/cart";
 import {
+  EventReviews,
+  getEventRatings,
   getEventRatingSummary,
   getOrganizerRatingSummary,
   getPublishedEventDetails,
+  parseReviewPage,
 } from "@/features/catalog";
 import { Button } from "@/features/shared/components/ui/button";
 import { formatAddress } from "@/features/shared/lib/location";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 const dateFormat = new Intl.DateTimeFormat("de-DE", {
@@ -48,14 +52,19 @@ function DetailRow({
  * the amount of this addition is calculated from ticket count and price.
  * The organizer is shown with its average rating (EVENTHUB-239), the
  * event's public rating summary (EVENTHUB-238) sits next to the category
- * above the title
+ * above the title, and its ratings are listed below the description (297),
+ * paged through `?reviewPage=n`.
  */
-export default async function EventDetailPage({ params }: PageProps) {
-  const { id } = await params;
-  const [result, session, rating] = await Promise.all([
+export default async function EventDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const [{ id }, { reviewPage }] = await Promise.all([params, searchParams]);
+  const [result, session, rating, reviews] = await Promise.all([
     getPublishedEventDetails(id),
     getSession(),
     getEventRatingSummary(id),
+    getEventRatings(id, parseReviewPage(reviewPage)),
   ]);
 
   if (result.status === "not-found") {
@@ -209,6 +218,10 @@ export default async function EventDetailPage({ params }: PageProps) {
           <p className="text-sm text-muted-foreground">
             Du erhältst eine Erinnerung vor Veranstaltungsbeginn
           </p>
+
+          <hr className="border-border" />
+
+          <EventReviews eventId={event.eventId} result={reviews} />
         </div>
 
         <div className="flex flex-col gap-2">

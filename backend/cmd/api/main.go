@@ -96,7 +96,7 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo, tx)
 
 	// Initialize Handlers
-	orgHandler := handler.NewOrganizationHandler(keycloakService, orgRepo, userRepo)
+	orgHandler := handler.NewOrganizationHandler(keycloakService, service.NewOrganizationService(keycloakService, orgRepo), orgRepo, userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
 	eventHandler := handler.NewEventHandler(eventService)
@@ -119,6 +119,7 @@ func main() {
 		v1.GET("/events", eventHandler.ListPublishedEventsHandler)
 		v1.GET("/events/:eventId", eventHandler.GetPublishedEventDetailsHandler)
 		v1.GET("/events/:eventId/rating-summary", ratingHandler.GetEventRatingSummaryHandler)
+		v1.GET("/events/:eventId/ratings", ratingHandler.ListEventRatingsHandler)
 		v1.GET("/organizations/:organizationID/rating-summary", ratingHandler.GetOrganizerRatingSummaryHandler)
 
 		// DEBUG routes — disabled in production
@@ -146,6 +147,7 @@ func main() {
 			events.GET("/org/:id", eventHandler.ListOrganizationEventsHandler)
 			events.PUT("/:id", middleware.Audit(audit.EventUpdated), eventHandler.UpdateEventHandler)
 			events.POST("/:id/publish", middleware.Audit(audit.EventPublished), eventHandler.PublishEventHandler)
+			events.POST("/:id/restore-draft", middleware.Audit(audit.EventRestoredAsDraft), eventHandler.RestoreEventAsDraftHandler)
 			events.POST("/:id/withdraw", middleware.Audit(audit.EventCancelled), eventHandler.WithdrawEventHandler)
 			events.DELETE("/:id", middleware.Audit(audit.EventDeleted), eventHandler.DeleteEventHandler)
 			events.GET("/:eventId/sold-tickets", eventHandler.GetSoldTicketsHandler)
@@ -214,6 +216,10 @@ func main() {
 	orgRoles := v1.Group("/organizations")
 	orgRoles.Use(authenticator.Middleware())
 	{
+		// Organization details are read by any member and changed by org admins; the handler
+		// authorizes against the resolved organization like the role endpoint above.
+		orgRoles.GET("/:organizationID", orgHandler.GetOrganization)
+		orgRoles.PUT("/:organizationID", middleware.Audit(audit.OrganizationUpdated), orgHandler.UpdateOrganization)
 		orgRoles.GET("/:organizationID/dashboard", eventHandler.GetSalesDashboardHandler)
 		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
 		// Organization admins read the audit log of their organization; the handler authorizes

@@ -176,7 +176,9 @@ func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter)
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").
-		Where("events.status = ?", model.EventStatusPublished)
+		Where("events.status = ?", model.EventStatusPublished).
+		// Hide events that are already over (EVENTHUB-296).
+		Where("events.end_time > NOW()")
 	if filter.Date != nil {
 		// Match every event that takes place during the selected calendar day, not only
 		// on its start day: an event overlaps the day when it starts before the day ends

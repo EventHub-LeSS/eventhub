@@ -11,6 +11,14 @@ export type {
   EventRatingSummaryData,
   EventRatingSummaryResult,
 } from "@/features/catalog/lib/get-event-rating-summary"
+export { EventReviews } from "@/features/catalog/components/event-reviews"
+export { getEventRatings } from "@/features/catalog/lib/get-event-ratings"
+export type { EventRatingsResult } from "@/features/catalog/lib/get-event-ratings"
+export { parseReviewPage } from "@/features/catalog/lib/event-ratings"
+export type {
+  EventRating,
+  EventRatingsPage,
+} from "@/features/catalog/lib/event-ratings"
 export { getOrganizerRatingSummary } from "@/features/catalog/lib/get-organizer-rating-summary"
 export type {
   OrganizerRatingSummaryData,

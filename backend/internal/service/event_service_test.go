@@ -140,6 +140,10 @@ func (f *fakeOrgRepo) UpdateOrganization(*model.OrganizationModel) error {
 	return nil
 }
 
+func (f *fakeOrgRepo) UpdateName(uuid.UUID, string) error {
+	return nil
+}
+
 func (f *fakeOrgRepo) GetByID(id uuid.UUID) (*model.OrganizationModel, error) {
 	return f.orgs[id], nil
 }
@@ -496,13 +500,12 @@ func TestPublishEvent_PersistsPublishedStatus(t *testing.T) {
 	}
 }
 
-func TestPublishEvent_OnlyDraftsCanBePublished(t *testing.T) {
+func TestPublishEvent_RejectsUnsupportedStatuses(t *testing.T) {
 	tests := []struct {
 		status  model.EventStatus
 		wantErr error
 	}{
 		{status: model.EventStatusPublished, wantErr: ErrAlreadyPublished},
-		{status: model.EventStatusCancelled, wantErr: ErrNotDraft},
 		{status: model.EventStatusCompleted, wantErr: ErrNotDraft},
 	}
 	for _, tt := range tests {

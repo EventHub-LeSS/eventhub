@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,4 +220,149 @@ func TestRatingScoreRangeDatabase(t *testing.T) {
 			t.Fatalf("database accepted invalid score %d", score)
 		}
 	}
+}
+
+// seedListedRating stores a rating of userID (nil for a booking without user) created at createdAt.
+func seedListedRating(t *testing.T, db *gorm.DB, eventID uuid.UUID, userID *uuid.UUID, status string, score int, text string, visible bool, createdAt time.Time) uuid.UUID {
+	t.Helper()
+	bookingID, ratingID := uuid.New(), uuid.New()
+	if err := db.Exec("INSERT INTO bookings (booking_id, event_id, user_id, status, number_of_tickets, expires_at) VALUES (?, ?, ?, ?, 1, NOW() + interval '1 hour')",
+		bookingID, eventID, userID, status).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("INSERT INTO ratings (rating_id, booking_id, score, text, is_visible, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		ratingID, bookingID, score, text, visible, createdAt).Error; err != nil {
+		t.Fatal(err)
+	}
+	return ratingID
+}
+
+func seedRatingUser(t *testing.T, db *gorm.DB, firstName, lastName string) uuid.UUID {
+	t.Helper()
+	userID := uuid.New()
+	if err := db.Exec("INSERT INTO users (user_id, keycloak_user_id, first_name, last_name, email) VALUES (?, ?, ?, ?, ?)",
+		userID, uuid.NewString(), firstName, lastName, userID.String()+"@example.test").Error; err != nil {
+		t.Fatal(err)
+	}
+	return userID
+}
+
+func readEventRatings(t *testing.T, router http.Handler, eventID uuid.UUID, query string) (model.EventRatingPage, string) {
+	t.Helper()
+	rec := getEventRatings(router, eventID.String(), query)
+	var page model.EventRatingPage
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &page) != nil || page.Items == nil {
+		t.Fatalf("invalid rating page: %d %s", rec.Code, rec.Body.String())
+	}
+	return page, rec.Body.String()
+}
+
+func TestEventRatingListDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	event := seedEventForOrg(t, db, "rating-list", model.EventStatusPublished)
+	other := seedEventForOrg(t, db, "rating-list-other", model.EventStatusPublished)
+	router := databaseRatingRouter(db)
+	if empty, _ := readEventRatings(t, router, event.eventID, ""); len(empty.Items) != 0 || empty.Total != 0 || empty.Page != 1 || empty.Limit != 50 {
+		t.Fatalf("empty page: %+v", empty)
+	}
+
+	maxName := "Max"
+	maxUser := seedRatingUser(t, db, maxName, "Mustermann")
+	blank := seedRatingUser(t, db, "  ", "Ohnevorname")
+	base := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Microsecond)
+	oldest := seedListedRating(t, db, event.eventID, &maxUser, "confirmed", 5, "Super", true, base)
+	untitled := seedListedRating(t, db, event.eventID, &blank, "confirmed", 3, "", true, base.Add(time.Hour))
+	anonymous := seedListedRating(t, db, event.eventID, nil, "confirmed", 4, "Okay", true, base.Add(2*time.Hour))
+	// Not counted by the summary, so not listed either.
+	seedListedRating(t, db, event.eventID, &maxUser, "confirmed", 1, "hidden", false, base.Add(3*time.Hour))
+	for _, status := range []string{"reserved", "cancelled", "failed", "expired"} {
+		seedListedRating(t, db, event.eventID, &maxUser, status, 1, status, true, base.Add(3*time.Hour))
+	}
+	seedListedRating(t, db, other.eventID, &maxUser, "confirmed", 1, "other event", true, base.Add(3*time.Hour))
+	detached := seedSummaryRating(t, db, &event.eventID, "confirmed", 1, 1, true)
+	if err := db.Exec("DELETE FROM bookings WHERE booking_id = ?", detached).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	page, body := readEventRatings(t, router, event.eventID, "")
+	summary := readEventRatingSummary(t, router, event.eventID)
+	if page.Total != 3 || page.Total != summary.RatingCount || len(page.Items) != 3 {
+		t.Fatalf("listed %d of %d ratings, summary counts %d: %s", len(page.Items), page.Total, summary.RatingCount, body)
+	}
+	for i, want := range []struct {
+		id     uuid.UUID
+		score  int
+		text   string
+		author *string
+	}{
+		{anonymous, 4, "Okay", nil},
+		{untitled, 3, "", nil},
+		{oldest, 5, "Super", &maxName},
+	} {
+		got := page.Items[i]
+		if got.RatingID != want.id || got.Score != want.score || got.Text != want.text ||
+			(got.AuthorName == nil) != (want.author == nil) || (got.AuthorName != nil && *got.AuthorName != *want.author) {
+			t.Errorf("item %d: got %+v, want %+v", i, got, want)
+		}
+	}
+	for _, private := range []string{"Mustermann", "Ohnevorname", "@example.test", maxUser.String(), "bookingId", "userId"} {
+		if strings.Contains(body, private) {
+			t.Errorf("response exposes %q: %s", private, body)
+		}
+	}
+
+	for _, tc := range []struct {
+		query string
+		want  []uuid.UUID
+	}{
+		{"?limit=2", []uuid.UUID{anonymous, untitled}},
+		{"?page=2&limit=2", []uuid.UUID{oldest}},
+		{"?page=3&limit=2", nil},
+	} {
+		page, body := readEventRatings(t, router, event.eventID, tc.query)
+		if page.Total != 3 || len(page.Items) != len(tc.want) {
+			t.Fatalf("%s: %s", tc.query, body)
+		}
+		for i, id := range tc.want {
+			if page.Items[i].RatingID != id {
+				t.Errorf("%s item %d: %s", tc.query, i, body)
+			}
+		}
+	}
+}
+
+func TestEventRatingListVisibilityDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	router := databaseRatingRouter(db)
+	for _, tc := range []struct {
+		name   string
+		status model.EventStatus
+		ended  bool
+		want   int
+	}{
+		{"future published", model.EventStatusPublished, false, http.StatusOK},
+		{"ended published", model.EventStatusPublished, true, http.StatusOK},
+		{"ended completed", model.EventStatusCompleted, true, http.StatusOK},
+		{"future completed", model.EventStatusCompleted, false, http.StatusNotFound},
+		{"draft", model.EventStatusDraft, true, http.StatusNotFound},
+		{"cancelled", model.EventStatusCancelled, true, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			event := seedEventForOrg(t, db, "list-visibility", tc.status)
+			if tc.ended {
+				if err := db.Exec("UPDATE events SET start_time = NOW() - interval '2 days', end_time = NOW() - interval '1 day' WHERE event_id = ?", event.eventID).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			seedListedRating(t, db, event.eventID, nil, "confirmed", 5, "secret", true, time.Now())
+			rec := getEventRatings(router, event.eventID.String(), "")
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if tc.want != http.StatusOK && strings.Contains(rec.Body.String(), "secret") {
+				t.Fatalf("private rating leaked: %s", rec.Body.String())
+			}
+		})
+	}
+	assertOrganizationEventsProblem(t, getEventRatings(router, uuid.NewString(), ""), http.StatusNotFound)
 }

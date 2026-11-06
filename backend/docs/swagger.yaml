@@ -546,6 +546,8 @@ definitions:
         type: string
       updatedAt:
         type: string
+      withdrawnByModerator:
+        type: boolean
     type: object
   model.EventModerationResponse:
     properties:
@@ -555,6 +557,33 @@ definitions:
         type: string
       status:
         $ref: '#/definitions/model.EventStatus'
+    type: object
+  model.EventRating:
+    properties:
+      authorName:
+        type: string
+        x-nullable: true
+      createdAt:
+        type: string
+      ratingId:
+        type: string
+      score:
+        type: integer
+      text:
+        type: string
+    type: object
+  model.EventRatingPage:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.EventRating'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
     type: object
   model.EventRatingSummary:
     properties:
@@ -673,6 +702,8 @@ definitions:
         type: string
       updatedAt:
         type: string
+      withdrawnByModerator:
+        type: boolean
     type: object
   model.ModeratedEventPage:
     properties:
@@ -785,6 +816,35 @@ definitions:
         description: Reserved tickets over all items of the payment.
         example: 2
         type: integer
+    type: object
+  model.OrganizationDetailsResponse:
+    properties:
+      alias:
+        type: string
+      city:
+        type: string
+      contactEmail:
+        type: string
+      contactPhoneNumber:
+        type: string
+      countryCode:
+        type: string
+      createdAt:
+        type: string
+      houseNumber:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      organizationId:
+        type: string
+      postalCode:
+        type: string
+      street:
+        type: string
+      updatedAt:
+        type: string
     type: object
   model.OrganizationRole:
     enum:
@@ -1158,6 +1218,35 @@ definitions:
     - endTime
     - startTime
     - title
+    type: object
+  model.UpdateOrganizationRequest:
+    properties:
+      alias:
+        description: |-
+          Alias is the Keycloak-owned identity reference of the organization and deliberately not
+          changeable: the token claim carries it, so every member would have to refresh their token
+          and every stored reference would drift. The field is optional so an unchanged value is
+          ignored, while an attempt to change it is rejected with 400 instead of being dropped
+          silently.
+        type: string
+      name:
+        description: |-
+          Name is the display name of the organization ("Organisationsdetails"); it is required and
+          must not be empty after trimming.
+        type: string
+    required:
+    - name
+    type: object
+  model.UpdateOrganizationResponse:
+    properties:
+      alias:
+        type: string
+      id:
+        type: string
+      message:
+        type: string
+      name:
+        type: string
     type: object
   model.UtilizationPercentageResponse:
     properties:
@@ -1910,6 +1999,55 @@ paths:
       summary: Get event rating summary
       tags:
       - events
+  /events/{eventId}/ratings:
+    get:
+      description: 'Public page of the ratings counted by GET /events/{eventId}/rating-summary,
+        newest first: visible ratings with scores 1–5 linked to confirmed bookings
+        of this event, so total equals ratingCount. Ratings without text are included
+        with an empty text. authorName is only the reviewer''s first name and null
+        if the reviewer is unknown or has no first name. Published events and ended
+        completed events expose ratings; drafts and cancelled events return 404.'
+      parameters:
+      - description: Event UUID
+        in: path
+        name: eventId
+        required: true
+        type: string
+      - default: 1
+        description: Page number (1-indexed)
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 50
+        description: Page size (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventRatingPage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: List event ratings
+      tags:
+      - events
   /events/{eventId}/sold-tickets:
     get:
       description: Returns the number of confirmed tickets sold for an event. Requires
@@ -2107,10 +2245,13 @@ paths:
       - events
   /events/{id}/publish:
     post:
-      description: Publishes a draft event so that visitors can find and book it.
-        Requires the event_manager role in the organization that owns the event. Only
-        sufficiently complete events in status draft can be published. If the event
-        is already published, returns 400 with detail "this event is already published".
+      description: Publishes a draft event or republishes a withdrawn (cancelled)
+        event so that visitors can find and book it. Requires the event_manager role
+        in the organization that owns the event. Only sufficiently complete events
+        in status draft or cancelled can be published. Events withdrawn by moderation
+        cannot be republished by organizers. Existing bookings are preserved and are
+        not reactivated or duplicated. If the event is already published, returns
+        400 with detail "this event is already published".
       parameters:
       - description: Event ID
         in: path
@@ -2203,6 +2344,53 @@ paths:
       security:
       - BearerAuth: []
       summary: Rate an event
+      tags:
+      - events
+  /events/{id}/restore-draft:
+    post:
+      description: Returns a cancelled event to draft so the owning organization can
+        edit and publish it again. Requires event_manager in the owning organization.
+        Only events withdrawn by their organizer are accepted; moderation withdrawals,
+        completed, published and draft events return 400. Event ID, content and bookings
+        are preserved. Incomplete events may be restored for editing; publication
+        still checks completeness. The draft remains hidden from public listings and
+        cannot be booked.
+      parameters:
+      - description: Event UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.EventModel'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Restore withdrawn event as draft
       tags:
       - events
   /events/{id}/withdraw:
@@ -2733,8 +2921,10 @@ paths:
         trimming. Draft and published events become cancelled and disappear from public
         lists, details and recommendations. New bookings and payment completion are
         rejected; existing bookings and payments remain in the history and tickets
-        are invalid. No automatic refunds. Completed events return 409. Already cancelled
-        events return changed=false without another audit entry. The status change,
+        are invalid. No automatic refunds. Completed events return 409. Events already
+        withdrawn by moderation return changed=false without another audit entry.
+        Events previously withdrawn by their organizer receive a moderation block
+        so they cannot be restored or republished by organizers. The status change,
         reason and actor are recorded atomically.
       parameters:
       - description: Event UUID
@@ -3036,6 +3226,105 @@ paths:
       security:
       - BearerAuth: []
       summary: Create organization
+      tags:
+      - organizations
+  /organizations/{organizationID}:
+    get:
+      description: 'Returns the details of an organization: display name, alias, contact
+        columns and timestamps. Requires membership of the organization in any role
+        (global admins bypass this check). organizationID is the Keycloak organization
+        ID or alias as returned by POST /organizations and GET /users/me. The display
+        name is loaded from the API database; the alias is the identity reference
+        the token claim carries.'
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.OrganizationDetailsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get organization details
+      tags:
+      - organizations
+    put:
+      consumes:
+      - application/json
+      description: 'Sets the display name of an organization. Requires the org_admin
+        role in the given organization (global admins bypass this check); it is checked
+        against the token and again against Keycloak, so a demoted admin cannot act
+        on an old token. The change runs Keycloak first, then the API database row,
+        and both are recorded in the audit log: a started entry before the first change
+        and a result entry afterwards sharing one operationId; a result entry that
+        could not be written is reported with 500 and the request is safe to retry.
+        name is required; the alias is read-only, because the token claim carries
+        it — sending it with a different value is rejected with 400. organizationID
+        is the Keycloak organization ID or alias.'
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      - description: Organization details to set
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.UpdateOrganizationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.UpdateOrganizationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update organization details
       tags:
       - organizations
   /organizations/{organizationID}/audit-logs:

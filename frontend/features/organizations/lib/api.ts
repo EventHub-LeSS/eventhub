@@ -1,80 +1,156 @@
-"use client";
+"use client"
 
 import {
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
-} from "@tanstack/react-query";
+} from "@tanstack/react-query"
 
-import type { OrganizationPayload } from "@/features/organizations/lib/organization";
+import type { OrganizationPayload } from "@/features/organizations/lib/organization"
 import type {
   AuditLogPage,
   OrganizationMember,
   OrganizationRight,
-} from "@/features/organizations/lib/types";
+} from "@/features/organizations/lib/types"
 
 export interface CreateOrganizationResponse {
-  id: string;
-  name: string;
-  alias: string;
+  id: string
+  name: string
+  alias: string
   /** Whether the creator made themselves the organization's admin */
-  selfAdmin: boolean;
+  selfAdmin: boolean
+}
+
+export interface OrganizationDetails {
+  id: string
+  name: string
+  alias: string
+  contactEmail?: string
+  contactPhoneNumber?: string
+  street?: string
+  houseNumber?: string
+  postalCode?: string
+  city?: string
+  countryCode?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export function useCreateOrganization() {
   return useMutation<CreateOrganizationResponse, Error, OrganizationPayload>({
     mutationFn: createOrganization,
-  });
+  })
 }
 
 async function createOrganization(
-  payload: OrganizationPayload,
+  payload: OrganizationPayload
 ): Promise<CreateOrganizationResponse> {
   const response = await fetch("/api/organizations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  })
 
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
+    throw new Error(errorMessage(body, response.status))
   }
 
-  return body as CreateOrganizationResponse;
+  return body as CreateOrganizationResponse
 }
 
 function errorMessage(body: unknown, status: number): string {
   if (body && typeof body === "object") {
     const { error, message, detail } = body as {
-      error?: unknown;
-      message?: unknown;
-      detail?: unknown;
-    };
+      error?: unknown
+      message?: unknown
+      detail?: unknown
+    }
 
     if (typeof detail === "string" && detail) {
-      return detail;
+      return detail
     }
 
     if (typeof error === "string" && error) {
-      return error;
+      return error
     }
 
     if (typeof message === "string" && message) {
-      return message;
+      return message
     }
 
     if (error && typeof error === "object" && "message" in error) {
-      const nested = (error as { message?: unknown }).message;
+      const nested = (error as { message?: unknown }).message
       if (typeof nested === "string" && nested) {
-        return nested;
+        return nested
       }
     }
   }
 
-  return `Anfrage fehlgeschlagen (${status}).`;
+  return `Anfrage fehlgeschlagen (${status}).`
+}
+
+export function useOrganization(alias: string, enabled = true) {
+  return useQuery<OrganizationDetails, Error>({
+    queryKey: ["organization", alias, "details"],
+    queryFn: () => fetchOrganization(alias),
+    enabled,
+  })
+}
+
+async function fetchOrganization(alias: string): Promise<OrganizationDetails> {
+  const response = await fetch(`/api/organizations/${alias}`)
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status))
+  }
+
+  return body as OrganizationDetails
+}
+
+export interface UpdateOrganizationResponse {
+  id: string
+  name: string
+  alias: string
+  message: string
+}
+
+export function useUpdateOrganization(alias: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<UpdateOrganizationResponse, Error, string>({
+    mutationFn: (name) => updateOrganization(alias, name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["organization", alias, "details"],
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["organization", alias, "audit-log"],
+      })
+    },
+  })
+}
+
+async function updateOrganization(
+  alias: string,
+  name: string
+): Promise<UpdateOrganizationResponse> {
+  const response = await fetch(`/api/organizations/${alias}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(errorMessage(body, response.status))
+  }
+
+  return body as UpdateOrganizationResponse
 }
 
 export function useOrganizationMembers(alias: string, enabled = true) {
@@ -82,20 +158,20 @@ export function useOrganizationMembers(alias: string, enabled = true) {
     queryKey: ["organization", alias, "members"],
     queryFn: () => fetchOrganizationMembers(alias),
     enabled,
-  });
+  })
 }
 
 async function fetchOrganizationMembers(
-  alias: string,
+  alias: string
 ): Promise<OrganizationMember[]> {
-  const response = await fetch(`/api/organizations/${alias}/members`);
-  const body = await response.json().catch(() => null);
+  const response = await fetch(`/api/organizations/${alias}/members`)
+  const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
+    throw new Error(errorMessage(body, response.status))
   }
 
-  return body as OrganizationMember[];
+  return body as OrganizationMember[]
 }
 
 export function useOrganizationAuditLog(alias: string, enabled = true) {
@@ -111,38 +187,38 @@ export function useOrganizationAuditLog(alias: string, enabled = true) {
     initialPageParam: null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled,
-  });
+  })
 }
 
 async function fetchOrganizationAuditLog(
   alias: string,
-  cursor: string | null,
+  cursor: string | null
 ): Promise<AuditLogPage> {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  const response = await fetch(`/api/organizations/${alias}/audit-logs${query}`);
-  const body = await response.json().catch(() => null);
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""
+  const response = await fetch(`/api/organizations/${alias}/audit-logs${query}`)
+  const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
+    throw new Error(errorMessage(body, response.status))
   }
 
-  return body as AuditLogPage;
+  return body as AuditLogPage
 }
 
 export interface UpdateMemberRolesVariables {
-  username: string;
-  roles: OrganizationRight[];
+  username: string
+  roles: OrganizationRight[]
 }
 
 export interface UpdateMemberRolesResponse {
-  username: string;
-  organizationId: string;
-  roles: OrganizationRight[];
-  message: string;
+  username: string
+  organizationId: string
+  roles: OrganizationRight[]
+  message: string
 }
 
 export function useUpdateMemberRoles(alias: string) {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useMutation<
     UpdateMemberRolesResponse,
@@ -154,18 +230,18 @@ export function useUpdateMemberRoles(alias: string) {
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["organization", alias, "members"],
-      });
+      })
       queryClient.invalidateQueries({
         queryKey: ["organization", alias, "audit-log"],
-      });
+      })
     },
-  });
+  })
 }
 
 async function updateMemberRoles(
   alias: string,
   username: string,
-  roles: OrganizationRight[],
+  roles: OrganizationRight[]
 ): Promise<UpdateMemberRolesResponse> {
   const response = await fetch(
     `/api/organizations/${alias}/members/${username}/roles`,
@@ -173,80 +249,80 @@ async function updateMemberRoles(
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roles }),
-    },
-  );
+    }
+  )
 
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
+    throw new Error(errorMessage(body, response.status))
   }
 
-  return body as UpdateMemberRolesResponse;
+  return body as UpdateMemberRolesResponse
 }
 
 export interface InviteMemberVariables {
-  email: string;
-  name?: string;
+  email: string
+  name?: string
 }
 
 export interface InviteMemberResponse {
-  message: string;
+  message: string
 }
 
 export function useInviteMember(alias: string) {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useMutation<InviteMemberResponse, Error, InviteMemberVariables>({
     mutationFn: (variables) => inviteMember(alias, variables),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["organization", alias, "members"],
-      });
+      })
     },
-  });
+  })
 }
 
 async function inviteMember(
   alias: string,
-  variables: InviteMemberVariables,
+  variables: InviteMemberVariables
 ): Promise<InviteMemberResponse> {
   const response = await fetch(`/api/organizations/${alias}/members`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(variables),
-  });
+  })
 
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(errorMessage(body, response.status));
+    throw new Error(errorMessage(body, response.status))
   }
 
-  return body as InviteMemberResponse;
+  return body as InviteMemberResponse
 }
 
 export function useRemoveMember(alias: string) {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useMutation<void, Error, string>({
     mutationFn: (username) => removeMember(alias, username),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["organization", alias, "members"],
-      });
+      })
     },
-  });
+  })
 }
 
 async function removeMember(alias: string, username: string): Promise<void> {
   const response = await fetch(
     `/api/organizations/${alias}/members/${username}`,
-    { method: "DELETE" },
-  );
+    { method: "DELETE" }
+  )
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(errorMessage(body, response.status));
+    const body = await response.json().catch(() => null)
+    throw new Error(errorMessage(body, response.status))
   }
 }

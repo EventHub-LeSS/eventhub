@@ -1,5 +1,9 @@
 package model
 
+import (
+	"time"
+)
+
 // OrganizationRole is a per-organization role, stored in Keycloak as an organization group of the
 // same name (EVENTHUB-188). It lives in model so request models and services can use it without
 // importing middleware.
@@ -72,6 +76,46 @@ type ConfigureOrgRolesResponse struct {
 	OrganizationID string   `json:"organizationId"`
 	Roles          []string `json:"roles"`
 	Message        string   `json:"message,omitempty"`
+}
+
+type UpdateOrganizationRequest struct {
+	// Name is the display name of the organization ("Organisationsdetails"); it is required and
+	// must not be empty after trimming.
+	Name string `json:"name" binding:"required"`
+	// Alias is the Keycloak-owned identity reference of the organization and deliberately not
+	// changeable: the token claim carries it, so every member would have to refresh their token
+	// and every stored reference would drift. The field is optional so an unchanged value is
+	// ignored, while an attempt to change it is rejected with 400 instead of being dropped
+	// silently.
+	Alias *string `json:"alias,omitempty"`
+}
+
+type UpdateOrganizationResponse struct {
+	ID      string `json:"id"`
+	Alias   string `json:"alias"`
+	Name    string `json:"name"`
+	Message string `json:"message,omitempty"`
+}
+
+// OrganizationDetailsResponse is the response of GET /organizations/{organizationID}: the details
+// of one organization, loaded from the API database. id is the Keycloak organization ID, which
+// roles and audit entries are addressed by, and organizationId is the database UUID events
+// reference in their organizer_id. The contact columns belong to the organization details and are
+// returned as they are stored, null when never set.
+type OrganizationDetailsResponse struct {
+	ID                 string    `json:"id"`
+	OrganizationID     string    `json:"organizationId"`
+	Alias              string    `json:"alias"`
+	Name               string    `json:"name"`
+	ContactEmail       *string   `json:"contactEmail"`
+	ContactPhoneNumber *string   `json:"contactPhoneNumber"`
+	Street             *string   `json:"street"`
+	HouseNumber        *string   `json:"houseNumber"`
+	PostalCode         *string   `json:"postalCode"`
+	City               *string   `json:"city"`
+	CountryCode        *string   `json:"countryCode"`
+	CreatedAt          time.Time `json:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt"`
 }
 
 type ErrorResponse struct {

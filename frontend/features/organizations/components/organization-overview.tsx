@@ -1,34 +1,37 @@
-"use client";
+"use client"
 
-import { useState } from "react";
+import { useState } from "react"
 
-import { ActivityChart } from "@/features/organizations/components/activity-chart";
-import { AuditLogTable } from "@/features/organizations/components/audit-log-table";
-import { MembersTable } from "@/features/organizations/components/members-table";
-import { OrganizationHeader } from "@/features/organizations/components/organization-header";
+import { ActivityChart } from "@/features/organizations/components/activity-chart"
+import { AuditLogTable } from "@/features/organizations/components/audit-log-table"
+import { MembersTable } from "@/features/organizations/components/members-table"
+import { OrganizationHeader } from "@/features/organizations/components/organization-header"
 import {
   type ActivityEvent,
   activityByMonth,
-} from "@/features/organizations/lib/activity";
+} from "@/features/organizations/lib/activity"
 import {
+  useOrganization,
   useOrganizationAuditLog,
   useOrganizationMembers,
-} from "@/features/organizations/lib/api";
-import type { OrganizationRight } from "@/features/organizations/lib/types";
-import { Button } from "@/features/shared/components/ui/button";
+  useUpdateOrganization,
+} from "@/features/organizations/lib/api"
+import type { OrganizationRight } from "@/features/organizations/lib/types"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/features/shared/components/ui/card";
-import { Input } from "@/features/shared/components/ui/input";
+} from "@/features/shared/components/ui/card"
+import { Input } from "@/features/shared/components/ui/input"
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/features/shared/components/ui/tabs";
+} from "@/features/shared/components/ui/tabs"
+import { toast } from "@/features/shared/components/ui/toast"
 
 export function OrganizationOverview({
   alias,
@@ -36,33 +39,66 @@ export function OrganizationOverview({
   isAdmin = false,
   events,
 }: {
-  alias: string;
+  alias: string
   /** Null when the events could not be loaded. */
-  events: ActivityEvent[] | null;
-  rights: string[];
-  isAdmin?: boolean;
+  events: ActivityEvent[] | null
+  rights: string[]
+  isAdmin?: boolean
 }) {
   const hasRight = (right: OrganizationRight) =>
-    isAdmin || rights.includes(right);
-  const canViewMembers = isAdmin;
-  const canViewAuditLog = hasRight("org_admin");
+    isAdmin || rights.includes(right)
+  const canViewMembers = isAdmin
+  const canViewAuditLog = hasRight("org_admin")
+  const canEditOrganization = hasRight("org_admin")
 
-  const membersQuery = useOrganizationMembers(alias, canViewMembers);
+  const membersQuery = useOrganizationMembers(alias, canViewMembers)
+  const organizationQuery = useOrganization(alias)
+  const updateOrganization = useUpdateOrganization(alias)
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState({ name: alias, alias });
+  // Fall back to the alias until the details request resolves.
+  const name = organizationQuery.data?.name ?? alias
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftName, setDraftName] = useState(name)
 
   function handleEditClick() {
-    setDraft({ name: alias, alias });
-    setIsEditing(true);
+    setDraftName(name)
+    setIsEditing(true)
   }
 
   function handleSaveClick() {
-    setIsEditing(false);
+    const trimmedName = draftName.trim()
+
+    if (!trimmedName) {
+      toast.add({
+        type: "error",
+        title: "Speichern fehlgeschlagen",
+        description: "Der Name der Organisation darf nicht leer sein.",
+      })
+      return
+    }
+
+    updateOrganization.mutate(trimmedName, {
+      onSuccess: (data) => {
+        setIsEditing(false)
+        toast.add({
+          type: "success",
+          title: "Organisation aktualisiert",
+          description: `Der Name ist jetzt „${data.name}".`,
+        })
+      },
+      onError: (error) => {
+        toast.add({
+          type: "error",
+          title: "Speichern fehlgeschlagen",
+          description: error.message,
+        })
+      },
+    })
   }
 
-  const members = membersQuery.data ?? [];
-  const activity = events ? activityByMonth(events, members) : null;
+  const members = membersQuery.data ?? []
+  const activity = events ? activityByMonth(events, members) : null
 
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -70,8 +106,9 @@ export function OrganizationOverview({
         <OrganizationHeader
           alias={alias}
           isEditing={isEditing}
-          onEditClick={handleEditClick}
-          onSaveClick={handleSaveClick}
+          isSaving={updateOrganization.isPending}
+          onEditClick={canEditOrganization ? handleEditClick : undefined}
+          onSaveClick={canEditOrganization ? handleSaveClick : undefined}
         />
 
         <Card>
@@ -81,20 +118,13 @@ export function OrganizationOverview({
           <CardContent className="flex flex-col divide-y divide-border">
             <SettingsRow
               label="Name"
-              value={draft.name}
+              value={isEditing ? draftName : name}
               isEditing={isEditing}
-              onChange={(value) =>
-                setDraft((prev) => ({ ...prev, name: value }))
-              }
+              onChange={setDraftName}
             />
-            <SettingsRow
-              label="Alias"
-              value={draft.alias}
-              isEditing={isEditing}
-              onChange={(value) =>
-                setDraft((prev) => ({ ...prev, alias: value }))
-              }
-            />
+            {/* The alias is the identity reference carried by the token claim
+                and deliberately not changeable, so it is always read-only. */}
+            <SettingsRow label="Alias" value={alias} />
           </CardContent>
         </Card>
       </div>
@@ -154,12 +184,12 @@ export function OrganizationOverview({
         )}
       </Tabs>
     </div>
-  );
+  )
 }
 
 function AuditLogCard({ alias }: { alias: string }) {
-  const auditLogQuery = useOrganizationAuditLog(alias);
-  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const auditLogQuery = useOrganizationAuditLog(alias)
+  const entries = auditLogQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
     <Card>
@@ -193,7 +223,7 @@ function AuditLogCard({ alias }: { alias: string }) {
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function SettingsRow({
@@ -202,10 +232,10 @@ function SettingsRow({
   isEditing,
   onChange,
 }: {
-  label: string;
-  value: string;
-  isEditing?: boolean;
-  onChange?: (value: string) => void;
+  label: string
+  value: string
+  isEditing?: boolean
+  onChange?: (value: string) => void
 }) {
   return (
     <div className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
@@ -219,5 +249,5 @@ function SettingsRow({
         <p className="text-sm break-words text-muted-foreground">{value}</p>
       )}
     </div>
-  );
+  )
 }

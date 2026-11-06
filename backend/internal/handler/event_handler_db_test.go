@@ -105,6 +105,7 @@ func newEventRouter(db *gorm.DB, principal *middleware.Principal) http.Handler {
 	r.GET("/api/v1/events/org/:id", setPrincipal, h.ListOrganizationEventsHandler)
 	r.PUT("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventUpdated), h.UpdateEventHandler)
 	r.POST("/api/v1/events/:id/publish", setPrincipal, middleware.Audit(audit.EventPublished), h.PublishEventHandler)
+	r.POST("/api/v1/events/:id/restore-draft", setPrincipal, middleware.Audit(audit.EventRestoredAsDraft), h.RestoreEventAsDraftHandler)
 	r.POST("/api/v1/events/:id/withdraw", setPrincipal, middleware.Audit(audit.EventCancelled), h.WithdrawEventHandler)
 	r.DELETE("/api/v1/events/:id", setPrincipal, middleware.Audit(audit.EventDeleted), h.DeleteEventHandler)
 	locations := NewLocationHandler(service.NewLocationService(repository.NewOrganizationRepository(db), repository.NewLocationRepository(db)))
