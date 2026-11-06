@@ -116,6 +116,28 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+@utility mask-fade-left {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    rgb(0 0 0 / 0.013) 6.9%,
+    rgb(0 0 0 / 0.049) 13.2%,
+    rgb(0 0 0 / 0.104) 19.1%,
+    rgb(0 0 0 / 0.175) 24.7%,
+    rgb(0 0 0 / 0.259) 29.9%,
+    rgb(0 0 0 / 0.352) 35%,
+    rgb(0 0 0 / 0.45) 40%,
+    rgb(0 0 0 / 0.55) 45%,
+    rgb(0 0 0 / 0.648) 50%,
+    rgb(0 0 0 / 0.741) 55.1%,
+    rgb(0 0 0 / 0.825) 60.4%,
+    rgb(0 0 0 / 0.896) 65.9%,
+    rgb(0 0 0 / 0.951) 71.8%,
+    rgb(0 0 0 / 0.987) 78.1%,
+    black 85%
+  );
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
