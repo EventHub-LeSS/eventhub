@@ -1,19 +1,20 @@
-"use client";
+"use client"
 
 import {
   Building2Icon,
+  ClipboardCheckIcon,
   DoorOpenIcon,
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
   SunIcon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import Link from "next/link";
+} from "lucide-react"
+import { useTheme } from "next-themes"
+import Link from "next/link"
 
-import type { SessionUser } from "@/features/auth";
-import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar";
-import { Button } from "@/features/shared/components/ui/button";
+import type { SessionUser } from "@/features/auth"
+import { Avatar, AvatarFallback } from "@/features/shared/components/ui/avatar"
+import { Button } from "@/features/shared/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +25,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/features/shared/components/ui/dropdown-menu";
+} from "@/features/shared/components/ui/dropdown-menu"
 
 function initials(name: string) {
   const letters = name
@@ -32,17 +33,17 @@ function initials(name: string) {
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0])
-    .join("");
+    .join("")
 
-  return letters.toUpperCase() || "?";
+  return letters.toUpperCase() || "?"
 }
 
 function hasOrganizations(user: SessionUser) {
-  return user.organizations.length > 0;
+  return user.organizations.length > 0
 }
 
 export function UserMenu({ user }: { user: SessionUser }) {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme } = useTheme()
 
   return (
     <DropdownMenu>
@@ -71,31 +72,31 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </div>
 
         <DropdownMenuSeparator />
-        {!hasOrganizations(user) && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Organisationen</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Organisation</DropdownMenuLabel>
+          {hasOrganizations(user) ? (
+            <DropdownMenuItem render={<Link href="/organization" />}>
+              Deine Organisation
+            </DropdownMenuItem>
+          ) : (
             <DropdownMenuItem render={<Link href="/organizations/join" />}>
               <DoorOpenIcon />
               Einer Organisation beitreten
             </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
-        {hasOrganizations(user) && (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Organisation</DropdownMenuLabel>
-            <DropdownMenuItem render={<Link href="/organization" />}>
-              Deine Organisation
+          )}
+          <DropdownMenuItem render={<Link href="/organizations/create" />}>
+            <Building2Icon />
+            Organisation beantragen
+          </DropdownMenuItem>
+          {(user.canReviewApplications || user.isAdmin) && (
+            <DropdownMenuItem
+              render={<Link href="/admin/organizer-applications" />}
+            >
+              <ClipboardCheckIcon />
+              Organisationsanträge
             </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
-        {user.isAdmin && (
-          <DropdownMenuGroup>
-            <DropdownMenuItem render={<Link href="/organizations/create" />}>
-              <Building2Icon />
-              Organisation erstellen
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        )}
+          )}
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Darstellung</DropdownMenuLabel>
@@ -131,5 +132,5 @@ export function UserMenu({ user }: { user: SessionUser }) {
         </form>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }

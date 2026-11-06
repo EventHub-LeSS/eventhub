@@ -23,12 +23,15 @@ const actionLabel: Record<AuditAction, string> = {
   "event.deleted": "Veranstaltung gelöscht",
   "rating.visibility_changed": "Sichtbarkeit einer Bewertung geändert",
   "organization.member_roles_changed": "Rechte geändert",
+  "organizer_application.approved": "Veranstalterbewerbung angenommen",
+  "organizer_application.rejected": "Veranstalterbewerbung abgelehnt",
 }
 
 const categoryLabel: Record<AuditLogEntry["resourceType"], string> = {
   event: "Veranstaltung",
   rating: "Bewertung",
   organization_member: "Mitglied",
+  organizer_application: "Bewerbung",
 }
 
 const categoryVariant: Record<
@@ -38,6 +41,7 @@ const categoryVariant: Record<
   event: "secondary",
   rating: "secondary",
   organization_member: "default",
+  organizer_application: "default",
 }
 
 const phaseBadge: Partial<
@@ -91,6 +95,19 @@ function rights(values: string[]) {
 
 function describeChange(entry: AuditLogEntry): string {
   const { changes } = entry
+
+  if (
+    entry.action === "organizer_application.approved" ||
+    entry.action === "organizer_application.rejected"
+  ) {
+    const alias =
+      typeof changes.organizationAlias === "string"
+        ? changes.organizationAlias
+        : entry.resourceId
+    const reason =
+      typeof changes.reason === "string" && changes.reason ? changes.reason : ""
+    return reason ? `${alias}: ${reason}` : alias
+  }
 
   if (entry.action === "rating.visibility_changed") {
     const visibility = asRecord(asRecord(changes.fields)?.isVisible)

@@ -32,7 +32,8 @@ function externalOrigin(request: NextRequest) {
 function authenticationRequired(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/api/moderation/") ||
-    request.nextUrl.pathname.startsWith("/api/admin/")
+    request.nextUrl.pathname.startsWith("/api/admin/") ||
+    request.nextUrl.pathname.startsWith("/api/organizations/applications")
   ) {
     return NextResponse.json(
       { detail: "Anmeldung erforderlich." },
