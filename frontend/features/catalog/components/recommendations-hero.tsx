@@ -4,6 +4,7 @@ import { CalendarIcon, MapPinIcon, SparklesIcon } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
+import { EventImage } from "@/features/catalog/components/event-image"
 import {
   formatEventDate,
   formatEventPrice,
@@ -113,6 +114,12 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
         <span className="font-mono text-sm tracking-widest text-muted-foreground uppercase">
           {event.category.category}
         </span>
+        <EventImage
+          key={event.eventId}
+          eventId={event.eventId}
+          sizes="(min-width: 1280px) 640px, 50vw"
+          className="animate-in duration-500 fade-in [mask-image:linear-gradient(to_right,transparent,black_35%)]"
+        />
       </div>
 
       <div
