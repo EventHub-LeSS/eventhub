@@ -173,7 +173,16 @@ func (s *OrganizationService) CreateOrganizationAsService(ctx context.Context, r
 		return nil, err
 	}
 	defer func() { s.keycloak.dropAdminTokenIfRejected(err) }()
-	return s.CreateOrganization(ctx, token, req)
+	created, err = s.CreateOrganization(ctx, token, req)
+	if err != nil {
+		return nil, err
+	}
+	// The caller already reviewed the organization (e.g. approved the organizer application),
+	// so it skips the pending state that new organizations start in.
+	if _, err := s.orgRepo.Activate(created.OrganizationID); err != nil {
+		return nil, fmt.Errorf("organization created but failed to activate it: %w", err)
+	}
+	return created, nil
 }
 
 // CreateOrganization creates the organization in Keycloak with its role groups and the given

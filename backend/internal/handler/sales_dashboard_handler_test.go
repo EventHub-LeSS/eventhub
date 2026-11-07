@@ -158,11 +158,13 @@ func TestGetSalesDashboardHandlerUnit_ReturnsOwnSalesFigures(t *testing.T) {
 				OrganizationID: ownOrgID,
 				KeycloakOrgID:  "kc-own",
 				Alias:          "own",
+				IsActive:       true,
 			},
 			{
 				OrganizationID: foreignOrgID,
 				KeycloakOrgID:  "kc-foreign",
 				Alias:          "foreign",
+				IsActive:       true,
 			},
 		},
 	}
@@ -210,6 +212,7 @@ func TestGetSalesDashboardHandlerUnit_ReturnsEmptyArray(t *testing.T) {
 				OrganizationID: uuid.New(),
 				KeycloakOrgID:  "kc-own",
 				Alias:          "own",
+				IsActive:       true,
 			},
 		},
 	}
@@ -315,6 +318,7 @@ func TestGetSalesDashboardHandlerUnit_ReturnsInternalServerError(t *testing.T) {
 				OrganizationID: orgID,
 				KeycloakOrgID:  "kc-own",
 				Alias:          "own",
+				IsActive:       true,
 			},
 		},
 	}
@@ -374,11 +378,13 @@ func TestGetSalesDashboardHandlerUnit_SelectsOnlyRequestedOrganization(t *testin
 				OrganizationID: orgAID,
 				KeycloakOrgID:  "kc-a",
 				Alias:          "alias-a",
+				IsActive:       true,
 			},
 			{
 				OrganizationID: orgBID,
 				KeycloakOrgID:  "kc-b",
 				Alias:          "alias-b",
+				IsActive:       true,
 			},
 		},
 	}
@@ -437,11 +443,13 @@ func TestGetSalesDashboardHandlerUnit_RejectsForeignAndUnknownOrganizations(t *t
 				OrganizationID: orgAID,
 				KeycloakOrgID:  "kc-a",
 				Alias:          "alias-a",
+				IsActive:       true,
 			},
 			{
 				OrganizationID: orgBID,
 				KeycloakOrgID:  "kc-b",
 				Alias:          "alias-b",
+				IsActive:       true,
 			},
 		},
 	}

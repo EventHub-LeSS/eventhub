@@ -33,6 +33,8 @@ var (
 	// ErrOrganizationRequired means the caller manages events in several organizations and did not
 	// say which one a new event belongs to.
 	ErrOrganizationRequired = errors.New("organizationId is required when managing events in several organizations")
+	// ErrOrganizationInactive means an admin has not approved the organization yet.
+	ErrOrganizationInactive = errors.New("organization is not active")
 	// ErrUnknownReference means the event references a category or location that does not exist.
 	ErrUnknownReference = repository.ErrUnknownReference
 	// ErrNoImage means the event has no image stored.
@@ -98,6 +100,9 @@ func (s *EventService) CreateDraft(ctx context.Context, keycloakOrgIDs []string,
 		return nil, ErrForbidden
 	}
 	org := orgs[idx]
+	if err := ensureActiveOrganization(org); err != nil {
+		return nil, err
+	}
 
 	event := &model.EventModel{
 		EventID:     uuid.New(),
@@ -146,7 +151,9 @@ func (s *EventService) ListOwnEvents(keycloakOrgIDs []string, status model.Event
 	}
 	orgIDs := make([]uuid.UUID, 0, len(orgs))
 	for _, org := range orgs {
-		orgIDs = append(orgIDs, org.OrganizationID)
+		if org != nil && org.IsActive {
+			orgIDs = append(orgIDs, org.OrganizationID)
+		}
 	}
 	return s.eventRepo.ListByOrganizers(orgIDs, status)
 }
@@ -181,6 +188,9 @@ func (s *EventService) UpdateEvent(
 		}
 		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
+		}
+		if err := ensureActiveOrganization(org); err != nil {
+			return err
 		}
 
 		switch event.Status {
@@ -268,6 +278,9 @@ func (s *EventService) DeleteEvent(ctx context.Context, eventID uuid.UUID, keycl
 		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
 		}
+		if err := ensureActiveOrganization(org); err != nil {
+			return err
+		}
 		if event.Status != model.EventStatusDraft {
 			return ErrNotDeletable
 		}
@@ -303,6 +316,9 @@ func (s *EventService) ListByOrganization(organizationID uuid.UUID, keycloakOrgI
 	if !managesOrganization(org, keycloakOrgIDs) {
 		return nil, ErrOrganizationNotFound
 	}
+	if err := ensureActiveOrganization(org); err != nil {
+		return nil, err
+	}
 	return s.eventRepo.ListByOrganization(organizationID)
 }
 
@@ -328,6 +344,14 @@ func (s *EventService) ListByOrganizationRef(ref string, keycloakOrgIDs []string
 func managesOrganization(org *model.OrganizationModel, keycloakOrgIDs []string) bool {
 	return org != nil && (slices.Contains(keycloakOrgIDs, org.KeycloakOrgID) ||
 		slices.Contains(keycloakOrgIDs, org.Alias))
+}
+
+// ensureActiveOrganization rejects an organization that is still waiting for admin approval.
+func ensureActiveOrganization(org *model.OrganizationModel) error {
+	if org != nil && !org.IsActive {
+		return ErrOrganizationInactive
+	}
+	return nil
 }
 
 func isEventComplete(event *model.EventModel) bool {
@@ -376,6 +400,9 @@ func (s *EventService) PublishEvent(ctx context.Context, eventID uuid.UUID, keyc
 		if event.WithdrawnByModerator {
 			return ErrModerationWithdrawal
 		}
+		if err := ensureActiveOrganization(org); err != nil {
+			return err
+		}
 		if event.Status == model.EventStatusPublished {
 			return ErrAlreadyPublished
 		}
@@ -419,6 +446,9 @@ func (s *EventService) WithdrawEvent(ctx context.Context, eventID uuid.UUID, key
 		}
 		if !managesOrganization(org, keycloakOrgIDs) {
 			return ErrForbidden
+		}
+		if err := ensureActiveOrganization(org); err != nil {
+			return err
 		}
 		if event.Status != model.EventStatusPublished {
 			return ErrNotPublished
@@ -542,17 +572,19 @@ func (s *EventService) GetEventStatistics(
 	if event == nil {
 		return nil, ErrEventNotFound
 	}
-	if !globalAdmin {
-		if event.OrganizerID == nil {
-			return nil, ErrForbidden
-		}
+	if event.OrganizerID != nil {
 		org, err := s.orgRepo.GetByID(*event.OrganizerID)
 		if err != nil {
 			return nil, err
 		}
-		if !managesOrganization(org, keycloakOrgIDs) {
+		if !globalAdmin && !managesOrganization(org, keycloakOrgIDs) {
 			return nil, ErrForbidden
 		}
+		if err := ensureActiveOrganization(org); err != nil {
+			return nil, err
+		}
+	} else if !globalAdmin {
+		return nil, ErrForbidden
 	}
 
 	soldTickets, err := s.eventRepo.GetConfirmedTicketCount(eventID)
@@ -660,6 +692,9 @@ func (s *EventService) GetSalesDashboard(
 
 	if selectedOrg == nil {
 		return nil, ErrForbidden
+	}
+	if err := ensureActiveOrganization(selectedOrg); err != nil {
+		return nil, err
 	}
 
 	events, err := s.eventRepo.ListByOrganizers(

@@ -112,6 +112,9 @@ func (s *Seeder) syncDB(ctx context.Context, realm, token string) error {
 			KeycloakOrgID:  *kcOrg.ID,
 			Alias:          alias,
 			Name:           name,
+			// Organizations requested through the API start inactive. Seeded ones are
+			// already part of the demo data and are public immediately.
+			IsActive: true,
 		}
 		if err := orgRepo.CreateOrganization(org); err != nil {
 			log.Printf("  skip org %s: create error: %v", name, err)

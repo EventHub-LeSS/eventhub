@@ -79,6 +79,13 @@ func (k *KeycloakService) adminToken(ctx context.Context) (string, error) {
 	return token.AccessToken, nil
 }
 
+// ServiceAccountToken returns the backend service-account token. Callers use it for Keycloak
+// admin operations that a signed-in user must be able to trigger without holding those rights
+// themselves, such as creating an organization.
+func (k *KeycloakService) ServiceAccountToken(ctx context.Context) (string, error) {
+	return k.adminToken(ctx)
+}
+
 // dropAdminTokenIfRejected discards the cached service-account token when Keycloak rejected it
 // with 401, e.g. after a Keycloak restart, so the next call logs in again instead of failing until
 // the cached token would have expired.

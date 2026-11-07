@@ -119,7 +119,7 @@ type deleteFixture struct {
 }
 
 func newDeleteFixture(status model.EventStatus) *deleteFixture {
-	org := &model.OrganizationModel{OrganizationID: uuid.New(), KeycloakOrgID: "kc-org-b", Alias: "alias-b"}
+	org := &model.OrganizationModel{OrganizationID: uuid.New(), KeycloakOrgID: "kc-org-b", Alias: "alias-b", IsActive: true}
 	event := &model.EventModel{EventID: uuid.New(), Title: "Altes Konzert", Status: status, OrganizerID: &org.OrganizationID}
 	f := &deleteFixture{
 		events: &deleteEventRepo{event: event},

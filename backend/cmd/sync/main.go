@@ -132,6 +132,7 @@ func main() {
 			KeycloakOrgID:  *kcOrg.ID,
 			Alias:          alias,
 			Name:           name,
+			IsActive:       true,
 		}
 		if err := orgRepo.CreateOrganization(org); err != nil {
 			log.Printf("  skip org %s: create error: %v", name, err)

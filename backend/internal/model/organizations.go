@@ -18,6 +18,7 @@ type OrganizationModel struct {
 	PostalCode         *string   `json:"postalCode" gorm:"column:postal_code;type:text"`
 	City               *string   `json:"city" gorm:"column:city;type:text"`
 	CountryCode        *string   `json:"countryCode" gorm:"column:country_code;type:varchar(2)"`
+	IsActive           bool      `json:"isActive" gorm:"column:is_active;not null;default:false"`
 	CreatedAt          time.Time `json:"createdAt" gorm:"column:created_at;not null;default:CURRENT_TIMESTAMP;autoCreateTime"`
 	UpdatedAt          time.Time `json:"updatedAt" gorm:"column:updated_at;not null;default:CURRENT_TIMESTAMP;autoUpdateTime"`
 }

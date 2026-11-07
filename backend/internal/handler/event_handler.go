@@ -261,7 +261,7 @@ func writeEventActionError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrOrganizationNotFound):
 		writeProblem(c, http.StatusNotFound, err.Error())
-	case errors.Is(err, service.ErrForbidden):
+	case errors.Is(err, service.ErrForbidden), errors.Is(err, service.ErrOrganizationInactive):
 		writeProblem(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, service.ErrInvalidStatus):
 		writeProblem(c, http.StatusBadRequest, err.Error())

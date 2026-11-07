@@ -88,6 +88,14 @@ func (s *CartService) AddToCart(ctx context.Context, userID, eventID uuid.UUID, 
 		if event.Status != model.EventStatusPublished {
 			return ErrEventNotPublished
 		}
+		// Events of organizations that an admin has not approved yet are not public.
+		active, err := tx.Events.OrganizerIsActive(eventID)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return ErrEventNotFound
+		}
 
 		existing, err := tx.Bookings.LatestOpenReservation(userID, eventID)
 		if err != nil {

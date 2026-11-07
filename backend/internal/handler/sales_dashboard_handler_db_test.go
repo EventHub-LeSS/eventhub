@@ -84,8 +84,8 @@ func TestGetSalesDashboardHandler_ReturnsEmptyArray(t *testing.T) {
 	ownOrgID := uuid.New()
 
 	err := db.Exec(
-		`INSERT INTO organizations (organization_id, keycloak_org_id, name)
-		 VALUES (?, ?, ?)`,
+		`INSERT INTO organizations (organization_id, keycloak_org_id, name, is_active)
+		 VALUES (?, ?, ?, true)`,
 		ownOrgID,
 		ownOrg,
 		"Empty dashboard organization",

@@ -26,6 +26,7 @@ const (
 	EventImageChanged             Action = "event.image_changed"
 	OrganizationMemberRolesChange Action = "organization.member_roles_changed"
 	OrganizationUpdated           Action = "organization.updated"
+	OrganizationApproved          Action = "organization.approved"
 	RatingVisibilityChanged       Action = "rating.visibility_changed"
 	EventModerated                Action = "event.moderated"
 	OrganizerApplicationApproved  Action = "organizer_application.approved"
