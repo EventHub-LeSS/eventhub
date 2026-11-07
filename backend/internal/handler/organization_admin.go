@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"backend/internal/audit"
 	"backend/internal/model"
 	"backend/internal/repository"
+	"backend/internal/service"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -13,11 +16,12 @@ import (
 // EVENTHUB-293: admins list the organizations requested via the contact form and approve them.
 // An organization only becomes public once an admin has approved it (EVENTHUB-287).
 type OrganizationAdminHandler struct {
-	orgRepo repository.OrganizationRepository
+	orgRepo   repository.OrganizationRepository
+	approvals *service.OrganizationApprovalService
 }
 
-func NewOrganizationAdminHandler(orgRepo repository.OrganizationRepository) *OrganizationAdminHandler {
-	return &OrganizationAdminHandler{orgRepo: orgRepo}
+func NewOrganizationAdminHandler(orgRepo repository.OrganizationRepository, approvals *service.OrganizationApprovalService) *OrganizationAdminHandler {
+	return &OrganizationAdminHandler{orgRepo: orgRepo, approvals: approvals}
 }
 
 // PendingOrganizationListResponse mirrors UserAdminListResponse so the frontend can page admin lists uniformly.
@@ -62,7 +66,7 @@ func (h *OrganizationAdminHandler) ListPendingOrganizations(c *gin.Context) {
 }
 
 // @Summary      Approve organization
-// @Description  Approves a pending organization so it becomes public. Available only to global admins. An organization can be approved only once; approving an already approved organization returns 409.
+// @Description  Approves a pending organization so it becomes public. Available only to global admins; the approval is recorded in the audit log. An organization can be approved only once; approving an already approved organization returns 409.
 // @Tags         organizations
 // @Security     BearerAuth
 // @Produce      json
@@ -82,30 +86,19 @@ func (h *OrganizationAdminHandler) ApproveOrganization(c *gin.Context) {
 		return
 	}
 
-	activated, err := h.orgRepo.Activate(id)
-	if err != nil {
+	org, err := h.approvals.ApproveOrganization(c.Request.Context(), id)
+	switch {
+	case err == nil:
+		slog.InfoContext(c.Request.Context(), "organization approved", "event", "organization_approved", "organization_id", id)
+		c.JSON(http.StatusOK, org)
+	case errors.Is(err, service.ErrOrganizationNotFound):
+		writeProblem(c, http.StatusNotFound, "organization not found")
+	case errors.Is(err, service.ErrOrganizationAlreadyApproved):
+		writeProblem(c, http.StatusConflict, "organization is already approved")
+	case errors.Is(err, audit.ErrUnavailable), errors.Is(err, audit.ErrMissingContext):
+		writeProblem(c, http.StatusInternalServerError, "the audit log is unavailable, the organization was not approved")
+	default:
 		slog.ErrorContext(c.Request.Context(), "failed to approve organization", "organization_id", id, "error", err)
 		writeProblem(c, http.StatusInternalServerError, "failed to approve organization")
-		return
 	}
-
-	// Activate changes only pending rows, so the row is loaded afterwards: for the response on
-	// success, and to tell an unknown organization from an already approved one otherwise.
-	org, err := h.orgRepo.GetByID(id)
-	if err != nil {
-		slog.ErrorContext(c.Request.Context(), "failed to load organization after approval", "organization_id", id, "activated", activated, "error", err)
-		writeProblem(c, http.StatusInternalServerError, "failed to load organization")
-		return
-	}
-	if org == nil {
-		writeProblem(c, http.StatusNotFound, "organization not found")
-		return
-	}
-	if !activated {
-		writeProblem(c, http.StatusConflict, "organization is already approved")
-		return
-	}
-
-	slog.InfoContext(c.Request.Context(), "organization approved", "event", "organization_approved", "organization_id", id)
-	c.JSON(http.StatusOK, org)
 }

@@ -102,7 +102,7 @@ func main() {
 	applicationHandler := handler.NewOrganizerApplicationHandler(service.NewOrganizerApplicationService(tx, repository.NewOrganizerApplicationRepository(db), userRepo, orgRepo, orgService), userRepo)
 	auditLogHandler := handler.NewAuditLogHandler(keycloakService, repository.NewAuditLogRepository(db))
 	userAdminHandler := handler.NewUserAdminHandler(keycloakService, userRepo)
-	orgAdminHandler := handler.NewOrganizationAdminHandler(orgRepo)
+	orgAdminHandler := handler.NewOrganizationAdminHandler(orgRepo, service.NewOrganizationApprovalService(tx))
 	eventHandler := handler.NewEventHandler(eventService)
 	locationHandler := handler.NewLocationHandler(locationService)
 	notificationHandler := handler.NewNotificationHandler(notificationService, userRepo)
@@ -188,7 +188,7 @@ func main() {
 		adminOrgs.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 		{
 			adminOrgs.GET("/pending", orgAdminHandler.ListPendingOrganizations)
-			adminOrgs.PATCH("/:organizationID/approve", orgAdminHandler.ApproveOrganization)
+			adminOrgs.PATCH("/:organizationID/approve", middleware.Audit(audit.OrganizationApproved), orgAdminHandler.ApproveOrganization)
 		}
 
 		// Platform moderation of user content by global admins and moderators.

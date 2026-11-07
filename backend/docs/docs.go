@@ -110,7 +110,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Approves a pending organization so it becomes public. Available only to global admins. An organization can be approved only once; approving an already approved organization returns 409.",
+                "description": "Approves a pending organization so it becomes public. Available only to global admins; the approval is recorded in the audit log. An organization can be approved only once; approving an already approved organization returns 409.",
                 "produces": [
                     "application/json"
                 ],
