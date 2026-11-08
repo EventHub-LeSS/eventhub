@@ -167,3 +167,89 @@ func TestApproveOrganizationRequiresAuditContext(t *testing.T) {
 		t.Fatal("organization approved without audit context")
 	}
 }
+
+type pendingOrgRepoStub struct {
+	repository.OrganizationRepository
+	orgs  []*model.OrganizationModel
+	total int64
+	err   error
+	page  [2]int
+}
+
+func (s *pendingOrgRepoStub) ListPending(page, limit int) ([]*model.OrganizationModel, int64, error) {
+	s.page = [2]int{page, limit}
+	return s.orgs, s.total, s.err
+}
+
+func listPending(repo *pendingOrgRepoStub, principal *middleware.Principal, query string) *httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	h := NewOrganizationAdminHandler(repo, nil)
+	r := gin.New()
+	r.GET("/api/v1/admin/organizations/pending", func(c *gin.Context) {
+		middleware.SetPrincipalForRequest(c, principal)
+		c.Next()
+	}, middleware.RequireGlobalRole(middleware.RoleAdmin), h.ListPendingOrganizations)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/organizations/pending"+query, nil))
+	return rec
+}
+
+func TestListPendingOrganizationsPages(t *testing.T) {
+	org := &model.OrganizationModel{OrganizationID: uuid.New(), Name: "Pending"}
+	repo := &pendingOrgRepoStub{orgs: []*model.OrganizationModel{org}, total: 7}
+
+	rec := listPending(repo, globalPrincipal(middleware.RoleAdmin), "?page=2&limit=3")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp PendingOrganizationListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if repo.page != [2]int{2, 3} || resp.Page != 2 || resp.Limit != 3 || resp.Total != 7 ||
+		len(resp.Items) != 1 || resp.Items[0].OrganizationID != org.OrganizationID {
+		t.Fatalf("unexpected page %+v (repository asked for %v)", resp, repo.page)
+	}
+}
+
+func TestListPendingOrganizationsDefaultsAndEmptyList(t *testing.T) {
+	repo := &pendingOrgRepoStub{}
+	rec := listPending(repo, globalPrincipal(middleware.RoleAdmin), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// An empty result is an empty array, not null, so the frontend can render it directly.
+	if !strings.Contains(rec.Body.String(), `"items":[]`) {
+		t.Fatalf("expected an empty items array, got %s", rec.Body.String())
+	}
+	if repo.page[0] != 1 || repo.page[1] < 1 {
+		t.Fatalf("unexpected default paging %v", repo.page)
+	}
+}
+
+func TestListPendingOrganizationsRejections(t *testing.T) {
+	privateErr := errors.New("private database error")
+	for _, tc := range []struct {
+		name      string
+		principal *middleware.Principal
+		query     string
+		err       error
+		want      int
+	}{
+		{name: "page below one", principal: globalPrincipal(middleware.RoleAdmin), query: "?page=0", want: http.StatusBadRequest},
+		{name: "limit too large", principal: globalPrincipal(middleware.RoleAdmin), query: "?limit=1000", want: http.StatusBadRequest},
+		{name: "not a number", principal: globalPrincipal(middleware.RoleAdmin), query: "?page=abc", want: http.StatusBadRequest},
+		{name: "moderator", principal: globalPrincipal(middleware.RoleModerator), want: http.StatusForbidden},
+		{name: "database failure", principal: globalPrincipal(middleware.RoleAdmin), err: privateErr, want: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := listPending(&pendingOrgRepoStub{err: tc.err}, tc.principal, tc.query)
+			if rec.Code != tc.want {
+				t.Fatalf("expected %d, got %d: %s", tc.want, rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), privateErr.Error()) {
+				t.Fatal("database error leaked")
+			}
+		})
+	}
+}
