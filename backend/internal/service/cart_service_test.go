@@ -42,7 +42,7 @@ func seedEventFor(t *testing.T, db *gorm.DB, capacity int, status model.EventSta
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{categoryID, "cat-" + categoryID.String()}},
 		{"INSERT INTO locations (location_id, street, postal_code, city, address_addition) VALUES (?, ?, ?, ?, ?)", []any{locationID, "Weg", "53111", "Bonn", "loc-" + locationID.String()}},
-		{"INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", []any{orgID, "kc-org-" + orgID.String(), "Org " + orgID.String()}},
+		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, is_active) VALUES (?, ?, ?, true)", []any{orgID, "kc-org-" + orgID.String(), "Org " + orgID.String()}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', ?, ?, ?, ?, ?, ?)`,
 			[]any{eventID, "Konzert", capacity, string(status), price, categoryID, orgID, locationID}},

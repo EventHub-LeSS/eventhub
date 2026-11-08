@@ -40,7 +40,8 @@ func (r *recommendationRepository) ListCandidates(userID uuid.UUID) ([]Recommend
 	err := r.db.Table("events AS e").
 		Select("e.*, COALESCE(t.confirmed_tickets, 0) AS confirmed_tickets").
 		Joins("LEFT JOIN (?) AS t ON t.event_id = e.event_id", counts).
-		Where("e.status = ? AND e.start_time > NOW() AND e.capacity > 0", model.EventStatusPublished).
+		Joins("JOIN organizations AS o ON o.organization_id = e.organizer_id").
+		Where("e.status = ? AND e.start_time > NOW() AND e.capacity > 0 AND o.is_active = ?", model.EventStatusPublished, true).
 		Where("COALESCE(t.occupied_tickets, 0) < e.capacity").
 		Where("NOT EXISTS (?)", bookedByUser).
 		Scan(&candidates).Error

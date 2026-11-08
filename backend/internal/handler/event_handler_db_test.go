@@ -49,7 +49,7 @@ func seedEventForOrg(t *testing.T, db *gorm.DB, keycloakOrgID string, status mod
 	}{
 		{"INSERT INTO categories (category_id, category) VALUES (?, ?)", []any{s.categoryID, "cat-" + s.categoryID.String()}},
 		{"INSERT INTO locations (location_id, street, postal_code, city, address_addition) VALUES (?, ?, ?, ?, ?)", []any{s.locationID, "Weg", "53111", "Bonn", "loc-" + s.locationID.String()}},
-		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, alias) VALUES (?, ?, ?, ?) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID, "alias-" + keycloakOrgID}},
+		{"INSERT INTO organizations (organization_id, keycloak_org_id, name, alias, is_active) VALUES (?, ?, ?, ?, true) ON CONFLICT (organization_id) DO NOTHING", []any{s.ownerOrgID, keycloakOrgID, "Org " + keycloakOrgID, "alias-" + keycloakOrgID}},
 		{`INSERT INTO events (event_id, title, start_time, end_time, capacity, status, price, category_id, organizer_id, location_id)
 		  VALUES (?, ?, NOW() + interval '1 day', NOW() + interval '2 day', 100, ?, 20, ?, ?, ?)`,
 			[]any{s.eventID, "Altes Konzert", string(status), s.categoryID, s.ownerOrgID, s.locationID}},
@@ -232,7 +232,7 @@ func TestListOrganizationEventsHandler_ByAlias(t *testing.T) {
 func TestListOrganizationEventsHandler_EmptyArray(t *testing.T) {
 	db := testdb.Open(t)
 	orgID := uuid.New()
-	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, ?)", orgID, "org-1", "Empty organization").Error; err != nil {
+	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name, is_active) VALUES (?, ?, ?, true)", orgID, "org-1", "Empty organization").Error; err != nil {
 		t.Fatalf("seed organization: %v", err)
 	}
 	seedEventForOrg(t, db, "foreign-org", model.EventStatusPublished)

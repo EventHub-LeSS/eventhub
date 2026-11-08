@@ -62,6 +62,16 @@ func (s *RatingService) requirePublicRatedEvent(eventID uuid.UUID) error {
 		(event.Status != model.EventStatusCompleted || event.EndTime.After(time.Now()))) {
 		return ErrEventNotFound
 	}
+	// Events of organizations that an admin has not approved yet stay private.
+	if event.OrganizerID != nil {
+		org, err := s.orgRepo.GetByID(*event.OrganizerID)
+		if err != nil {
+			return err
+		}
+		if org == nil || !org.IsActive {
+			return ErrEventNotFound
+		}
+	}
 	return nil
 }
 
@@ -70,7 +80,7 @@ func (s *RatingService) GetOrganizerRatingSummary(organizationID uuid.UUID) (*mo
 	if err != nil {
 		return nil, err
 	}
-	if org == nil {
+	if org == nil || !org.IsActive {
 		return nil, ErrOrganizationNotFound
 	}
 	average, count, err := s.ratingRepo.GetOrganizerRatingSummary(organizationID)

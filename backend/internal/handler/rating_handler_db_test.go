@@ -202,7 +202,7 @@ func TestOrganizerRatingSummaryEmptyAndEndBoundaryDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	orgID := uuid.New()
-	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name) VALUES (?, ?, 'Empty')", orgID, uuid.NewString()).Error; err != nil {
+	if err := db.Exec("INSERT INTO organizations (organization_id, keycloak_org_id, name, is_active) VALUES (?, ?, 'Empty', true)", orgID, uuid.NewString()).Error; err != nil {
 		t.Fatal(err)
 	}
 	empty = readOrganizerRatingSummary(t, router, orgID)

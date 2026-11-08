@@ -15,6 +15,8 @@ type EventRepository interface {
 	CreateEvent(event *model.EventModel) error
 	GetEventByID(eventID uuid.UUID) (*model.EventModel, error)
 	LockEvent(eventID uuid.UUID) (*model.EventModel, error)
+	// OrganizerIsActive reports whether the event belongs to an organization an admin approved.
+	OrganizerIsActive(eventID uuid.UUID) (bool, error)
 	// LockEvents locks the events by ID, ordered by event_id; use it inside a transaction.
 	// The caller learns which events are missing by comparing with the IDs it asked for.
 	LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error)
@@ -54,6 +56,18 @@ func (r *eventRepository) GetEventByID(eventID uuid.UUID) (*model.EventModel, er
 
 func (r *eventRepository) LockEvent(eventID uuid.UUID) (*model.EventModel, error) {
 	return r.getEvent(eventID, true)
+}
+
+func (r *eventRepository) OrganizerIsActive(eventID uuid.UUID) (bool, error) {
+	var active bool
+	err := r.db.Raw(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM events e
+			JOIN organizations o ON o.organization_id = e.organizer_id
+			WHERE e.event_id = ? AND o.is_active
+		)`, eventID).Scan(&active).Error
+	return active, err
 }
 
 func (r *eventRepository) LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
@@ -176,7 +190,7 @@ func (r *eventRepository) ListPublishedEvents(filter model.PublishedEventFilter)
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").
-		Where("events.status = ?", model.EventStatusPublished).
+		Where("events.status = ? AND organizations.is_active = ?", model.EventStatusPublished, true).
 		// Hide events that are already over (EVENTHUB-296).
 		Where("events.end_time > NOW()")
 	if filter.Date != nil {
@@ -217,7 +231,7 @@ func (r *eventRepository) GetPublishedEventDetails(eventID uuid.UUID) (*model.Pu
 		Joins("JOIN categories ON categories.category_id = events.category_id").
 		Joins("JOIN locations ON locations.location_id = events.location_id").
 		Joins("JOIN organizations ON organizations.organization_id = events.organizer_id").
-		Where("events.event_id = ? AND events.status = ?", eventID, model.EventStatusPublished).
+		Where("events.event_id = ? AND events.status = ? AND organizations.is_active = ?", eventID, model.EventStatusPublished, true).
 		Scan(&details)
 	if result.Error != nil {
 		return nil, result.Error

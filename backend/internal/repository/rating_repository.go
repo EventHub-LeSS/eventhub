@@ -114,15 +114,18 @@ func (r *ratingRepository) CreateEventRating(ctx context.Context, userID, eventI
 		// Drafts stay private like in the summaries. Only events that took place can be
 		// rated; database time keeps this consistent with the summaries.
 		var event struct {
-			Status model.EventStatus
-			Ended  bool
+			Status    model.EventStatus
+			Ended     bool
+			OrgActive bool
 		}
-		res := tx.Table("events").Select("status, end_time <= NOW() AS ended").
-			Where("event_id = ?", eventID).Scan(&event)
+		res := tx.Table("events").
+			Select("events.status, events.end_time <= NOW() AS ended, COALESCE(organizations.is_active, false) AS org_active").
+			Joins("LEFT JOIN organizations ON organizations.organization_id = events.organizer_id").
+			Where("events.event_id = ?", eventID).Scan(&event)
 		if res.Error != nil {
 			return res.Error
 		}
-		if res.RowsAffected == 0 || event.Status == model.EventStatusDraft {
+		if res.RowsAffected == 0 || event.Status == model.EventStatusDraft || !event.OrgActive {
 			return ErrRatingEventNotFound
 		}
 

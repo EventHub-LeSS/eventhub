@@ -99,6 +99,10 @@ func (f *fakeEventRepo) lockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, e
 	return []*model.EventModel{f.event}, nil
 }
 
+func (f *fakeEventRepo) OrganizerIsActive(uuid.UUID) (bool, error) {
+	return true, nil
+}
+
 func (f *fakeEventRepo) LockEvents(eventIDs []uuid.UUID) ([]*model.EventModel, error) {
 	return f.lockEvents(eventIDs)
 }
@@ -163,11 +167,13 @@ var (
 		OrganizationID: uuid.New(),
 		KeycloakOrgID:  "kc-org-a",
 		Alias:          "alias-a",
+		IsActive:       true,
 	}
 	orgB = &model.OrganizationModel{
 		OrganizationID: uuid.New(),
 		KeycloakOrgID:  "kc-org-b",
 		Alias:          "alias-b",
+		IsActive:       true,
 	}
 )
 
@@ -675,6 +681,23 @@ func TestCreateDraft_SavesDraftForManagedOrganization(t *testing.T) {
 	}
 }
 
+func TestCreateDraft_InactiveOrganization(t *testing.T) {
+	inactive := *orgA
+	inactive.OrganizationID = uuid.New()
+	inactive.IsActive = false
+	eventRepo := &fakeEventRepo{}
+	orgRepo := &fakeOrgRepo{orgs: map[uuid.UUID]*model.OrganizationModel{inactive.OrganizationID: &inactive}}
+	svc := NewEventService(eventRepo, orgRepo, &fakeTransactor{events: eventRepo, orgs: orgRepo, audit: &fakeAuditRepo{}})
+
+	_, err := svc.CreateDraft(auditCtx(audit.EventCreated), []string{inactive.KeycloakOrgID}, draftRequest(""))
+	if !errors.Is(err, ErrOrganizationInactive) {
+		t.Fatalf("expected ErrOrganizationInactive, got %v", err)
+	}
+	if eventRepo.created != nil {
+		t.Fatal("inactive organization must not create an event")
+	}
+}
+
 func TestCreateDraft_Rejections(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1094,4 +1117,12 @@ func TestDeleteEvent_RowAlreadyGone_ReturnsErrEventNotFound(t *testing.T) {
 	if len(auditRepo.entries) != 0 {
 		t.Errorf("deletion without a deleted row recorded %d entries", len(auditRepo.entries))
 	}
+}
+
+func (f *fakeOrgRepo) ListPending(int, int) ([]*model.OrganizationModel, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeOrgRepo) Activate(uuid.UUID) (bool, error) {
+	return false, nil
 }

@@ -35,6 +35,10 @@ type OrganizationRepository interface {
 	// Tokens identify organizations by alias when the claim carries no ID.
 	ListByKeycloakOrgIDsOrAliases(refs []string) ([]*model.OrganizationModel, error)
 	AddMembership(membership *model.OrganizationMembershipModel) error
+	// ListPending returns all Organizations that are waiting for approval
+	// Activate activates an Organization that is waiting for approval
+	ListPending(page, limit int) ([]*model.OrganizationModel, int64, error)
+	Activate(organizationID uuid.UUID) (bool, error)
 }
 
 type organizationRepository struct {
@@ -124,4 +128,31 @@ func (r *organizationRepository) ListByKeycloakOrgIDsOrAliases(refs []string) ([
 
 func (r *organizationRepository) AddMembership(membership *model.OrganizationMembershipModel) error {
 	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(membership).Error
+}
+
+func (r *organizationRepository) ListPending(page, limit int) ([]*model.OrganizationModel, int64, error) {
+	query := r.db.Model(&model.OrganizationModel{}).Where("is_active = ?", false)
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var orgs []*model.OrganizationModel
+	err := query.
+		Order("created_at ASC, organization_id ASC").
+		Offset((page - 1) * limit).
+		Limit(limit).
+		Find(&orgs).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return orgs, total, nil
+}
+
+func (r *organizationRepository) Activate(organizationID uuid.UUID) (bool, error) {
+	res := r.db.Model(&model.OrganizationModel{}).
+		Where("organization_id = ? AND is_active = ?", organizationID, false). // nur pending
+		Update("is_active", true)
+	return res.RowsAffected > 0, res.Error
 }
