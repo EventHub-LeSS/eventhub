@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -12,7 +13,9 @@ const (
 	userRolePageTimeout     = 15 * time.Second
 )
 
-// GetUsersGlobalRoles returns role sets in the same order as userIDs.
+// GetUsersGlobalRoles returns role sets in the same order as userIDs. The entry of a user that
+// does not exist in Keycloak (anymore) is nil, so one stale database user does not fail the whole
+// page; a user without global roles gets an empty, non-nil slice.
 func (k *KeycloakService) GetUsersGlobalRoles(ctx context.Context, userIDs []string) (result [][]string, err error) {
 	result = make([][]string, len(userIDs))
 	if len(userIDs) == 0 {
@@ -47,6 +50,9 @@ func (k *KeycloakService) GetUsersGlobalRoles(ctx context.Context, userIDs []str
 					return
 				}
 				roles, err := k.userGlobalRoles(ctx, token, clientID, userIDs[i])
+				if isKeycloakStatus(err, http.StatusNotFound) {
+					continue
+				}
 				if err != nil {
 					k.dropAdminTokenIfRejected(err)
 					firstError.Do(func() {

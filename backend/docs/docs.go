@@ -486,7 +486,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.",
+                "description": "Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Users that no longer exist in Keycloak are listed with missingInKeycloak=true and no roles instead of failing the page. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.",
                 "produces": [
                     "application/json"
                 ],
@@ -4248,6 +4248,10 @@ const docTemplate = `{
                 },
                 "lastName": {
                     "type": "string"
+                },
+                "missingInKeycloak": {
+                    "description": "MissingInKeycloak reports that the user no longer exists in Keycloak; roles is then empty and\ncannot be changed.",
+                    "type": "boolean"
                 },
                 "phoneNumber": {
                     "type": "string"

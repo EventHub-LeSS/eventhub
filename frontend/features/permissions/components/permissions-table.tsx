@@ -98,6 +98,7 @@ export function PermissionsTable() {
   })
 
   function openEditor(user: AdminUser) {
+    if (user.missingInKeycloak) return
     update.reset()
     setRole(user.roles.length === 1 ? user.roles[0] : null)
     setEditing(user)
@@ -192,7 +193,14 @@ export function PermissionsTable() {
                       </TableCell>
                       <TableCell>{user.email}</TableCell>
                       <TableCell>
-                        {user.roles.length === 0 ? (
+                        {user.missingInKeycloak ? (
+                          <Badge
+                            variant="destructive"
+                            title="Der Benutzer existiert nur noch in der Datenbank, nicht mehr in Keycloak. Seine Rolle kann nicht geändert werden."
+                          >
+                            Nicht in Keycloak vorhanden
+                          </Badge>
+                        ) : user.roles.length === 0 ? (
                           <span className="text-muted-foreground">
                             Keine Rolle zugewiesen
                           </span>
@@ -218,7 +226,10 @@ export function PermissionsTable() {
                             align="end"
                             className="w-max min-w-48 whitespace-nowrap"
                           >
-                            <DropdownMenuItem onClick={() => openEditor(user)}>
+                            <DropdownMenuItem
+                              disabled={user.missingInKeycloak}
+                              onClick={() => openEditor(user)}
+                            >
                               <PencilIcon />
                               Rolle bearbeiten
                             </DropdownMenuItem>
