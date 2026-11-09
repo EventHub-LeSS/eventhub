@@ -102,6 +102,12 @@ per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur
 Frische Realms bekommen es über `core/realms/eventhub-realm.json`. Bei einem bestehenden
 Keycloak-Volume richtet `docker compose up api-seed` das Service-Konto nachträglich ein.
 
+Auch `api-seed` führt ausschließlich Keycloak-Admin-Aufrufe aus und meldet sich daher mit dem
+gleichen Service-Konto an (`KEYCLOAK_CLIENT_ID`, Standard `backend`, plus `KEYCLOAK_CLIENT_SECRET`)
+statt mit einem Realm-Benutzer. Fehlt das Secret, bricht der Seed sofort ab; bei einer Ablehnung
+(403/400) loggt er die Rohantwort des Token-Endpunkts samt Ursachen-Hinweis. Auf Server-Deployments
+muss die `api-seed`-Service-Umgebung deshalb `KEYCLOAK_CLIENT_SECRET` enthalten.
+
 #### Mock-Benutzer
 
 Alle Passwörter: `password`
