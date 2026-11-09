@@ -222,7 +222,7 @@ func TestGetUsersGlobalRolesRejectsOnPageFailureAndCancelsWorkers(t *testing.T) 
 					return
 				}
 			}
-			http.Error(w, `{"error":"missing user"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"unknown_error"}`, http.StatusInternalServerError)
 			close(failed)
 			return
 		}
@@ -232,7 +232,7 @@ func TestGetUsersGlobalRolesRejectsOnPageFailureAndCancelsWorkers(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	roles, err := kc.GetUsersGlobalRoles(ctx, []string{"bad", "wait-1", "wait-2", "wait-3", "not-started"})
-	if roles != nil || !isKeycloakStatus(err, http.StatusNotFound) {
+	if roles != nil || !isKeycloakStatus(err, http.StatusInternalServerError) {
 		t.Fatalf("roles=%v err=%v", roles, err)
 	}
 	select {
@@ -244,6 +244,34 @@ func TestGetUsersGlobalRolesRejectsOnPageFailureAndCancelsWorkers(t *testing.T) 
 	defer fake.mu.Unlock()
 	if len(fake.requests) != 4 {
 		t.Fatalf("started extra requests after failure: %v", fake.requests)
+	}
+}
+
+func TestGetUsersGlobalRolesMarksUsersMissingInKeycloak(t *testing.T) {
+	fake := &userPageKeycloak{roles: func(w http.ResponseWriter, r *http.Request) {
+		switch r.PathValue("id") {
+		case "deleted-1", "deleted-2":
+			w.WriteHeader(http.StatusNotFound)
+			writeUserPageResponse(t, w, `{"error":"User not found"}`)
+		case "no-roles":
+			writeUserPageResponse(t, w, `[]`)
+		default:
+			writeUserPageResponse(t, w, `[{"name":"visitor"}]`)
+		}
+	}}
+	ids := []string{"deleted-1", "visitor", "no-roles", "deleted-2", "visitor-2"}
+	roles, err := fake.service(t).GetUsersGlobalRoles(context.Background(), ids)
+	if err != nil {
+		t.Fatalf("missing users must not fail the page: %v", err)
+	}
+	want := [][]string{nil, {"visitor"}, {}, nil, {"visitor"}}
+	if !reflect.DeepEqual(roles, want) {
+		t.Fatalf("roles=%#v, want %#v", roles, want)
+	}
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if len(fake.requests) != len(ids) || fake.logins != 1 {
+		t.Fatalf("requests=%v logins=%d, want every user looked up once with one token", fake.requests, fake.logins)
 	}
 }
 

@@ -88,6 +88,38 @@ func TestListUsersFetchesOnlyDatabasePage(t *testing.T) {
 	}
 }
 
+func TestListUsersMarksUsersMissingInKeycloak(t *testing.T) {
+	users := []*model.UserModel{
+		{UserID: uuid.New(), KeycloakUserID: "kc-present", Email: "present@example.test"},
+		{UserID: uuid.New(), KeycloakUserID: "kc-deleted", Email: "deleted@example.test"},
+		{UserID: uuid.New(), KeycloakUserID: "kc-no-roles", Email: "no-roles@example.test"},
+	}
+	repo := pageUserRepository{load: func(context.Context, int, int) ([]*model.UserModel, int64, error) {
+		return users, int64(len(users)), nil
+	}}
+	roles := pageUserRoles{load: func(context.Context, []string) ([][]string, error) {
+		return [][]string{{"admin"}, nil, {}}, nil
+	}}
+	recorder := runUserPageRequest(NewUserAdminHandler(roles, repo), "/admin/users", context.Background())
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body)
+	}
+	var body UserAdminListResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Items) != len(users) {
+		t.Fatalf("items=%+v, want all %d users", body.Items, len(users))
+	}
+	wantMissing := []bool{false, true, false}
+	wantRoles := [][]string{{"admin"}, {}, {}}
+	for i, item := range body.Items {
+		if item.UserID != users[i].UserID || item.MissingInKeycloak != wantMissing[i] || !reflect.DeepEqual(item.Roles, wantRoles[i]) {
+			t.Fatalf("items[%d]=%+v, want missing=%v roles=%v", i, item, wantMissing[i], wantRoles[i])
+		}
+	}
+}
+
 func TestListUsersEmptyPageSkipsKeycloak(t *testing.T) {
 	for _, page := range []int{1, 4, math.MaxInt} {
 		repo := pageUserRepository{load: func(_ context.Context, gotPage, limit int) ([]*model.UserModel, int64, error) {
