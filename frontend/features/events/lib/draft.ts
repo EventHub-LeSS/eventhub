@@ -1,3 +1,6 @@
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz"
+
+import { EVENT_TIME_ZONE } from "@/features/events/lib/format"
 import type { Event, EventLocation } from "@/features/events/lib/types"
 
 /**
@@ -93,8 +96,8 @@ export function validateDraft(draft: EventDraft): DraftErrors {
     errors.description = `Höchstens ${DESCRIPTION_MAX_LENGTH} Zeichen.`
   }
 
-  const start = Date.parse(draft.startTime)
-  const end = Date.parse(draft.endTime)
+  const start = fromZonedTime(draft.startTime, EVENT_TIME_ZONE).getTime()
+  const end = fromZonedTime(draft.endTime, EVENT_TIME_ZONE).getTime()
 
   if (!draft.startTime) {
     errors.startTime = "Bitte gib einen Beginn an."
@@ -182,8 +185,8 @@ export function toDraftPayload(
     ...(organizationId ? { organizationId } : {}),
     title: draft.title.trim(),
     ...(description ? { description } : {}),
-    startTime: new Date(draft.startTime).toISOString(),
-    endTime: new Date(draft.endTime).toISOString(),
+    startTime: fromZonedTime(draft.startTime, EVENT_TIME_ZONE).toISOString(),
+    endTime: fromZonedTime(draft.endTime, EVENT_TIME_ZONE).toISOString(),
     capacity: Number(draft.capacity),
     price: draft.price.trim(),
     categoryId: draft.categoryId,
@@ -198,7 +201,6 @@ export function toDraftPayload(
   }
 }
 
-/** Cuts an ISO timestamp down to what a datetime-local input accepts. */
 function toLocalInput(isoTime: string): string {
   const time = new Date(isoTime)
 
@@ -206,9 +208,7 @@ function toLocalInput(isoTime: string): string {
     return ""
   }
 
-  const offset = time.getTimezoneOffset() * 60 * 1000
-
-  return new Date(time.getTime() - offset).toISOString().slice(0, 16)
+  return formatInTimeZone(time, EVENT_TIME_ZONE, "yyyy-MM-dd'T'HH:mm")
 }
 
 /** Fills the address fields from a stored location. */
