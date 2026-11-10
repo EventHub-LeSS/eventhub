@@ -16,6 +16,15 @@ RUN git init -q . \
 
 RUN bun run build-keycloak-theme
 
+# realm-sync applies the realm file to a running server non-destructively (see
+# entrypoint-realm-override.sh). It is a tiny dependency-free Go tool, built
+# here so that the Keycloak image stays self-contained.
+FROM golang:1.26.5-alpine AS realm-sync
+
+WORKDIR /src
+COPY realm-sync/ ./
+RUN CGO_ENABLED=0 go build -trimpath -o /realm-sync .
+
 FROM quay.io/keycloak/keycloak:26.7
 
 COPY --from=theme \
@@ -25,6 +34,7 @@ COPY --from=theme \
 RUN mkdir -p /opt/keycloak/data/import
 COPY --chown=1000:0 --chmod=644 realms/eventhub-realm.json /opt/keycloak/data/import/eventhub-realm.json
 COPY --chown=1000:0 --chmod=755 entrypoint-realm-override.sh /opt/keycloak/entrypoint-realm-override.sh
+COPY --from=realm-sync --chown=1000:0 --chmod=755 /realm-sync /opt/keycloak/realm-sync
 
 RUN sed -i 's/\r$//' /opt/keycloak/entrypoint-realm-override.sh
 

@@ -6,6 +6,7 @@ import (
 	"backend/internal/handler"
 	"backend/internal/middleware"
 	"backend/internal/repository"
+	"backend/internal/seed"
 	"backend/internal/service"
 	"context"
 	"errors"
@@ -15,6 +16,9 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"time"
+
+	"gorm.io/gorm"
 
 	_ "backend/docs"
 
@@ -89,6 +93,13 @@ func main() {
 	ownBookingService := service.NewOwnBookingService(repository.NewOwnBookingRepository(db))
 	// EVENTHUB-235: fail pending payments of expired reservations, so no payment stays open.
 	go paymentService.RunPaymentCleanup(context.Background(), service.PaymentCleanupInterval)
+
+	// Converge the database with Keycloak at startup: the realm-sync on the
+	// Keycloak container applies realm-file changes to Keycloak only. Mirror
+	// those organizations and users into the database here, so a restart is
+	// enough for realm.json changes to reach the API. Retries while Keycloak
+	// boots; a failure never prevents the API from serving.
+	go runStartupSync(db, keycloakService, keycloakCfg.UserRealm)
 	recommendationsService := service.NewRecommendationsService(repository.NewRecommendationRepository(db))
 	ratingService := service.NewRatingService(repository.NewRatingRepository(db), eventRepo, orgRepo)
 	moderationService := service.NewModerationService(tx, repository.NewModerationRepository(db))
@@ -261,6 +272,46 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 		return
+	}
+}
+
+// runStartupSync mirrors Keycloak organizations and users into the database
+// once at API startup (see the goroutine in main). It retries the Keycloak
+// login while the Keycloak container is still booting and gives up with a log
+// line instead of taking the API down.
+func runStartupSync(database *gorm.DB, keycloakService *service.KeycloakService, realm string) {
+	ctx := context.Background()
+	seeder := seed.NewSeeder(database, keycloakService)
+
+	syncOnce := func() bool {
+		token, err := keycloakService.ServiceAccountToken(ctx)
+		if err != nil {
+			log.Printf("startup sync: keycloak login failed: %v", err)
+			return false
+		}
+		if err := seeder.SyncDB(ctx, realm, token); err != nil {
+			log.Printf("startup sync: failed (run 'docker compose up api-seed' manually): %v", err)
+			return false
+		}
+		return true
+	}
+
+	// Retry while the Keycloak container boots (up to 2 minutes in 5s steps).
+	for attempt := 1; attempt <= 24; attempt++ {
+		if syncOnce() {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	// The Keycloak entrypoint applies the realm file a few seconds AFTER the
+	// server answers (realm-sync runs as a background job). A first sync that
+	// wins that race has converged against the pre-sync state, so re-check
+	// once after a short settle delay. Both passes are no-ops when the
+	// database already matches Keycloak.
+	time.Sleep(15 * time.Second)
+	if syncOnce() {
+		log.Println("startup sync: database converged with Keycloak")
 	}
 }
 
