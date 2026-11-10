@@ -22,7 +22,7 @@ import (
 const applicantEmail = "applicant@eventhub.test"
 
 // applicationRouters mirrors the routes of main.go: the user routes behind authentication and the
-// review routes behind the global admin or any org_admin role.
+// review routes behind the global admin role.
 func applicationRouters(t *testing.T, db *gorm.DB, user, admin *middleware.Principal) (userRouter, adminRouter http.Handler, fake *keycloakmock.Fake) {
 	t.Helper()
 	fake = keycloakmock.New()
@@ -50,7 +50,7 @@ func applicationRouters(t *testing.T, db *gorm.DB, user, admin *middleware.Princ
 
 	a := gin.New()
 	g := a.Group("/api/v1/admin/organizer-applications")
-	g.Use(withPrincipal(admin), middleware.RequireGlobalOrAnyOrganizationRole(middleware.RoleAdmin, middleware.RoleOrganizationAdmin))
+	g.Use(withPrincipal(admin), middleware.RequireGlobalRole(middleware.RoleAdmin))
 	g.GET("", h.ListApplicationsHandler)
 	g.GET("/:applicationId", h.GetApplicationHandler)
 	g.POST("/:applicationId/approve", middleware.Audit(audit.OrganizerApplicationApproved), h.ApproveApplicationHandler)
@@ -274,20 +274,57 @@ func TestOrganizerApplicationValidationAndAccessDatabase(t *testing.T) {
 	wantProblem(t, sendJSON(admins, http.MethodGet, "/api/v1/admin/organizer-applications?status=open", ""), http.StatusBadRequest)
 }
 
-// Org admins of any organization review the applications of others. They cannot manage Keycloak
-// organizations with their own token, so the approval runs with the backend service account.
-func TestOrganizerApplicationOrgAdminReviewerDatabase(t *testing.T) {
+// EVENTHUB-304: the applications belong to organizations an org admin is not a member of, so the
+// org_admin role of another organization grants neither insight nor a decision.
+func TestOrganizerApplicationOrgAdminForbiddenDatabase(t *testing.T) {
 	db := testdb.Open(t)
 	_, applicant := seedApplicant(t, db)
-	orgAdmin := orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin) // no AccessToken
-	users, reviewers, fake := applicationRouters(t, db, applicant, orgAdmin)
+	orgAdmin := orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin)
+	users, orgAdmins, fake := applicationRouters(t, db, applicant, orgAdmin)
 
 	submitted := decodeApplication(t, sendJSON(users, http.MethodPost, "/api/v1/organizer-applications", validApplication), http.StatusCreated)
-	if rec := sendJSON(reviewers, http.MethodGet, "/api/v1/admin/organizer-applications", ""); rec.Code != http.StatusOK {
-		t.Fatalf("org admin list: %d %s", rec.Code, rec.Body.String())
+	path := "/api/v1/admin/organizer-applications/" + submitted.ApplicationID.String()
+	for _, request := range []struct{ name, method, path, body string }{
+		{"list", http.MethodGet, "/api/v1/admin/organizer-applications", ""},
+		{"inspect", http.MethodGet, path, ""},
+		{"approve", http.MethodPost, path + "/approve", ""},
+		{"reject", http.MethodPost, path + "/reject", `{"reason":"fremd"}`},
+	} {
+		rec := sendJSON(orgAdmins, request.method, request.path, request.body)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("org admin %s: %d %s", request.name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "stadtfest") {
+			t.Fatalf("org admin %s leaks the application: %s", request.name, rec.Body.String())
+		}
 	}
+
+	fake.Mu.Lock()
+	_, created := fake.OrgAliases["stadtfest-bremen"]
+	fake.Mu.Unlock()
+	if created {
+		t.Fatal("a refused approval must not create an organization")
+	}
+	var stored model.OrganizerApplicationModel
+	if err := db.First(&stored, "application_id = ?", submitted.ApplicationID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != model.OrganizerApplicationPending || stored.DecidedAt != nil {
+		t.Fatalf("application after refused org admin review: %+v", stored)
+	}
+}
+
+// Reviewers need not be allowed to manage Keycloak organizations with their own token: the
+// approval runs with the backend service account.
+func TestOrganizerApplicationApprovalUsesServiceAccountDatabase(t *testing.T) {
+	db := testdb.Open(t)
+	_, applicant := seedApplicant(t, db)
+	admin := globalAdminPrincipal() // no AccessToken
+	users, reviewers, fake := applicationRouters(t, db, applicant, admin)
+
+	submitted := decodeApplication(t, sendJSON(users, http.MethodPost, "/api/v1/organizer-applications", validApplication), http.StatusCreated)
 	approved := decodeApplication(t, sendJSON(reviewers, http.MethodPost, "/api/v1/admin/organizer-applications/"+submitted.ApplicationID.String()+"/approve", ""), http.StatusOK)
-	if approved.Status != model.OrganizerApplicationApproved || approved.DecidedByUsername == nil || *approved.DecidedByUsername != orgAdmin.Username {
+	if approved.Status != model.OrganizerApplicationApproved || approved.DecidedByUsername == nil || *approved.DecidedByUsername != admin.Username {
 		t.Fatalf("approved: %+v", approved)
 	}
 	fake.Mu.Lock()
@@ -302,11 +339,8 @@ func TestOrganizerApplicationOrgAdminReviewerDatabase(t *testing.T) {
 func TestOrganizerApplicationNoSelfReviewDatabase(t *testing.T) {
 	db := testdb.Open(t)
 	_, applicant := seedApplicant(t, db)
-	// The applicant already administers another organization and applies for a second one.
-	applicant.Organizations = []*middleware.OrganizationAccess{{
-		ID: "org-1", Alias: "alias-1",
-		Roles: map[middleware.OrganizationRole]struct{}{middleware.RoleOrganizationAdmin: {}},
-	}}
+	// The applicant is a global admin and applies for an organization of their own.
+	applicant.GlobalRoles[middleware.RoleAdmin] = struct{}{}
 	users, reviewers, fake := applicationRouters(t, db, applicant, applicant)
 
 	submitted := decodeApplication(t, sendJSON(users, http.MethodPost, "/api/v1/organizer-applications", validApplication), http.StatusCreated)

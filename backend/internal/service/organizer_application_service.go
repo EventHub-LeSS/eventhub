@@ -27,10 +27,9 @@ var (
 const NotificationOccasionOrganizerApplication = "organizer_application"
 
 // OrganizerApplicationService handles the contact form through which users apply to become an
-// organizer (EVENTHUB-294). Global admins and org admins of any organization review the
-// applications of others, never their own: approving it creates the
-// requested organization with the applicant as org_admin, rejecting it records the reason. The
-// applicant is notified of either decision.
+// organizer (EVENTHUB-294). Global admins review the applications of others, never their own:
+// approving it creates the requested organization with the applicant as org_admin, rejecting it
+// records the reason. The applicant is notified of either decision.
 type OrganizerApplicationService struct {
 	tx           repository.Transactor
 	applications repository.OrganizerApplicationRepository

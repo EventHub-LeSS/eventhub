@@ -183,10 +183,11 @@ func main() {
 			adminUsers.PUT("/:userID/roles", userAdminHandler.UpdateUserRoles)
 		}
 
-		// EVENTHUB-294: global admins and org admins of any organization review organizer
-		// applications of others; approval creates the organization with the service account.
+		// EVENTHUB-294: global admins review organizer applications of others; approval creates the
+		// organization with the service account. EVENTHUB-304: org admins get no access, the
+		// applications belong to organizations they are not a member of.
 		adminApplications := v1.Group("/admin/organizer-applications")
-		adminApplications.Use(authenticator.Middleware(), middleware.RequireGlobalOrAnyOrganizationRole(middleware.RoleAdmin, middleware.RoleOrganizationAdmin))
+		adminApplications.Use(authenticator.Middleware(), middleware.RequireGlobalRole(middleware.RoleAdmin))
 		{
 			adminApplications.GET("", applicationHandler.ListApplicationsHandler)
 			adminApplications.GET("/:applicationId", applicationHandler.GetApplicationHandler)
