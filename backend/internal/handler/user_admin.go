@@ -53,6 +53,9 @@ type UserAdminListItem struct {
 	Email          string    `json:"email"`
 	PhoneNumber    *string   `json:"phoneNumber,omitempty"`
 	Roles          []string  `json:"roles"`
+	// MissingInKeycloak reports that the user no longer exists in Keycloak; roles is then empty and
+	// cannot be changed.
+	MissingInKeycloak bool `json:"missingInKeycloak"`
 }
 
 // UserAdminRolesResponse exposes a user's effective global roles.
@@ -76,7 +79,7 @@ type UserAdminRolesRequest struct {
 }
 
 // @Summary      List users
-// @Description  Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.
+// @Description  Returns a database page of shared users ordered by userId ascending, with their current global roles. Only users on this page are looked up in Keycloak, with at most four concurrent lookups and a 15-second total role-lookup timeout. Users that no longer exist in Keycloak are listed with missingInKeycloak=true and no roles instead of failing the page. Available only to global admins. total counts all database users; concurrent user creation or deletion can cause count/page differences.
 // @Tags         users
 // @Security     BearerAuth
 // @Produce      json
@@ -138,14 +141,20 @@ func (h *UserAdminHandler) ListUsers(c *gin.Context) {
 			return
 		}
 		for i, user := range users {
+			userRoles, missing := roles[i], roles[i] == nil
+			if missing {
+				userRoles = []string{}
+				slog.WarnContext(c.Request.Context(), "admin user list: database user missing in Keycloak", "user_id", user.UserID, "keycloak_user_id", user.KeycloakUserID)
+			}
 			items = append(items, UserAdminListItem{
-				UserID:         user.UserID,
-				KeycloakUserID: user.KeycloakUserID,
-				FirstName:      user.FirstName,
-				LastName:       user.LastName,
-				Email:          user.Email,
-				PhoneNumber:    user.PhoneNumber,
-				Roles:          roles[i],
+				UserID:            user.UserID,
+				KeycloakUserID:    user.KeycloakUserID,
+				FirstName:         user.FirstName,
+				LastName:          user.LastName,
+				Email:             user.Email,
+				PhoneNumber:       user.PhoneNumber,
+				Roles:             userRoles,
+				MissingInKeycloak: missing,
 			})
 		}
 	}

@@ -18,6 +18,8 @@ export interface AdminUser {
   lastName: string
   email: string
   roles: GlobalRole[]
+  /** The user only exists in the API database; its roles cannot be read or changed. */
+  missingInKeycloak: boolean
 }
 
 export interface AdminUsersPage {
