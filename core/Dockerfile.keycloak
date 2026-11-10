@@ -19,7 +19,7 @@ RUN bun run build-keycloak-theme
 # realm-sync applies the realm file to a running server non-destructively (see
 # entrypoint-realm-override.sh). It is a tiny dependency-free Go tool, built
 # here so that the Keycloak image stays self-contained.
-FROM golang:1.26-alpine AS realm-sync
+FROM golang:1.26.5-alpine AS realm-sync
 
 WORKDIR /src
 COPY realm-sync/ ./
