@@ -26,7 +26,7 @@
   },
   "organizations": [
     {
-      "name": "Provadis Hochschule 88",
+      "name": "Provadis Hochschule",
       "alias": "provadis-hochschule",
       "enabled": true,
       "description": "Demo organization",
