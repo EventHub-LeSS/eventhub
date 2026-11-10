@@ -117,13 +117,14 @@ func main() {
 		}
 		if existing != nil {
 			// A realm re-import re-creates organizations with new IDs; follow the new ID
-			// instead of inserting a duplicate row for the same organization.
-			if existing.KeycloakOrgID != *kcOrg.ID || existing.Alias != alias {
+			// instead of inserting a duplicate row for the same organization. A name
+			// change in Keycloak (e.g. via the realm file) is reconciled too.
+			if existing.KeycloakOrgID != *kcOrg.ID || existing.Alias != alias || existing.Name != name {
 				if err := orgRepo.UpdateKeycloakRefs(existing.OrganizationID, *kcOrg.ID, alias, name); err != nil {
 					log.Printf("  skip org %s: update error: %v", name, err)
 					continue
 				}
-				log.Printf("  reconciled org %s to Keycloak ID %s", name, *kcOrg.ID)
+				log.Printf("  reconciled org %s (Keycloak ID %s)", name, *kcOrg.ID)
 			}
 			continue
 		}
