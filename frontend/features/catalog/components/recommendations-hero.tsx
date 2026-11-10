@@ -76,18 +76,42 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
       }
     }
 
+    const switchWithArrowKeys = (event: KeyboardEvent) => {
+      if (
+        events.length < 2 ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return
+      }
+
+      const step =
+        event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0
+
+      if (step === 0) {
+        return
+      }
+
+      event.preventDefault()
+      setIndex((current) => (current + step + events.length) % events.length)
+    }
+
     section.addEventListener("mouseenter", pause)
     section.addEventListener("mouseleave", resume)
     section.addEventListener("focusin", pause)
     section.addEventListener("focusout", resumeOnFocusLeave)
+    section.addEventListener("keydown", switchWithArrowKeys)
 
     return () => {
       section.removeEventListener("mouseenter", pause)
       section.removeEventListener("mouseleave", resume)
       section.removeEventListener("focusin", pause)
       section.removeEventListener("focusout", resumeOnFocusLeave)
+      section.removeEventListener("keydown", switchWithArrowKeys)
     }
-  }, [])
+  }, [events.length])
 
   useEffect(() => {
     if (!rotating) {
@@ -114,7 +138,10 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
       ref={sectionRef}
       aria-roledescription="carousel"
       aria-labelledby="recommendations-heading"
-      className="relative overflow-hidden rounded-2xl bg-muted ring-1 ring-foreground/10"
+      // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the carousel handles ArrowLeft/ArrowRight
+      tabIndex={hasMultiple ? 0 : undefined}
+      aria-keyshortcuts={hasMultiple ? "ArrowLeft ArrowRight" : undefined}
+      className="relative overflow-hidden rounded-2xl bg-muted ring-1 ring-foreground/10 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <div
         aria-hidden
