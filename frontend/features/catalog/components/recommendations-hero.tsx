@@ -1,6 +1,12 @@
 "use client"
 
-import { CalendarIcon, MapPinIcon, SparklesIcon } from "lucide-react"
+import {
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MapPinIcon,
+  SparklesIcon,
+} from "lucide-react"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
@@ -97,6 +103,11 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
   }, [rotating, events.length])
 
   const event = events[index]
+  const hasMultiple = events.length > 1
+
+  const showPrevious = () =>
+    setIndex((current) => (current - 1 + events.length) % events.length)
+  const showNext = () => setIndex((current) => (current + 1) % events.length)
 
   return (
     <section
@@ -113,7 +124,6 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
         aria-hidden
         className="absolute inset-y-0 right-0 hidden w-3/5 items-center justify-center md:flex"
       >
-
         <div className="absolute inset-0 bg-black/15 mask-fade-left" />
         {missingImageId === event.eventId && (
           <span className="relative font-mono text-sm tracking-widest text-muted-foreground uppercase">
@@ -132,7 +142,10 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
       <div
         key={event.eventId}
         aria-live={rotating ? "off" : "polite"}
-        className="relative flex min-h-64 animate-in flex-col justify-center gap-3 p-6 duration-500 fade-in md:w-1/2 md:p-10"
+        className={cn(
+          "relative flex min-h-64 animate-in flex-col justify-center gap-3 p-6 duration-500 fade-in md:w-1/2 md:p-10",
+          hasMultiple && "pb-18 md:pb-10 md:pl-20"
+        )}
       >
         <h2
           id="recommendations-heading"
@@ -171,8 +184,31 @@ export function RecommendationsHero({ events }: RecommendationsHeroProps) {
         </div>
       </div>
 
-      {events.length > 1 && (
-        <div className="absolute inset-x-0 bottom-4 flex justify-center gap-2">
+      {hasMultiple && (
+        <>
+          <Button
+            variant="outline"
+            size="icon-lg"
+            aria-label="Vorheriger Vorschlag"
+            onClick={showPrevious}
+            className="absolute bottom-4 left-4 size-10 rounded-full bg-background/80 shadow-sm backdrop-blur-sm md:top-[calc(50%-1.25rem)] md:bottom-auto [&_svg:not([class*='size-'])]:size-5"
+          >
+            <ChevronLeftIcon />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-lg"
+            aria-label="Nächster Vorschlag"
+            onClick={showNext}
+            className="absolute right-4 bottom-4 size-10 rounded-full bg-background/80 shadow-sm backdrop-blur-sm md:top-[calc(50%-1.25rem)] md:bottom-auto [&_svg:not([class*='size-'])]:size-5"
+          >
+            <ChevronRightIcon />
+          </Button>
+        </>
+      )}
+
+      {hasMultiple && (
+        <div className="absolute inset-x-0 bottom-8 flex justify-center gap-2 md:bottom-4">
           {events.map((item, i) => (
             <button
               key={item.eventId}
