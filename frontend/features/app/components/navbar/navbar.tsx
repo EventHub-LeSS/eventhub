@@ -77,31 +77,25 @@ function activeHref(pathname: string, links: NavLink[]) {
 export function Navbar({ user }: NavbarProps) {
   const pathname = usePathname()
   const role = user?.role ?? "guest"
-  const extraLinks: NavLink[] = [
-    ...(user?.canReviewApplications || user?.isAdmin
-      ? [
-          {
-            label: "Anträge",
-            href: "/admin/organizer-applications",
-            icon: ClipboardCheckIcon,
-          },
-        ]
-      : []),
-    ...(user?.isAdmin
-      ? [
-          {
-            label: "Moderation",
-            href: "/admin/moderation",
-            icon: ShieldCheckIcon,
-          },
-          {
-            label: "Berechtigungen",
-            href: "/admin/permissions",
-            icon: KeyRoundIcon,
-          },
-        ]
-      : []),
-  ]
+  const extraLinks: NavLink[] = user?.isAdmin
+    ? [
+        {
+          label: "Anträge",
+          href: "/admin/organizer-applications",
+          icon: ClipboardCheckIcon,
+        },
+        {
+          label: "Moderation",
+          href: "/admin/moderation",
+          icon: ShieldCheckIcon,
+        },
+        {
+          label: "Berechtigungen",
+          href: "/admin/permissions",
+          icon: KeyRoundIcon,
+        },
+      ]
+    : []
   const links = [...navigationByRole[role], ...extraLinks]
   const active = activeHref(pathname, links)
 

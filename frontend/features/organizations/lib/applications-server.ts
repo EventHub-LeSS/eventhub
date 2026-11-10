@@ -24,7 +24,8 @@ export async function authorizeApplicationReviewer() {
     )
   }
   const user = await getCurrentUser()
-  if (!user?.canReviewApplications && !user?.isAdmin) {
+  // EVENTHUB-304: only EventHub admins review applications, org admins do not.
+  if (!user?.isAdmin) {
     return NextResponse.json(
       {
         detail:

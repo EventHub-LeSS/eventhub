@@ -5,7 +5,6 @@ import { cache } from "react"
 import { readActiveOrganization } from "@/features/auth/lib/active-organization"
 import { readSession, type Session } from "@/features/auth/lib/session"
 import {
-  canReviewApplicationsFromAccessToken,
   isAdminFromAccessToken,
   organizationRolesFromAccessToken,
   roleFor,
@@ -32,9 +31,6 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     activeOrganization,
     role: roleFor(session.organizations),
     isAdmin: isAdminFromAccessToken(session.accessToken),
-    canReviewApplications: canReviewApplicationsFromAccessToken(
-      session.accessToken
-    ),
     organizationRoles: organizationRolesFromAccessToken(
       session.accessToken,
       activeOrganization
@@ -66,16 +62,6 @@ export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireSession()
 
   if (!user.isAdmin) {
-    redirect("/")
-  }
-
-  return user
-}
-
-export async function requireApplicationReviewer(): Promise<SessionUser> {
-  const user = await requireSession()
-
-  if (!user.canReviewApplications && !user.isAdmin) {
     redirect("/")
   }
 

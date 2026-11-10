@@ -180,7 +180,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization. Oldest first, so reviewers work through the queue.",
+                "description": "Requires the global admin role. Oldest first, so reviewers work through the queue.",
                 "produces": [
                     "application/json"
                 ],
@@ -259,7 +259,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization.",
+                "description": "Requires the global admin role.",
                 "produces": [
                     "application/json"
                 ],
@@ -323,7 +323,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.",
+                "description": "Requires the global admin role; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.",
                 "consumes": [
                     "application/json"
                 ],
@@ -404,7 +404,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.",
+                "description": "Requires the global admin role; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3753,7 +3753,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Contact form of the authenticated user to become an organizer. The application waits for review by a global admin or an org admin of any organization; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.",
+                "description": "Contact form of the authenticated user to become an organizer. The application waits for review by a global admin; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.",
                 "consumes": [
                     "application/json"
                 ],

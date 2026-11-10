@@ -9,12 +9,10 @@ export {
   getCurrentUser,
   getSession,
   requireAdmin,
-  requireApplicationReviewer,
   requireOrganizer,
   requireSession,
 } from "@/features/auth/lib/dal"
 export {
-  canReviewApplicationsFromAccessToken,
   organizationIdFromAccessToken,
   organizationsFromClaims,
   roleFor,
