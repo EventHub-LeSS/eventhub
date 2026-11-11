@@ -180,6 +180,99 @@ func (h *OrganizationHandler) GetOrganization(c *gin.Context) {
 	})
 }
 
+// ListOrganizationMembers returns the members and organization roles for an organization.
+// @Summary      List organization members
+// @Description  Returns members and their organization roles. Requires the org_admin role in the organization (global admins bypass this check).
+// @Tags         organizations
+// @Security     BearerAuth
+// @Produce      json
+// @Param        organizationID path string true "Keycloak organization ID or Alias"
+// @Success      200 {array} model.OrganizationMemberResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.APIError
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /organizations/{organizationID}/members [get]
+func (h *OrganizationHandler) ListOrganizationMembers(c *gin.Context) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, model.APIError{
+			Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
+		})
+		return
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	org, ok := h.resolveOrganizationParam(c, principal)
+	if !ok {
+		return
+	}
+	if !globalAdmin &&
+		!principal.HasOrganizationRoleIn(org.ID, middleware.RoleOrganizationAdmin) &&
+		!principal.HasOrganizationRoleIn(org.Alias, middleware.RoleOrganizationAdmin) {
+		middleware.AbortForbidden(c)
+		return
+	}
+
+	members, err := h.keycloakService.ListOrganizationMembers(c.Request.Context(), org.ID, principal.Subject, globalAdmin)
+	if err != nil {
+		writeOrgRolesError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, members)
+}
+
+// InviteOrganizationMember sends an organization invitation through Keycloak.
+// @Summary      Invite an organization member
+// @Description  Sends an invitation to join the organization. Requires the org_admin role in the organization (global admins bypass this check).
+// @Tags         organizations
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        organizationID path string true "Keycloak organization ID or Alias"
+// @Param        request body model.InviteOrganizationMemberRequest true "Member invitation"
+// @Success      202 {object} model.InviteOrganizationMemberResponse
+// @Failure      400 {object} model.ErrorResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.APIError
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      409 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /organizations/{organizationID}/members/invitations [post]
+func (h *OrganizationHandler) InviteOrganizationMember(c *gin.Context) {
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, model.APIError{
+			Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
+		})
+		return
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	org, ok := h.resolveOrganizationParam(c, principal)
+	if !ok {
+		return
+	}
+	if !globalAdmin &&
+		!principal.HasOrganizationRoleIn(org.ID, middleware.RoleOrganizationAdmin) &&
+		!principal.HasOrganizationRoleIn(org.Alias, middleware.RoleOrganizationAdmin) {
+		middleware.AbortForbidden(c)
+		return
+	}
+
+	var req model.InviteOrganizationMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeProblem(c, http.StatusBadRequest, "email must be a valid email address")
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	if err := h.keycloakService.InviteOrganizationMember(c.Request.Context(), org.ID, principal.Subject, req.Email, req.Name, globalAdmin); err != nil {
+		writeOrgRolesError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, model.InviteOrganizationMemberResponse{Message: "invitation sent"})
+}
+
 // UpdateOrganization sets the display name of an organization. Alias and contact columns are
 // deliberately not changeable (EVENTHUB-188).
 // @Summary      Update organization details
@@ -420,6 +513,8 @@ func writeOrgRolesError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrNotAMember):
 		writeProblem(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrLastAdmin):
+		writeProblem(c, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrOrganizationInvitationExists):
 		writeProblem(c, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrOrgGroupsMissing):
 		writeProblem(c, http.StatusInternalServerError, err.Error())

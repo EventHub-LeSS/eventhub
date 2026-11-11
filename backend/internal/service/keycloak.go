@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -674,6 +675,137 @@ func (k *KeycloakService) GetOrganizationMembers(ctx context.Context, accessToke
 	return allMembers, nil
 }
 
+func (k *KeycloakService) ListOrganizationMembers(ctx context.Context, organizationIDOrAlias, actorUserID string, globalAdmin bool) (members []model.OrganizationMemberResponse, err error) {
+	token, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+
+	org, err := k.resolveOrganization(ctx, token, organizationIDOrAlias)
+	if err != nil {
+		return nil, err
+	}
+	groupIDByName, err := k.organizationRoleGroupIDs(ctx, token, org.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !globalAdmin {
+		isAdmin, err := k.isOrganizationGroupMember(ctx, token, org.ID, groupIDByName[string(model.RoleOrganizationAdmin)], actorUserID)
+		if err != nil {
+			return nil, err
+		}
+		if !isAdmin {
+			return nil, ErrActorNotOrgAdmin
+		}
+	}
+
+	keycloakMembers, err := k.GetOrganizationMembers(ctx, token, org.ID)
+	if err != nil {
+		return nil, err
+	}
+	rolesByUserID := make(map[string][]model.OrganizationRole)
+	for _, role := range model.OrganizationRoles {
+		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, token, org.ID, groupIDByName[string(role)])
+		if err != nil {
+			return nil, err
+		}
+		for _, userID := range memberIDs {
+			rolesByUserID[userID] = append(rolesByUserID[userID], role)
+		}
+	}
+
+	members = make([]model.OrganizationMemberResponse, 0, len(keycloakMembers))
+	for _, member := range keycloakMembers {
+		if member == nil || member.ID == nil || *member.ID == "" {
+			continue
+		}
+		username := keycloakString(member.Username)
+		if username == "" {
+			username = *member.ID
+		}
+		name := strings.TrimSpace(strings.Join([]string{keycloakString(member.FirstName), keycloakString(member.LastName)}, " "))
+		if name == "" {
+			name = username
+		}
+		if email := keycloakString(member.Email); name == "" {
+			name = email
+		}
+
+		var joinedAt *time.Time
+		if member.CreatedTimestamp != nil {
+			createdAt := time.UnixMilli(*member.CreatedTimestamp).UTC()
+			joinedAt = &createdAt
+		}
+		memberRoles := rolesByUserID[*member.ID]
+		if memberRoles == nil {
+			memberRoles = []model.OrganizationRole{}
+		}
+		members = append(members, model.OrganizationMemberResponse{
+			ID:       *member.ID,
+			Username: username,
+			Name:     name,
+			Email:    keycloakString(member.Email),
+			JoinedAt: joinedAt,
+			Rights:   memberRoles,
+		})
+	}
+	sort.Slice(members, func(i, j int) bool {
+		return strings.ToLower(members[i].Username) < strings.ToLower(members[j].Username)
+	})
+	return members, nil
+}
+
+func keycloakString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func (k *KeycloakService) InviteOrganizationMember(ctx context.Context, organizationIDOrAlias, actorUserID, email, name string, globalAdmin bool) (err error) {
+	token, err := k.adminToken(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+
+	org, err := k.resolveOrganization(ctx, token, organizationIDOrAlias)
+	if err != nil {
+		return err
+	}
+	groupIDByName, err := k.organizationRoleGroupIDs(ctx, token, org.ID)
+	if err != nil {
+		return err
+	}
+	if !globalAdmin {
+		isAdmin, err := k.isOrganizationGroupMember(ctx, token, org.ID, groupIDByName[string(model.RoleOrganizationAdmin)], actorUserID)
+		if err != nil {
+			return err
+		}
+		if !isAdmin {
+			return ErrActorNotOrgAdmin
+		}
+	}
+
+	params := gocloak.OrganizationInviteUserParams{Email: &email}
+	nameParts := strings.Fields(strings.TrimSpace(name))
+	if len(nameParts) > 0 {
+		params.FirstName = &nameParts[0]
+		if len(nameParts) > 1 {
+			lastName := strings.Join(nameParts[1:], " ")
+			params.LastName = &lastName
+		}
+	}
+	if err = k.client.InviteUserToOrganization(ctx, token, k.cfg.UserRealm, org.ID, params); err != nil {
+		if isKeycloakStatus(err, http.StatusConflict) {
+			return ErrOrganizationInvitationExists
+		}
+		return fmt.Errorf("failed to invite organization member: %w", err)
+	}
+	return nil
+}
+
 // ErrOrganizationExists is returned by CreateOrganization when the alias or the name is taken.
 var ErrOrganizationExists = errors.New("organization already exists")
 
@@ -891,13 +1023,14 @@ func (k *KeycloakService) GetOrganizationGroupIDByName(ctx context.Context, acce
 
 // EVENTHUB-188: errors returned by ConfigureOrganizationMemberRoles.
 var (
-	ErrUserNotFound         = errors.New("user not found")
-	ErrOrganizationNotFound = errors.New("organization not found")
-	ErrNotAMember           = errors.New("user is not a member of the organization")
-	ErrOrgGroupsMissing     = errors.New("organization role groups are not initialized")
-	ErrLastAdmin            = errors.New("cannot remove the last organization admin")
-	ErrLastGlobalAdmin      = errors.New("cannot remove the last global admin")
-	ErrActorNotOrgAdmin     = errors.New("caller is not an admin of the organization")
+	ErrUserNotFound                 = errors.New("user not found")
+	ErrOrganizationNotFound         = errors.New("organization not found")
+	ErrNotAMember                   = errors.New("user is not a member of the organization")
+	ErrOrgGroupsMissing             = errors.New("organization role groups are not initialized")
+	ErrOrganizationInvitationExists = errors.New("an invitation for this email already exists")
+	ErrLastAdmin                    = errors.New("cannot remove the last organization admin")
+	ErrLastGlobalAdmin              = errors.New("cannot remove the last global admin")
+	ErrActorNotOrgAdmin             = errors.New("caller is not an admin of the organization")
 )
 
 // OrgRoleChange is the outcome of a role configuration: the resolved organization,

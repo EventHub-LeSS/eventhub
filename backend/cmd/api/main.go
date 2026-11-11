@@ -262,6 +262,8 @@ func main() {
 		// authorizes against the resolved organization like the role endpoint above.
 		orgRoles.GET("/:organizationID", orgHandler.GetOrganization)
 		orgRoles.PUT("/:organizationID", middleware.Audit(audit.OrganizationUpdated), orgHandler.UpdateOrganization)
+		orgRoles.GET("/:organizationID/members", orgHandler.ListOrganizationMembers)
+		orgRoles.POST("/:organizationID/members/invitations", orgHandler.InviteOrganizationMember)
 		orgRoles.GET("/:organizationID/dashboard", eventHandler.GetSalesDashboardHandler)
 		orgRoles.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), orgHandler.ConfigureMemberRoles)
 		// Organization admins read the audit log of their organization; the handler authorizes
