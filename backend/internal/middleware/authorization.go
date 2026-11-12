@@ -30,23 +30,6 @@ func RequireGlobalRole(roles ...GlobalRole) gin.HandlerFunc {
 	}
 }
 
-// RequireGlobalOrAnyOrganizationRole lets a principal pass that holds the global role or the
-// organization role in at least one of its organizations.
-func RequireGlobalOrAnyOrganizationRole(globalRole GlobalRole, orgRole OrganizationRole) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := PrincipalFromContext(c)
-		if !ok {
-			abortAuthentication(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Authentication is required")
-			return
-		}
-		if principal.HasGlobalRole(globalRole) || principal.HasOrganizationRole(orgRole) {
-			c.Next()
-			return
-		}
-		AbortForbidden(c)
-	}
-}
-
 func RequireOrganizationRole(organizationParam string, roles ...OrganizationRole) gin.HandlerFunc {
 	allowed := make(map[OrganizationRole]struct{}, len(roles))
 	for _, role := range roles {

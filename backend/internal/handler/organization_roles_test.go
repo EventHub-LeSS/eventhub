@@ -37,6 +37,8 @@ func newOrgRolesRouter(t *testing.T, principal *middleware.Principal) (http.Hand
 	orgs := r.Group("/api/v1/organizations")
 	{
 		orgs.POST("/", h.CreateOrganization)
+		orgs.GET("/:organizationID/members", h.ListOrganizationMembers)
+		orgs.POST("/:organizationID/members/invitations", h.InviteOrganizationMember)
 		orgs.PUT("/:organizationID/members/:username/roles", middleware.Audit(audit.OrganizationMemberRolesChange), h.ConfigureMemberRoles)
 	}
 	return r, fake
@@ -82,6 +84,27 @@ func putOrgRoles(t *testing.T, router http.Handler, orgID, username string, role
 	return putOrgRolesBody(t, router, orgID, username, string(payload))
 }
 
+func getOrganizationMembers(t *testing.T, router http.Handler, orgID string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/organizations/"+orgID+"/members", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func postOrganizationInvitation(t *testing.T, router http.Handler, orgID, email, name string) *httptest.ResponseRecorder {
+	t.Helper()
+	payload, err := json.Marshal(model.InviteOrganizationMemberRequest{Email: email, Name: name})
+	if err != nil {
+		t.Fatalf("marshal invitation: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/organizations/"+orgID+"/members/invitations", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
 func wantAPIError(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
 	if rec.Code != status {
@@ -112,6 +135,63 @@ func wantProblem(t *testing.T, rec *httptest.ResponseRecorder, status int) {
 	}
 	if p.Title != http.StatusText(status) {
 		t.Errorf("problem title = %q, want %q (body: %s)", p.Title, http.StatusText(status), rec.Body.String())
+	}
+}
+
+func TestListOrganizationMembers_OrgAdminSeesOwnMembershipAndRoles(t *testing.T) {
+	router, _ := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+
+	rec := getOrganizationMembers(t, router, "org-1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	var members []model.OrganizationMemberResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &members); err != nil {
+		t.Fatalf("unmarshal members: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("got %d members, want 2: %+v", len(members), members)
+	}
+	for _, member := range members {
+		if member.ID == "u-alice" {
+			if member.Username != "alice" {
+				t.Errorf("self username = %q, want alice", member.Username)
+			}
+			if len(member.Rights) != 1 || member.Rights[0] != model.RoleOrganizationAdmin {
+				t.Errorf("self roles = %v, want [org_admin]", member.Rights)
+			}
+			return
+		}
+	}
+	t.Fatal("organization admin must be included in the member list")
+}
+
+func TestListOrganizationMembers_ForbiddenWithoutOrgAdminRole(t *testing.T) {
+	router, _ := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleEventManager))
+
+	rec := getOrganizationMembers(t, router, "org-1")
+	wantAPIError(t, rec, http.StatusForbidden, "FORBIDDEN")
+}
+
+func TestInviteOrganizationMember_OrgAdminCanInvite(t *testing.T) {
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+
+	rec := postOrganizationInvitation(t, router, "org-1", "new-member@example.com", "New Member")
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202, body: %s", rec.Code, rec.Body.String())
+	}
+	if len(fake.Invitations) != 1 || fake.Invitations[0].Email != "new-member@example.com" {
+		t.Errorf("unexpected invitations: %+v", fake.Invitations)
+	}
+}
+
+func TestInviteOrganizationMember_ForbiddenWithoutOrgAdminRole(t *testing.T) {
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleEventManager))
+
+	rec := postOrganizationInvitation(t, router, "org-1", "new-member@example.com", "New Member")
+	wantAPIError(t, rec, http.StatusForbidden, "FORBIDDEN")
+	if len(fake.Invitations) != 0 {
+		t.Errorf("non-admin created invitations: %+v", fake.Invitations)
 	}
 }
 

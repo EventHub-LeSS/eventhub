@@ -23,8 +23,6 @@ export interface SessionUser {
   role: UserRole
   /** Platform-wide admin, from the "admin" backend client role. Independent of `role`/organization membership. */
   isAdmin: boolean
-  /** True when the user is a global admin or holds org_admin in any organization. */
-  canReviewApplications?: boolean
   /** Roles in the active organization, e.g. event_manager to manage its events. */
   organizationRoles: OrganizationRole[]
 }
@@ -122,35 +120,4 @@ export function organizationRolesFromAccessToken(
   return ORGANIZATION_ROLES.filter(
     (role) => groups.includes(`/${role}`) || groups.includes(`/roles/${role}`)
   )
-}
-
-/**
- * Checks whether the access token grants global admin or org_admin in at least one
- * organization, matching the backend's RequireGlobalOrAnyOrganizationRole(admin, org_admin).
- */
-export function canReviewApplicationsFromAccessToken(
-  accessToken: string
-): boolean {
-  if (isAdminFromAccessToken(accessToken)) {
-    return true
-  }
-
-  try {
-    const claim = decodeJwt(accessToken).organization as
-      | Record<string, { groups?: unknown }>
-      | undefined
-    if (!claim || typeof claim !== "object") {
-      return false
-    }
-
-    return Object.values(claim).some((entry) => {
-      const groups = entry?.groups
-      return (
-        Array.isArray(groups) &&
-        (groups.includes("/org_admin") || groups.includes("/roles/org_admin"))
-      )
-    })
-  } catch {
-    return false
-  }
 }
