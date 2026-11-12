@@ -52,7 +52,7 @@ export default async function CreateOrganizationPage() {
             </Button>
           </div>
 
-          {(user.canReviewApplications || user.isAdmin) && (
+          {user.isAdmin && (
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm">
               <p className="font-medium">Anträge prüfen</p>
               <p className="text-xs text-muted-foreground">

@@ -88,7 +88,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
             <Building2Icon />
             Organisation beantragen
           </DropdownMenuItem>
-          {(user.canReviewApplications || user.isAdmin) && (
+          {user.isAdmin && (
             <DropdownMenuItem
               render={<Link href="/admin/organizer-applications" />}
             >

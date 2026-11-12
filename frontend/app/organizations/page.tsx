@@ -18,7 +18,7 @@ export default async function OrganizationsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(user.canReviewApplications || user.isAdmin) && (
+          {user.isAdmin && (
             <Button
               variant="outline"
               render={<Link href="/admin/organizer-applications" />}

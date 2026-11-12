@@ -1,6 +1,7 @@
 "use client"
 
 import { PencilIcon, UserMinusIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import {
@@ -75,6 +76,7 @@ export function MembersTable({
   members: OrganizationMember[]
   alias: string
 }) {
+  const router = useRouter()
   const [editingMember, setEditingMember] = useState<OrganizationMember | null>(
     null
   )
@@ -112,7 +114,10 @@ export function MembersTable({
     updateMemberRoles.mutate(
       { username: editingMember.username, roles: draftRights },
       {
-        onSuccess: () => setEditingMember(null),
+        onSuccess: () => {
+          setEditingMember(null)
+          router.refresh()
+        },
         onError: (mutationError) => setError(mutationError.message),
       }
     )

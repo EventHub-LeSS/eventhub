@@ -165,7 +165,7 @@ type CreatedOrganization struct {
 }
 
 // CreateOrganizationAsService is CreateOrganization with the backend service account, for callers
-// whose own token cannot manage Keycloak organizations, e.g. org admins approving an organizer
+// whose own token cannot manage Keycloak organizations, e.g. admins approving an organizer
 // application.
 func (s *OrganizationService) CreateOrganizationAsService(ctx context.Context, req model.CreateOrganizationRequest) (created *CreatedOrganization, err error) {
 	token, err := s.keycloak.adminToken(ctx)

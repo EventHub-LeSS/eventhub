@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getSession, requireSession } from "@/features/auth";
+import {
+  createSessionCookie,
+  getSession,
+  organizationsFromClaims,
+  refreshAccessToken,
+  requireSession,
+} from "@/features/auth";
 import type { OrganizationRight } from "@/features/organizations";
 import { envConfig } from "@/features/shared/lib/env";
 
@@ -49,6 +55,40 @@ export async function PUT(
       body = JSON.parse(text);
     } catch {
       body = { error: { code: "BAD_GATEWAY", message: text } };
+    }
+  }
+
+  if (
+    response.ok &&
+    username.toLowerCase() === session.email.toLowerCase()
+  ) {
+    try {
+      const refreshed = await refreshAccessToken(session.refreshToken);
+
+      if (!refreshed.accessToken) {
+        throw new Error("refresh returned no access token");
+      }
+
+      await createSessionCookie({
+        ...session,
+        organizations: refreshed.claims
+          ? organizationsFromClaims(refreshed.claims.organization)
+          : session.organizations,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        accessTokenExpiresAt: Date.now() + (refreshed.expiresIn ?? 0) * 1000,
+      });
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "SESSION_REFRESH_FAILED",
+            message:
+              "Die Rechte wurden gespeichert, aber die Sitzung konnte nicht aktualisiert werden. Bitte lade die Seite neu.",
+          },
+        },
+        { status: 502 },
+      );
     }
   }
 

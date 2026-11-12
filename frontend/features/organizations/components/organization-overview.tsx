@@ -47,7 +47,7 @@ export function OrganizationOverview({
 }) {
   const hasRight = (right: OrganizationRight) =>
     isAdmin || rights.includes(right)
-  const canViewMembers = isAdmin
+  const canViewMembers = hasRight("org_admin")
   const canViewAuditLog = hasRight("org_admin")
   const canEditOrganization = hasRight("org_admin")
 

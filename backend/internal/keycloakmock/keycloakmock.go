@@ -46,6 +46,15 @@ type Fake struct {
 	AdminDelay time.Duration
 	// Audit records the audited operations of the service returned by KeycloakService.
 	Audit AuditLog
+
+	Invitations []OrganizationInvitation
+}
+
+type OrganizationInvitation struct {
+	OrganizationID string
+	Email          string
+	FirstName      string
+	LastName       string
 }
 
 // New returns a fake with two members: alice (org_admin of org-1) and bob
@@ -224,6 +233,36 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(list)
 	}))
 
+	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/members", admin(func(w http.ResponseWriter, r *http.Request) {
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		orgID := r.PathValue("orgID")
+		if _, ok := f.OrgMembers[orgID]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		list := make([]map[string]any, 0)
+		for username, userID := range f.Users {
+			if !f.OrgMembers[orgID][userID] {
+				continue
+			}
+			firstName := username
+			if len(firstName) > 0 {
+				firstName = strings.ToUpper(firstName[:1])
+			}
+			list = append(list, map[string]any{
+				"id":               userID,
+				"username":         username,
+				"email":            username + "@example.com",
+				"firstName":        firstName,
+				"lastName":         "Member",
+				"createdTimestamp": int64(1700000000000),
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(list)
+	}))
+
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/members/{userID}", admin(func(w http.ResponseWriter, r *http.Request) {
 		f.Mu.Lock()
 		defer f.Mu.Unlock()
@@ -347,6 +386,27 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 		}
 		members[userID] = true
 		w.WriteHeader(http.StatusCreated)
+	}))
+
+	mux.HandleFunc("POST /admin/realms/eventhub/organizations/{orgID}/members/invite-user", admin(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		orgID := r.PathValue("orgID")
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		if _, ok := f.OrgMembers[orgID]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		f.Invitations = append(f.Invitations, OrganizationInvitation{
+			OrganizationID: orgID,
+			Email:          r.FormValue("email"),
+			FirstName:      r.FormValue("firstName"),
+			LastName:       r.FormValue("lastName"),
+		})
+		w.WriteHeader(http.StatusNoContent)
 	}))
 
 	mux.HandleFunc("DELETE /admin/realms/eventhub/organizations/{orgID}", admin(func(w http.ResponseWriter, r *http.Request) {

@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { requireApplicationReviewer } from "@/features/auth"
+import { requireAdmin } from "@/features/auth"
 import {
   OrganizerApplicationsQueue,
   parseApplicationFilters,
@@ -11,7 +11,7 @@ export default async function OrganizerApplicationsAdminPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  await requireApplicationReviewer()
+  await requireAdmin()
   const params = await searchParams
   const query = new URLSearchParams()
   for (const key of ["status", "page", "limit"]) {

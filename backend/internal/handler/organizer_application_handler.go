@@ -21,7 +21,7 @@ import (
 )
 
 // OrganizerApplicationHandler serves the contact form through which users apply to become an
-// organizer and the review of those applications by global admins and org admins (EVENTHUB-294).
+// organizer and the review of those applications by global admins (EVENTHUB-294, EVENTHUB-304).
 type OrganizerApplicationHandler struct {
 	applications *service.OrganizerApplicationService
 	userRepo     repository.UserRepository
@@ -40,7 +40,7 @@ const maxDecisionReasonLength = 1000
 
 // SubmitApplicationHandler godoc
 // @Summary      Apply to become an organizer
-// @Description  Contact form of the authenticated user to become an organizer. The application waits for review by a global admin or an org admin of any organization; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.
+// @Description  Contact form of the authenticated user to become an organizer. The application waits for review by a global admin; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.
 // @Tags         organizer-applications
 // @Security     BearerAuth
 // @Accept       json
@@ -118,7 +118,7 @@ func (h *OrganizerApplicationHandler) ListOwnApplicationsHandler(c *gin.Context)
 
 // ListApplicationsHandler godoc
 // @Summary      List organizer applications for review
-// @Description  Requires the global admin role or the org_admin role in any organization. Oldest first, so reviewers work through the queue.
+// @Description  Requires the global admin role. Oldest first, so reviewers work through the queue.
 // @Tags         organizer-applications
 // @Security     BearerAuth
 // @Produce      json
@@ -156,7 +156,7 @@ func (h *OrganizerApplicationHandler) ListApplicationsHandler(c *gin.Context) {
 
 // GetApplicationHandler godoc
 // @Summary      Inspect an organizer application
-// @Description  Requires the global admin role or the org_admin role in any organization.
+// @Description  Requires the global admin role.
 // @Tags         organizer-applications
 // @Security     BearerAuth
 // @Produce      json
@@ -179,7 +179,7 @@ func (h *OrganizerApplicationHandler) GetApplicationHandler(c *gin.Context) {
 
 // ApproveApplicationHandler godoc
 // @Summary      Approve an organizer application
-// @Description  Requires the global admin role or the org_admin role in any organization; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.
+// @Description  Requires the global admin role; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.
 // @Tags         organizer-applications
 // @Security     BearerAuth
 // @Accept       json
@@ -229,7 +229,7 @@ func (h *OrganizerApplicationHandler) ApproveApplicationHandler(c *gin.Context) 
 
 // RejectApplicationHandler godoc
 // @Summary      Reject an organizer application
-// @Description  Requires the global admin role or the org_admin role in any organization; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.
+// @Description  Requires the global admin role; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.
 // @Tags         organizer-applications
 // @Security     BearerAuth
 // @Accept       json
