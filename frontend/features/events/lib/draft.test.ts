@@ -1,8 +1,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { emptyDraft, toDraft, toDraftPayload } from "@/features/events/lib/draft"
-import { formatEventDateTime } from "@/features/events/lib/format"
+import {
+  emptyDraft,
+  toDraft,
+  toDraftPayload,
+} from "@/features/events/lib/draft"
+import {
+  formatEventDateTime,
+  formatEventTimeRange,
+} from "@/features/events/lib/format"
 import type { Event } from "@/features/events/lib/types"
 
 for (const [date, expectedStart, expectedEnd] of [
@@ -23,12 +30,26 @@ for (const [date, expectedStart, expectedEnd] of [
     assert.equal(payload.endTime, expectedEnd)
     assert.match(formatEventDateTime(payload.startTime), /12:00/)
     assert.match(formatEventDateTime(payload.endTime), /13:00/)
+    assert.match(
+      formatEventTimeRange(payload.startTime, payload.endTime),
+      /12:00.*13:00/
+    )
+    const endingAtNoon = toDraftPayload({
+      ...draft,
+      startTime: `${date}T11:00`,
+      endTime: `${date}T12:00`,
+    })
+    assert.match(
+      formatEventTimeRange(endingAtNoon.startTime, endingAtNoon.endTime),
+      /11:00.*12:00/
+    )
 
     const event: Event = {
       ...payload,
       eventId: "event-id",
       description: payload.description ?? null,
       status: "draft",
+      withdrawnByModerator: false,
       organizerId: null,
       locationId: null,
       createdAt: expectedStart,

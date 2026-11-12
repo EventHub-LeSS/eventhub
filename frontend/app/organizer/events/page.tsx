@@ -9,19 +9,9 @@ import {
   listOwnEvents,
   OrganizerEventList,
   PublishDraftButton,
+  formatEventTimeRange,
 } from "@/features/events"
 import { Button } from "@/features/shared/components/ui/button"
-
-const dateFormat = new Intl.DateTimeFormat("de-DE", {
-  dateStyle: "medium",
-  timeStyle: "short",
-})
-
-function formatTimeSpan(event: Event): string {
-  return `${dateFormat.format(new Date(event.startTime))} – ${dateFormat.format(
-    new Date(event.endTime)
-  )}`
-}
 
 export default async function OrganizerDraftsPage() {
   const user = await requireOrganizer()
@@ -96,8 +86,8 @@ export default async function OrganizerDraftsPage() {
               <div>
                 <p className="text-sm font-medium">{draft.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatTimeSpan(draft)} · {draft.capacity} Plätze ·{" "}
-                  {draft.price}
+                  {formatEventTimeRange(draft.startTime, draft.endTime)} ·{" "}
+                  {draft.capacity} Plätze · {draft.price}
                 </p>
               </div>
               <div className="flex items-center gap-2">

@@ -14,6 +14,7 @@ export { IMAGE_FAILED_PARAM } from "@/features/events/lib/image"
 export {
   EMPTY_VALUE,
   formatEventDateTime,
+  formatEventTimeRange,
   formatSoldTickets,
 } from "@/features/events/lib/format"
 export { getOrganizerEvents } from "@/features/events/lib/get-organizer-events"
