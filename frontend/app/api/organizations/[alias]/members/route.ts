@@ -4,9 +4,9 @@ import { getSession, requireSession } from "@/features/auth";
 import {
   KeycloakAdminError,
   resolveOrganizationId,
-  getOrganizationMembersWithRights,
   inviteOrganizationMember,
 } from "@/features/organizations";
+import { envConfig } from "@/features/shared/lib/env";
 
 export async function GET(
   _request: Request,
@@ -31,22 +31,28 @@ export async function GET(
     );
   }
 
-  try {
-    const organizationId = await resolveOrganizationId(session.accessToken, alias);
-    const members = await getOrganizationMembersWithRights(
-      session.accessToken,
-      organizationId,
-    );
-    return NextResponse.json(members);
-  } catch (error) {
-    if (error instanceof KeycloakAdminError) {
-      return NextResponse.json(
-        { error: { code: "KEYCLOAK_ERROR", message: error.message } },
-        { status: error.status === 404 ? 404 : error.status },
-      );
+  // The API reads the members with its service account; Keycloak's admin API does not accept
+  // the token of an organization admin who is no global admin.
+  const response = await fetch(
+    `${envConfig.apiBaseUrl}/organizations/${alias}/members`,
+    {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+      cache: "no-store",
+    },
+  );
+
+  const text = await response.text();
+  let body: unknown = null;
+
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { error: { code: "BAD_GATEWAY", message: text } };
     }
-    throw error;
   }
+
+  return NextResponse.json(body, { status: response.status });
 }
 
 export async function POST(

@@ -78,6 +78,16 @@ type ConfigureOrgRolesResponse struct {
 	Message        string   `json:"message,omitempty"`
 }
 
+// OrganizationMemberResponse is one member of an organization with their roles in it.
+type OrganizationMemberResponse struct {
+	ID       string   `json:"id"`
+	Username string   `json:"username"`
+	Name     string   `json:"name"`
+	Email    string   `json:"email"`
+	JoinedAt *string  `json:"joinedAt"`
+	Rights   []string `json:"rights"`
+}
+
 type UpdateOrganizationRequest struct {
 	// Name is the display name of the organization ("Organisationsdetails"); it is required and
 	// must not be empty after trimming.

@@ -305,6 +305,64 @@ func logOrgNameChangeFailure(c *gin.Context, organizationID, name string, err er
 	)
 }
 
+// @Summary      List organization members
+// @Description  Returns the members of an organization with their roles in it. Requires the org_admin role in the given organization (global admins bypass this check). organizationID is the Keycloak organization ID or alias.
+// @Tags         organizations
+// @Security     BearerAuth
+// @Produce      json
+// @Param        organizationID path string true "Keycloak organization ID or Alias"
+// @Success      200 {array} model.OrganizationMemberResponse
+// @Failure      401 {object} model.APIError
+// @Failure      403 {object} model.APIError
+// @Failure      404 {object} model.ErrorResponse
+// @Failure      500 {object} model.ErrorResponse
+// @Router       /organizations/{organizationID}/members [get]
+func (h *OrganizationHandler) ListMembers(c *gin.Context) {
+	organizationParam := c.Param("organizationID")
+
+	principal, ok := middleware.PrincipalFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, model.APIError{
+			Error: model.APIErrorDetail{Code: "UNAUTHENTICATED", Message: "Authentication is required"},
+		})
+		return
+	}
+	globalAdmin := principal.HasGlobalRole(middleware.RoleAdmin)
+
+	org, err := h.keycloakService.ResolveOrganization(c.Request.Context(), organizationParam)
+	if err != nil {
+		if errors.Is(err, service.ErrOrganizationNotFound) {
+			if !globalAdmin {
+				middleware.AbortForbidden(c)
+				return
+			}
+			writeProblem(c, http.StatusNotFound, "organization not found")
+			return
+		}
+		slog.Error("listing organization members failed", "organization_id", organizationParam, "error", err.Error())
+		writeProblem(c, http.StatusInternalServerError, "failed to load the organization")
+		return
+	}
+	if !globalAdmin &&
+		!principal.HasOrganizationRoleIn(org.ID, middleware.RoleOrganizationAdmin) &&
+		!principal.HasOrganizationRoleIn(org.Alias, middleware.RoleOrganizationAdmin) {
+		middleware.AbortForbidden(c)
+		return
+	}
+
+	members, err := h.keycloakService.ListOrganizationMembersWithRoles(c.Request.Context(), org.ID)
+	if err != nil {
+		if errors.Is(err, service.ErrOrganizationNotFound) {
+			writeProblem(c, http.StatusNotFound, "organization not found")
+			return
+		}
+		slog.Error("listing organization members failed", "organization_id", org.ID, "error", err.Error())
+		writeProblem(c, http.StatusInternalServerError, "failed to load the organization members")
+		return
+	}
+	c.JSON(http.StatusOK, members)
+}
+
 // EVENTHUB-188: Rollen innerhalb einer Organisation vergeben und entziehen
 // @Summary      Configure organization member roles
 // @Description  Replaces the complete role set of an organization member. Requires the org_admin role in the given organization (global admins bypass this check); it is checked against the token and again against Keycloak, so a demoted admin cannot act on an old token. organizationID is the Keycloak organization ID or alias as returned by POST /organizations and GET /users/me. roles is required; an empty array removes all roles. Roles: org_admin (manage members), event_manager (manage events), finance_viewer (view sales and billing). Removing the last org_admin is rejected. The affected user must refresh their token before the new roles take effect.

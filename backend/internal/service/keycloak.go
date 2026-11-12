@@ -674,6 +674,68 @@ func (k *KeycloakService) GetOrganizationMembers(ctx context.Context, accessToke
 	return allMembers, nil
 }
 
+// ListOrganizationMembersWithRoles returns the members of the organization with their roles in it.
+// It uses the backend service account, because organization admins cannot read Keycloak's admin
+// API with their own token; callers must authorize the request themselves.
+func (k *KeycloakService) ListOrganizationMembersWithRoles(ctx context.Context, keycloakOrgID string) (result []model.OrganizationMemberResponse, err error) {
+	token, err := k.adminToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+
+	members, err := k.GetOrganizationMembers(ctx, token, keycloakOrgID)
+	if err != nil {
+		if isKeycloakNotFound(err) {
+			return nil, ErrOrganizationNotFound
+		}
+		return nil, err
+	}
+	groupIDByName, err := k.organizationRoleGroupIDs(ctx, token, keycloakOrgID)
+	if err != nil {
+		return nil, err
+	}
+	rolesByUserID := map[string][]string{}
+	for _, role := range model.OrganizationRoles {
+		memberIDs, err := k.getOrganizationGroupMemberIDs(ctx, token, keycloakOrgID, groupIDByName[string(role)])
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range memberIDs {
+			rolesByUserID[id] = append(rolesByUserID[id], string(role))
+		}
+	}
+
+	result = make([]model.OrganizationMemberResponse, 0, len(members))
+	for _, m := range members {
+		if m == nil || m.ID == nil {
+			continue
+		}
+		member := model.OrganizationMemberResponse{
+			ID:       *m.ID,
+			Username: gocloak.PString(m.Username),
+			Email:    gocloak.PString(m.Email),
+			Rights:   nonNilStrings(rolesByUserID[*m.ID]),
+		}
+		member.Name = strings.TrimSpace(gocloak.PString(m.FirstName) + " " + gocloak.PString(m.LastName))
+		if member.Name == "" {
+			member.Name = member.Username
+		}
+		if member.Name == "" {
+			member.Name = member.Email
+		}
+		if member.Name == "" {
+			member.Name = member.ID
+		}
+		if m.CreatedTimestamp != nil {
+			joinedAt := time.UnixMilli(*m.CreatedTimestamp).UTC().Format(time.RFC3339)
+			member.JoinedAt = &joinedAt
+		}
+		result = append(result, member)
+	}
+	return result, nil
+}
+
 // ErrOrganizationExists is returned by CreateOrganization when the alias or the name is taken.
 var ErrOrganizationExists = errors.New("organization already exists")
 
