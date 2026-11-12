@@ -5,6 +5,10 @@ export {
 export { OrganizerApplicationsQueue } from "@/features/organizations/components/organizer-applications-queue"
 export { OrganizationOverview } from "@/features/organizations/components/organization-overview"
 export {
+  CopyInviteEmail,
+  OpenMailButton,
+} from "@/features/organizations/components/join-organization"
+export {
   type ActivityEvent,
   type ActivityPoint,
   activityByMonth,

@@ -35,24 +35,42 @@ export default async function CreateOrganizationPage() {
           </ol>
         </div>
 
-        {user.isAdmin && (
+        <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm">
-            <p className="font-medium">Anträge prüfen</p>
+            <p className="font-medium">Organisation existiert schon?</p>
             <p className="text-xs text-muted-foreground">
-              Als Administrator kannst du offene Bewerbungen anderer Nutzer
-              einsehen und freigeben.
+              Du kannst auch einer bestehenden Organisation auf Einladung beitreten.
             </p>
             <Button
               variant="outline"
               size="sm"
               className="w-fit"
-              render={<Link href="/admin/organizer-applications" />}
+              render={<Link href="/organizations/join" />}
               nativeButton={false}
             >
-              Zur Antragsprüfung
+              Organisation beitreten
             </Button>
           </div>
-        )}
+
+          {user.isAdmin && (
+            <div className="flex flex-col gap-2 rounded-xl border border-border bg-background p-4 text-sm">
+              <p className="font-medium">Anträge prüfen</p>
+              <p className="text-xs text-muted-foreground">
+                Als Administrator kannst du offene Bewerbungen anderer Nutzer
+                einsehen und freigeben.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                render={<Link href="/admin/organizer-applications" />}
+                nativeButton={false}
+              >
+                Zur Antragsprüfung
+              </Button>
+            </div>
+          )}
+        </div>
       </aside>
 
       <div className="flex justify-center lg:items-start">
