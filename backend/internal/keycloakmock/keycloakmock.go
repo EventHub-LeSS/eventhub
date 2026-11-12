@@ -224,6 +224,24 @@ func (f *Fake) Server(t testing.TB) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(list)
 	}))
 
+	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/members", admin(func(w http.ResponseWriter, r *http.Request) {
+		f.Mu.Lock()
+		defer f.Mu.Unlock()
+		members, ok := f.OrgMembers[r.PathValue("orgID")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		list := make([]map[string]any, 0, len(members))
+		for username, userID := range f.Users {
+			if members[userID] {
+				list = append(list, map[string]any{"id": userID, "username": username})
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(list)
+	}))
+
 	mux.HandleFunc("GET /admin/realms/eventhub/organizations/{orgID}/members/{userID}", admin(func(w http.ResponseWriter, r *http.Request) {
 		f.Mu.Lock()
 		defer f.Mu.Unlock()
