@@ -173,7 +173,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization. Oldest first, so reviewers work through the queue.",
+                "description": "Requires the global admin role. Oldest first, so reviewers work through the queue.",
                 "produces": [
                     "application/json"
                 ],
@@ -252,7 +252,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization.",
+                "description": "Requires the global admin role.",
                 "produces": [
                     "application/json"
                 ],
@@ -316,7 +316,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.",
+                "description": "Requires the global admin role; reviewers cannot approve their own application (403). Creates the requested organization with the backend service account in Keycloak and in the API database with the applicant as org_admin, marks the application approved, records the decision in the audit log of the new organization and notifies the applicant. An optional reason (at most 1000 characters) is passed on to the applicant. The applicant sees the organization after logging in again.",
                 "consumes": [
                     "application/json"
                 ],
@@ -397,7 +397,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Requires the global admin role or the org_admin role in any organization; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.",
+                "description": "Requires the global admin role; reviewers cannot reject their own application (403). Requires a reason of 1-1000 characters after trimming, which the applicant is told. The decision is recorded in the platform audit log.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3603,6 +3603,149 @@
                 }
             }
         },
+        "/organizations/{organizationID}/members": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns members and their organization roles. Requires the org_admin role in the organization (global admins bypass this check).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "List organization members",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Keycloak organization ID or Alias",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.OrganizationMemberResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/organizations/{organizationID}/members/invitations": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sends an invitation to join the organization. Requires the org_admin role in the organization (global admins bypass this check).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "organizations"
+                ],
+                "summary": "Invite an organization member",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Keycloak organization ID or Alias",
+                        "name": "organizationID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Member invitation",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.InviteOrganizationMemberRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/model.InviteOrganizationMemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/model.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/organizations/{organizationID}/members/{username}/roles": {
             "put": {
                 "security": [
@@ -3746,7 +3889,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Contact form of the authenticated user to become an organizer. The application waits for review by a global admin or an org admin of any organization; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.",
+                "description": "Contact form of the authenticated user to become an organizer. The application waits for review by a global admin; approval creates the organization with the applicant as org_admin. Only one application per user can be pending. The alias must be 3-50 lowercase letters, digits or hyphens and start and end with a letter or digit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4968,6 +5111,28 @@
                 }
             }
         },
+        "model.InviteOrganizationMemberRequest": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.InviteOrganizationMemberResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "model.LocationInput": {
             "type": "object",
             "required": [
@@ -5282,6 +5447,32 @@
                     "type": "string"
                 },
                 "updatedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.OrganizationMemberResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "joinedAt": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rights": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.OrganizationRole"
+                    }
+                },
+                "username": {
                     "type": "string"
                 }
             }

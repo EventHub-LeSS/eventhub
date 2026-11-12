@@ -85,7 +85,7 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
   ])
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-6 p-6">
       <div>
         <h1 className="font-medium">Veranstalter-Dashboard</h1>
         <p className="text-sm text-muted-foreground">

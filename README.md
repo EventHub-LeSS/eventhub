@@ -24,8 +24,47 @@ docker compose up -d
 Beim ersten Start wird ein eigenes Keycloak-Image gebaut, das das Login-Theme enthält
 (siehe unten). Das dauert einige Minuten, danach greift der Docker-Cache.
 
-Wichtig: `--import-realm` importiert nur, wenn der Realm noch nicht existiert. Nach Änderungen an
-der Realm-Datei muss deshalb das Datenbank-Volume gelöscht werden:
+### Realm-Konfiguration anwenden (nicht-destruktiv)
+
+Bei **jedem Start** wendet der Container die Realm-Datei mit dem mitgelieferten
+Tool `realm-sync` (`core/realm-sync/`) nicht-destruktiv an:
+
+- Alles, was in `core/realms/eventhub-realm.json` konfiguriert ist, wird
+  angelegt oder in-place aktualisiert (Realm-Settings, Clients, Client-Scopes,
+  Rollen, Nutzer, Organisationen inkl. Members).
+- Alles, was **nicht** in der Datei steht, bleibt erhalten: zur Laufzeit
+  angelegte Organisationen, registrierte Nutzer, geänderte Passwörter,
+  vergebene Rollen. Gelöscht wird nie.
+
+Das heißt: Änderungen an der Realm-Datei greifen beim nächsten
+`docker compose up -d keycloak` – ein Löschen des Datenbank-Volumes ist dafür
+**nicht** mehr nötig. Im Compose-Setup ist die Datei zusätzlich als Volume
+eingehängt, d.h. auch ein Image-Rebuild ist nicht nötig.
+
+Spezialfälle per Umgebungsvariable (am `keycloak`-Container setzen):
+
+| Variable | Wirkung |
+| --- | --- |
+| `KC_REALM_SYNC=false` | Sync deaktivieren (Realm wird nur bei erstem Import angelegt) |
+| `KC_REALM_HARD_RESET=true` | Achtung: destruktiver Komplett-Import vor dem Start – Realm wird 1:1 durch die Datei ersetzt, alle Laufzeitdaten gehen verloren. Nur für genau einen Neustart setzen. |
+
+Die früher übliche Variable `KC_IMPORT_OVERRIDE=true` (destruktiver
+Komplett-Import) wird nicht mehr ausgewertet und kann aus bestehenden
+Deployments entfernt werden; falls sie noch gesetzt ist, hat sie keinen Effekt
+mehr.
+
+**Hinweis:** Der realm-sync auf der Keycloak-Seite aktualisiert nur Keycloak.
+Die API gleicht ihre Datenbank bei **jedem Start** automatisch mit Keycloak ab
+(Organisationen und Nutzer: gespiegelt, abgeglichen – nie gelöscht). Änderungen
+aus der Realm-Datei erreichen die API-Datenbank damit mit dem nächsten
+API-Neustart. Für alles Weitere (Mock-Daten, manuelle Korrekturen) gibt es
+weiterhin:
+
+```bash
+docker compose up api-seed
+```
+
+Für einen kompletten Neuanfang (leere Datenbanken) bleibt:
 
 ```bash
 docker compose down -v && docker compose up -d
@@ -99,8 +138,9 @@ Eindeutigkeit von Name und Alias per Unique-Index.
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
 per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur die Rollen
 `manage-organizations`, `manage-users` und `view-clients` aus `realm-management`, kein `realm-admin`.
-Frische Realms bekommen es über `core/realms/eventhub-realm.json`. Bei einem bestehenden
-Keycloak-Volume richtet `docker compose up api-seed` das Service-Konto nachträglich ein.
+Frische Realms bekommen es über `core/realms/eventhub-realm.json`, dessen Grants der realm-sync
+bei jedem Start auch auf bestehende Volumes anwendet. Zur Not richtet `docker compose up api-seed`
+das Service-Konto nachträglich ein.
 
 Auch `api-seed` führt ausschließlich Keycloak-Admin-Aufrufe aus und meldet sich daher mit dem
 gleichen Service-Konto an (`KEYCLOAK_CLIENT_ID`, Standard `backend`, plus `KEYCLOAK_CLIENT_SECRET`)

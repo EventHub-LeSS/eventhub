@@ -1,6 +1,6 @@
 # PostgreSQL with the pg_cron extension, which runs the retention job of the audit log inside the
 # database. Same base image (and thus the same collation) as before, so existing volumes keep working.
-FROM postgres:17-alpine
+FROM postgres:16-alpine
 
 ARG PG_CRON_VERSION=v1.6.5
 

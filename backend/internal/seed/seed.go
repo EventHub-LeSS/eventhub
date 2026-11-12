@@ -28,7 +28,7 @@ func (s *Seeder) SeedAll(ctx context.Context, realm, token string) error {
 		return fmt.Errorf("keycloak seed: %w", err)
 	}
 
-	if err := s.syncDB(ctx, realm, token); err != nil {
+	if err := s.SyncDB(ctx, realm, token); err != nil {
 		return fmt.Errorf("db sync: %w", err)
 	}
 
@@ -38,6 +38,15 @@ func (s *Seeder) SeedAll(ctx context.Context, realm, token string) error {
 	}
 
 	return nil
+}
+
+// SyncDB mirrors Keycloak state into the API database: users and organizations
+// that exist in Keycloak are created or reconciled (Keycloak ID, alias, name,
+// memberships) in the database. It never deletes database rows. The API runs
+// it at startup so realm-file changes applied by the Keycloak realm-sync reach
+// the database without a manual seed run.
+func (s *Seeder) SyncDB(ctx context.Context, realm, token string) error {
+	return s.syncDB(ctx, realm, token)
 }
 
 func (s *Seeder) syncDB(ctx context.Context, realm, token string) error {
@@ -98,12 +107,13 @@ func (s *Seeder) syncDB(ctx context.Context, realm, token string) error {
 			// A realm re-import re-creates organizations with new IDs. Follow the new ID
 			// instead of inserting a duplicate row for the same organization (EVENTHUB fix:
 			// every realm generation used to duplicate every organization in the database).
-			if existing.KeycloakOrgID != *kcOrg.ID || existing.Alias != alias {
+			// A name change in Keycloak (e.g. via the realm file) is reconciled too.
+			if existing.KeycloakOrgID != *kcOrg.ID || existing.Alias != alias || existing.Name != name {
 				if err := orgRepo.UpdateKeycloakRefs(existing.OrganizationID, *kcOrg.ID, alias, name); err != nil {
 					log.Printf("  skip org %s: update error: %v", name, err)
 					continue
 				}
-				log.Printf("  reconciled org %s to Keycloak ID %s", name, *kcOrg.ID)
+				log.Printf("  reconciled org %s (Keycloak ID %s)", name, *kcOrg.ID)
 			}
 			continue
 		}

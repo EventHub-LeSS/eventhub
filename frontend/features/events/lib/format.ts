@@ -1,6 +1,8 @@
 /** Shown in place of a missing value, so no cell renders as a blank gap. */
 export const EMPTY_VALUE = "—"
 
+export const EVENT_TIME_ZONE = "Europe/Berlin"
+
 /**
  * Locale and time zone are pinned, so the output does not depend on the server.
  * Events are shown in their local time.
@@ -8,7 +10,7 @@ export const EMPTY_VALUE = "—"
 const eventDateTimeFormat = new Intl.DateTimeFormat("de-DE", {
   dateStyle: "medium",
   timeStyle: "short",
-  timeZone: "Europe/Berlin",
+  timeZone: EVENT_TIME_ZONE,
 })
 
 const eventPriceFormat = new Intl.NumberFormat("de-DE", {

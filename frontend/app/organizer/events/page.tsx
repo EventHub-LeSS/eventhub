@@ -46,7 +46,7 @@ export default async function OrganizerDraftsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-6">
+    <div className="mx-auto flex w-full max-w-screen-xl flex-1 flex-col gap-4 p-6">
       <div>
         <Button
           render={<Link href="/organizer" />}

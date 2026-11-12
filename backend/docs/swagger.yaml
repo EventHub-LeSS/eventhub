@@ -650,6 +650,20 @@ definitions:
       time:
         type: string
     type: object
+  model.InviteOrganizationMemberRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+    required:
+    - email
+    type: object
+  model.InviteOrganizationMemberResponse:
+    properties:
+      message:
+        type: string
+    type: object
   model.LocationInput:
     properties:
       accessible:
@@ -868,6 +882,23 @@ definitions:
       street:
         type: string
       updatedAt:
+        type: string
+    type: object
+  model.OrganizationMemberResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      joinedAt:
+        type: string
+      name:
+        type: string
+      rights:
+        items:
+          $ref: '#/definitions/model.OrganizationRole'
+        type: array
+      username:
         type: string
     type: object
   model.OrganizationModel:
@@ -1548,8 +1579,8 @@ paths:
       - organizations
   /admin/organizer-applications:
     get:
-      description: Requires the global admin role or the org_admin role in any organization.
-        Oldest first, so reviewers work through the queue.
+      description: Requires the global admin role. Oldest first, so reviewers work
+        through the queue.
       parameters:
       - description: Review state
         enum:
@@ -1602,7 +1633,7 @@ paths:
       - organizer-applications
   /admin/organizer-applications/{applicationId}:
     get:
-      description: Requires the global admin role or the org_admin role in any organization.
+      description: Requires the global admin role.
       parameters:
       - description: Application UUID
         in: path
@@ -1645,13 +1676,13 @@ paths:
     post:
       consumes:
       - application/json
-      description: Requires the global admin role or the org_admin role in any organization;
-        reviewers cannot approve their own application (403). Creates the requested
-        organization with the backend service account in Keycloak and in the API database
-        with the applicant as org_admin, marks the application approved, records the
-        decision in the audit log of the new organization and notifies the applicant.
-        An optional reason (at most 1000 characters) is passed on to the applicant.
-        The applicant sees the organization after logging in again.
+      description: Requires the global admin role; reviewers cannot approve their
+        own application (403). Creates the requested organization with the backend
+        service account in Keycloak and in the API database with the applicant as
+        org_admin, marks the application approved, records the decision in the audit
+        log of the new organization and notifies the applicant. An optional reason
+        (at most 1000 characters) is passed on to the applicant. The applicant sees
+        the organization after logging in again.
       parameters:
       - description: Application UUID
         in: path
@@ -1703,10 +1734,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Requires the global admin role or the org_admin role in any organization;
-        reviewers cannot reject their own application (403). Requires a reason of
-        1-1000 characters after trimming, which the applicant is told. The decision
-        is recorded in the platform audit log.
+      description: Requires the global admin role; reviewers cannot reject their own
+        application (403). Requires a reason of 1-1000 characters after trimming,
+        which the applicant is told. The decision is recorded in the platform audit
+        log.
       parameters:
       - description: Application UUID
         in: path
@@ -4036,6 +4067,46 @@ paths:
       summary: Get organization sales dashboard
       tags:
       - organizations
+  /organizations/{organizationID}/members:
+    get:
+      description: Returns members and their organization roles. Requires the org_admin
+        role in the organization (global admins bypass this check).
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.OrganizationMemberResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List organization members
+      tags:
+      - organizations
   /organizations/{organizationID}/members/{username}/roles:
     put:
       consumes:
@@ -4102,6 +4173,60 @@ paths:
       summary: Configure organization member roles
       tags:
       - organizations
+  /organizations/{organizationID}/members/invitations:
+    post:
+      consumes:
+      - application/json
+      description: Sends an invitation to join the organization. Requires the org_admin
+        role in the organization (global admins bypass this check).
+      parameters:
+      - description: Keycloak organization ID or Alias
+        in: path
+        name: organizationID
+        required: true
+        type: string
+      - description: Member invitation
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.InviteOrganizationMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/model.InviteOrganizationMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/model.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Invite an organization member
+      tags:
+      - organizations
   /organizations/{organizationID}/rating-summary:
     get:
       description: Public average of unrounded event averages, with equal weight per
@@ -4143,10 +4268,10 @@ paths:
       consumes:
       - application/json
       description: Contact form of the authenticated user to become an organizer.
-        The application waits for review by a global admin or an org admin of any
-        organization; approval creates the organization with the applicant as org_admin.
-        Only one application per user can be pending. The alias must be 3-50 lowercase
-        letters, digits or hyphens and start and end with a letter or digit.
+        The application waits for review by a global admin; approval creates the organization
+        with the applicant as org_admin. Only one application per user can be pending.
+        The alias must be 3-50 lowercase letters, digits or hyphens and start and
+        end with a letter or digit.
       parameters:
       - description: Contact form
         in: body
