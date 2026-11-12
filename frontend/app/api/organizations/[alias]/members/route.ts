@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSession, requireSession } from "@/features/auth";
-import {
-  KeycloakAdminError,
-  resolveOrganizationId,
-  getOrganizationMembersWithRights,
-  inviteOrganizationMember,
-} from "@/features/organizations";
+import { envConfig } from "@/features/shared/lib/env";
 
 export async function GET(
   _request: Request,
@@ -31,22 +26,37 @@ export async function GET(
     );
   }
 
+  let response: Response;
   try {
-    const organizationId = await resolveOrganizationId(session.accessToken, alias);
-    const members = await getOrganizationMembersWithRights(
-      session.accessToken,
-      organizationId,
+    response = await fetch(
+      `${envConfig.apiBaseUrl}/organizations/${encodeURIComponent(alias)}/members`,
+      {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+        cache: "no-store",
+      },
     );
-    return NextResponse.json(members);
   } catch (error) {
-    if (error instanceof KeycloakAdminError) {
-      return NextResponse.json(
-        { error: { code: "KEYCLOAK_ERROR", message: error.message } },
-        { status: error.status === 404 ? 404 : error.status },
-      );
-    }
-    throw error;
+    console.error("Failed to fetch organization members", error);
+    return NextResponse.json(
+      { error: { code: "BAD_GATEWAY", message: "Mitglieder konnten nicht geladen werden" } },
+      { status: 502 },
+    );
   }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return NextResponse.json(
+      { error: { code: "BAD_GATEWAY", message: "Die Mitgliederantwort war ungültig" } },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(body, {
+    status: response.status,
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(
@@ -72,8 +82,17 @@ export async function POST(
     );
   }
 
-  const payload = (await request.json()) as { email?: string; name?: string };
-  const email = payload.email?.trim();
+  let payload: { email?: unknown; name?: unknown };
+  try {
+    payload = (await request.json()) as { email?: unknown; name?: unknown };
+  } catch {
+    return NextResponse.json(
+      { error: { code: "VALIDATION_ERROR", message: "Die Anfrage muss gültiges JSON enthalten" } },
+      { status: 400 },
+    );
+  }
+
+  const email = typeof payload.email === "string" ? payload.email.trim() : "";
 
   if (!email) {
     return NextResponse.json(
@@ -82,22 +101,41 @@ export async function POST(
     );
   }
 
+  const name = typeof payload.name === "string" ? payload.name.trim() : "";
+  let response: Response;
   try {
-    const organizationId = await resolveOrganizationId(session.accessToken, alias);
-    await inviteOrganizationMember(
-      session.accessToken,
-      organizationId,
-      email,
-      payload.name,
+    response = await fetch(
+      `${envConfig.apiBaseUrl}/organizations/${encodeURIComponent(alias)}/members/invitations`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, ...(name ? { name } : {}) }),
+        cache: "no-store",
+      },
     );
-    return NextResponse.json({ message: "invitation sent" }, { status: 202 });
   } catch (error) {
-    if (error instanceof KeycloakAdminError) {
-      return NextResponse.json(
-        { error: { code: "KEYCLOAK_ERROR", message: error.message } },
-        { status: error.status === 404 ? 404 : error.status },
-      );
-    }
-    throw error;
+    console.error("Failed to send organization invitation", error);
+    return NextResponse.json(
+      { error: { code: "BAD_GATEWAY", message: "Die Einladung konnte nicht gesendet werden" } },
+      { status: 502 },
+    );
   }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return NextResponse.json(
+      { error: { code: "BAD_GATEWAY", message: "Die Einladungsantwort war ungültig" } },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json(body, {
+    status: response.status,
+    headers: { "Cache-Control": "no-store" },
+  });
 }

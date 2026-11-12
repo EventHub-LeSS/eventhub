@@ -43,6 +43,24 @@ func OrganizationRoleNames() []string {
 	return names
 }
 
+type OrganizationMemberResponse struct {
+	ID       string             `json:"id"`
+	Username string             `json:"username"`
+	Name     string             `json:"name"`
+	Email    string             `json:"email"`
+	JoinedAt *time.Time         `json:"joinedAt"`
+	Rights   []OrganizationRole `json:"rights"`
+}
+
+type InviteOrganizationMemberRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Name  string `json:"name,omitempty"`
+}
+
+type InviteOrganizationMemberResponse struct {
+	Message string `json:"message"`
+}
+
 type CreateOrganizationRequest struct {
 	InternalName       string  `json:"name" binding:"required"`
 	DisplayName        string  `json:"alias" binding:"required"`

@@ -30,6 +30,79 @@ func auditCtx() context.Context {
 	})
 }
 
+func TestListOrganizationMembers_IncludesCallerAndOrganizationRoles(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	members, err := kc.ListOrganizationMembers(context.Background(), "alias-1", "u-alice", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("got %d members, want 2: %+v", len(members), members)
+	}
+
+	var alice *model.OrganizationMemberResponse
+	for i := range members {
+		if members[i].ID == "u-alice" {
+			alice = &members[i]
+			break
+		}
+	}
+	if alice == nil {
+		t.Fatal("organization admin must see their own membership")
+	}
+	if alice.Username != "alice" || alice.Name != "A Member" || alice.Email != "alice@example.com" {
+		t.Errorf("unexpected member profile: %+v", alice)
+	}
+	if len(alice.Rights) != 1 || alice.Rights[0] != model.RoleOrganizationAdmin {
+		t.Errorf("alice roles = %v, want [org_admin]", alice.Rights)
+	}
+	if alice.JoinedAt == nil || !alice.JoinedAt.Equal(time.UnixMilli(1700000000000).UTC()) {
+		t.Errorf("alice joinedAt = %v, want the Keycloak created timestamp", alice.JoinedAt)
+	}
+}
+
+func TestListOrganizationMembers_RequiresCurrentOrganizationAdmin(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	_, err := kc.ListOrganizationMembers(context.Background(), "org-1", "u-bob", false)
+	if !errors.Is(err, service.ErrActorNotOrgAdmin) {
+		t.Fatalf("err = %v, want ErrActorNotOrgAdmin", err)
+	}
+}
+
+func TestInviteOrganizationMember_UsesServiceAccountAndChecksOrgAdmin(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	err := kc.InviteOrganizationMember(context.Background(), "alias-1", "u-alice", "organizer@example.com", "Local Test Invitee", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fake.Invitations) != 1 {
+		t.Fatalf("got %d invitations, want 1", len(fake.Invitations))
+	}
+	invitation := fake.Invitations[0]
+	if invitation.OrganizationID != "org-1" || invitation.Email != "organizer@example.com" || invitation.FirstName != "Local" || invitation.LastName != "Test Invitee" {
+		t.Errorf("unexpected invitation payload: %+v", invitation)
+	}
+}
+
+func TestInviteOrganizationMember_RejectsCallerWithoutOrgAdmin(t *testing.T) {
+	fake := keycloakmock.New()
+	kc := fake.KeycloakService(t)
+
+	err := kc.InviteOrganizationMember(context.Background(), "org-1", "u-bob", "organizer@example.com", "", false)
+	if !errors.Is(err, service.ErrActorNotOrgAdmin) {
+		t.Fatalf("err = %v, want ErrActorNotOrgAdmin", err)
+	}
+	if len(fake.Invitations) != 0 {
+		t.Errorf("non-admin created invitations: %+v", fake.Invitations)
+	}
+}
+
 func TestConfigureOrganizationMemberRoles_GrantsAndRevokesRoles(t *testing.T) {
 	fake := keycloakmock.New()
 	kc := fake.KeycloakService(t)
