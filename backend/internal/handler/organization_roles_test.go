@@ -185,6 +185,24 @@ func TestInviteOrganizationMember_OrgAdminCanInvite(t *testing.T) {
 	}
 }
 
+func TestInviteOrganizationMember_KeycloakFailureUsesInvitationError(t *testing.T) {
+	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleOrganizationAdmin))
+	fake.FailAdminRequest = func(method, path string) bool {
+		return method == http.MethodPost && strings.HasSuffix(path, "/members/invite-user")
+	}
+
+	rec := postOrganizationInvitation(t, router, "org-1", "new-member@example.com", "New Member")
+	wantProblem(t, rec, http.StatusInternalServerError)
+
+	var problem model.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("unmarshal problem: %v", err)
+	}
+	if problem.Detail != "failed to send organization invitation" {
+		t.Errorf("detail = %q, want invitation-specific error", problem.Detail)
+	}
+}
+
 func TestInviteOrganizationMember_ForbiddenWithoutOrgAdminRole(t *testing.T) {
 	router, fake := newOrgRolesRouter(t, orgRolesPrincipal("org-1", middleware.RoleEventManager))
 
