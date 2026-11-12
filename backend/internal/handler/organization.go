@@ -267,7 +267,7 @@ func (h *OrganizationHandler) InviteOrganizationMember(c *gin.Context) {
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	if err := h.keycloakService.InviteOrganizationMember(c.Request.Context(), org.ID, principal.Subject, req.Email, req.Name, globalAdmin); err != nil {
-		writeOrgRolesError(c, err)
+		writeOrganizationInvitationError(c, err)
 		return
 	}
 	c.JSON(http.StatusAccepted, model.InviteOrganizationMemberResponse{Message: "invitation sent"})
@@ -520,6 +520,21 @@ func writeOrgRolesError(c *gin.Context, err error) {
 		writeProblem(c, http.StatusInternalServerError, err.Error())
 	default:
 		writeProblem(c, http.StatusInternalServerError, "failed to configure organization roles, the request is safe to retry")
+	}
+}
+
+func writeOrganizationInvitationError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrActorNotOrgAdmin):
+		middleware.AbortForbidden(c)
+	case errors.Is(err, service.ErrOrganizationNotFound):
+		writeProblem(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrOrganizationInvitationExists):
+		writeProblem(c, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrOrgGroupsMissing):
+		writeProblem(c, http.StatusInternalServerError, err.Error())
+	default:
+		writeProblem(c, http.StatusInternalServerError, "failed to send organization invitation")
 	}
 }
 
