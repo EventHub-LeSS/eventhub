@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { CheckCircle2Icon, ClockIcon, XCircleIcon } from "lucide-react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
-import slugify from "slugify"
+import { CheckCircle2Icon, ClockIcon, XCircleIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import slugify from "slugify";
 
 import {
   useMyOrganizerApplications,
   useSubmitOrganizerApplication,
-} from "@/features/organizations/lib/api"
+} from "@/features/organizations/lib/api";
 import {
   emptyApplicationDraft,
   MAX_APPLICATION_MESSAGE_LENGTH,
@@ -19,9 +19,9 @@ import {
   type ApplicationDraftErrors,
   type OrganizerApplication,
   type OrganizerApplicationDraft,
-} from "@/features/organizations/lib/applications"
-import { Badge } from "@/features/shared/components/ui/badge"
-import { Button } from "@/features/shared/components/ui/button"
+} from "@/features/organizations/lib/applications";
+import { Badge } from "@/features/shared/components/ui/badge";
+import { Button } from "@/features/shared/components/ui/button";
 import {
   Field,
   FieldDescription,
@@ -29,13 +29,14 @@ import {
   FieldLabel,
   FieldLegend,
   FieldSet,
-} from "@/features/shared/components/ui/field"
-import { Input } from "@/features/shared/components/ui/input"
-import { Textarea } from "@/features/shared/components/ui/textarea"
-import { toast } from "@/features/shared/components/ui/toast"
+} from "@/features/shared/components/ui/field";
+import { Input } from "@/features/shared/components/ui/input";
+import { Textarea } from "@/features/shared/components/ui/textarea";
+import { toast } from "@/features/shared/components/ui/toast";
 
 interface CreateOrganizationFormProps {
-  defaultOrgAdmin?: string
+  defaultOrgAdmin?: string;
+  sessionOrganizations?: string[];
 }
 
 /**
@@ -46,7 +47,7 @@ function RequiredMark() {
     <span aria-hidden="true" className="text-destructive">
       *
     </span>
-  )
+  );
 }
 
 function formatDateTime(value: string) {
@@ -54,28 +55,34 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Europe/Berlin",
-  }).format(new Date(value))
+  }).format(new Date(value));
 }
 
 function formatAddress(application: OrganizerApplication) {
   const streetLine = [application.street, application.houseNumber]
     .filter(Boolean)
-    .join(" ")
+    .join(" ");
   const cityLine = [application.postalCode, application.city]
     .filter(Boolean)
-    .join(" ")
+    .join(" ");
   return [streetLine, cityLine, application.countryCode]
     .filter(Boolean)
-    .join(", ")
+    .join(", ");
 }
 
 export function OwnOrganizerApplicationsList({
   applications,
+  sessionOrganizations = [],
 }: {
-  applications: OrganizerApplication[]
+  applications: OrganizerApplication[];
+  /**
+   * Organization aliases in the current session token. An approved organization
+   * is only usable once it appears here, which requires a fresh login.
+   */
+  sessionOrganizations?: string[];
 }) {
   if (applications.length === 0) {
-    return null
+    return null;
   }
 
   return (
@@ -91,7 +98,7 @@ export function OwnOrganizerApplicationsList({
         aria-label="Eingereichte Veranstalteranträge"
       >
         {applications.map((item) => {
-          const address = formatAddress(item)
+          const address = formatAddress(item);
           return (
             <li
               key={item.applicationId}
@@ -158,14 +165,33 @@ export function OwnOrganizerApplicationsList({
                       </span>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link href="/organization" />}
-                    nativeButton={false}
-                  >
-                    Zur Organisation
-                  </Button>
+                  {sessionOrganizations.includes(item.organizationAlias) ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href="/organization" />}
+                      nativeButton={false}
+                    >
+                      Zur Organisation
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col items-start gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        Melde dich erneut an, um auf deine Organisation
+                        zuzugreifen.
+                      </span>
+                      <form method="get" action="/api/auth/login">
+                        <input
+                          type="hidden"
+                          name="returnTo"
+                          value="/organization"
+                        />
+                        <Button type="submit" variant="outline" size="sm">
+                          Erneut anmelden
+                        </Button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               )}
               {item.status === "rejected" && (
@@ -179,48 +205,49 @@ export function OwnOrganizerApplicationsList({
                 </div>
               )}
             </li>
-          )
+          );
         })}
       </ul>
     </section>
-  )
+  );
 }
 
 export function CreateOrganizationForm({
   defaultOrgAdmin = "",
+  sessionOrganizations = [],
 }: CreateOrganizationFormProps) {
-  const router = useRouter()
+  const router = useRouter();
   const [draft, setDraft] = useState<OrganizerApplicationDraft>(() => ({
     ...emptyApplicationDraft,
     contactEmail: defaultOrgAdmin,
-  }))
-  const [errors, setErrors] = useState<ApplicationDraftErrors>({})
-  const [aliasEdited, setAliasEdited] = useState(false)
-  const applicationsQuery = useMyOrganizerApplications()
-  const submitApplication = useSubmitOrganizerApplication()
+  }));
+  const [errors, setErrors] = useState<ApplicationDraftErrors>({});
+  const [aliasEdited, setAliasEdited] = useState(false);
+  const applicationsQuery = useMyOrganizerApplications();
+  const submitApplication = useSubmitOrganizerApplication();
 
-  const applications = applicationsQuery.data ?? []
+  const applications = applicationsQuery.data ?? [];
   const pendingApplication = applications.find(
-    (item) => item.status === "pending"
-  )
-  const messageLength = Array.from(draft.message.trim()).length
+    (item) => item.status === "pending",
+  );
+  const messageLength = Array.from(draft.message.trim()).length;
 
   function update<K extends keyof OrganizerApplicationDraft>(
     key: K,
-    value: OrganizerApplicationDraft[K]
+    value: OrganizerApplicationDraft[K],
   ) {
-    setDraft((current) => ({ ...current, [key]: value }))
-    setErrors((current) => ({ ...current, [key]: undefined }))
+    setDraft((current) => ({ ...current, [key]: value }));
+    setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
 
-    const found = validateApplicationDraft(draft)
-    setErrors(found)
+    const found = validateApplicationDraft(draft);
+    setErrors(found);
 
     if (Object.keys(found).length > 0) {
-      return
+      return;
     }
 
     submitApplication.mutate(toApplicationPayload(draft), {
@@ -229,16 +256,16 @@ export function CreateOrganizationForm({
           type: "success",
           title: "Antrag erfolgreich eingereicht",
           description: `Deine Anfrage für „${created.organizationName}" wartet nun auf die Freigabe durch einen Administrator.`,
-        })
+        });
         setDraft({
           ...emptyApplicationDraft,
           contactEmail: defaultOrgAdmin,
-        })
-        setErrors({})
-        setAliasEdited(false)
-        router.refresh()
+        });
+        setErrors({});
+        setAliasEdited(false);
+        router.refresh();
       },
-    })
+    });
   }
 
   return (
@@ -276,14 +303,14 @@ export function CreateOrganizationForm({
               autoComplete="off"
               aria-invalid={Boolean(errors.organizationName)}
               onChange={(event) => {
-                const value = event.target.value
-                update("organizationName", value)
+                const value = event.target.value;
+                update("organizationName", value);
 
                 if (!aliasEdited) {
                   update(
                     "organizationAlias",
-                    slugify(value, { lower: true, strict: true })
-                  )
+                    slugify(value, { lower: true, strict: true }),
+                  );
                 }
               }}
             />
@@ -306,8 +333,8 @@ export function CreateOrganizationForm({
               autoComplete="off"
               aria-invalid={Boolean(errors.organizationAlias)}
               onChange={(event) => {
-                setAliasEdited(true)
-                update("organizationAlias", event.target.value)
+                setAliasEdited(true);
+                update("organizationAlias", event.target.value);
               }}
             />
             <FieldDescription>
@@ -525,10 +552,10 @@ export function CreateOrganizationForm({
               setDraft({
                 ...emptyApplicationDraft,
                 contactEmail: defaultOrgAdmin,
-              })
-              setErrors({})
-              setAliasEdited(false)
-              submitApplication.reset()
+              });
+              setErrors({});
+              setAliasEdited(false);
+              submitApplication.reset();
             }}
           >
             Zurücksetzen
@@ -536,7 +563,10 @@ export function CreateOrganizationForm({
         </div>
       </form>
 
-      <OwnOrganizerApplicationsList applications={applications} />
+      <OwnOrganizerApplicationsList
+        applications={applications}
+        sessionOrganizations={sessionOrganizations}
+      />
     </div>
-  )
+  );
 }
