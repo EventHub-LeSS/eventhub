@@ -115,18 +115,57 @@ func TestEnsureUserForPrincipalSkipsKnownAndUnknownUsers(t *testing.T) {
 	repo := &userResolutionRepoStub{bySubject: known}
 	profiles := &userProfileStub{}
 	roles := &roleAssignerStub{}
-	resolved, err := EnsureUserForPrincipal(context.Background(), repo, profiles, roles, &Principal{Subject: "subject"})
+
+	// A token that carries a global role disqualifies the user from the grant: the admin page
+	// manages a single global role per user, and no Keycloak lookup is needed.
+	principal := &Principal{Subject: "subject", GlobalRoles: map[GlobalRole]struct{}{RoleModerator: {}}}
+	resolved, err := EnsureUserForPrincipal(context.Background(), repo, profiles, roles, principal)
 	if err != nil || resolved != known || profiles.calls != 0 || repo.created != nil {
-		t.Fatalf("known user: got %v, %v, %d profile calls, created %v", resolved, err, profiles.calls, repo.created)
+		t.Fatalf("known user with role in token: got %v, %v, %d profile calls, created %v", resolved, err, profiles.calls, repo.created)
 	}
 	if len(roles.calls) != 0 {
-		t.Fatalf("known user received %d default role grants, want 0", len(roles.calls))
+		t.Fatalf("known user with role in token received %d default role grants, want 0", len(roles.calls))
+	}
+
+	// Accounts the startup sync created before their first request carry a roleless token and
+	// receive the default global role like freshly provisioned users (EVENTHUB-299).
+	roles = &roleAssignerStub{}
+	resolved, err = EnsureUserForPrincipal(context.Background(), repo, profiles, roles, &Principal{Subject: "subject"})
+	if err != nil || resolved != known || profiles.calls != 0 || repo.created != nil {
+		t.Fatalf("known user with roleless token: got %v, %v, %d profile calls, created %v", resolved, err, profiles.calls, repo.created)
+	}
+	if len(roles.calls) != 1 || roles.calls[0] != "subject" {
+		t.Fatalf("default role grants = %v, want exactly one for subject", roles.calls)
 	}
 
 	repo = &userResolutionRepoStub{}
+	roles = &roleAssignerStub{}
 	resolved, err = EnsureUserForPrincipal(context.Background(), repo, profiles, roles, &Principal{Subject: "missing"})
 	if err != nil || resolved != nil || repo.created != nil {
 		t.Fatalf("user missing in Keycloak: got %v, %v, created %v", resolved, err, repo.created)
+	}
+	if len(roles.calls) != 0 {
+		t.Fatalf("unknown user received %d default role grants, want 0", len(roles.calls))
+	}
+}
+
+func TestEnsureUserForPrincipalSkipsGrantWhenTokenCarriesGlobalRole(t *testing.T) {
+	repo := &userResolutionRepoStub{}
+	profiles := &userProfileStub{profile: &model.UserModel{KeycloakUserID: "new-subject", FirstName: "New", LastName: "User", Email: "new@example.com"}}
+	roles := &roleAssignerStub{}
+	// A user provisioned while their token already carries a global role (e.g. an admin assigned
+	// the moderator role before the user's first request) keeps exactly their roles.
+	principal := &Principal{Subject: "new-subject", Username: "new@example.com", GlobalRoles: map[GlobalRole]struct{}{RoleModerator: {}}}
+
+	resolved, err := EnsureUserForPrincipal(context.Background(), repo, profiles, roles, principal)
+	if err != nil {
+		t.Fatalf("EnsureUserForPrincipal() error = %v", err)
+	}
+	if resolved == nil || repo.created != resolved {
+		t.Fatalf("EnsureUserForPrincipal() = %#v, want provisioned user", resolved)
+	}
+	if len(roles.calls) != 0 {
+		t.Fatalf("default role grants = %v, want 0", roles.calls)
 	}
 }
 

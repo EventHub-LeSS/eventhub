@@ -42,7 +42,8 @@ func (s *Seeder) SeedAll(ctx context.Context, realm, token string) error {
 
 // SyncDB mirrors Keycloak state into the API database: users and organizations
 // that exist in Keycloak are created or reconciled (Keycloak ID, alias, name,
-// memberships) in the database. It never deletes database rows. The API runs
+// memberships) in the database, and every user holding no global role receives
+// the default global role. It never deletes database rows. The API runs
 // it at startup so realm-file changes applied by the Keycloak realm-sync reach
 // the database without a manual seed run.
 func (s *Seeder) SyncDB(ctx context.Context, realm, token string) error {
@@ -83,6 +84,16 @@ func (s *Seeder) syncDB(ctx context.Context, realm, token string) error {
 			continue
 		}
 		usersSynced++
+	}
+
+	// Accounts the sync creates receive their default global role right away, so every user of
+	// the realm starts with a visible role on the admin permissions page without a seed run
+	// (EVENTHUB-299). The grant is idempotent and re-runs are no-ops.
+	seededRoles, err := s.kc.EnsureDefaultGlobalRoles(ctx, token)
+	if err != nil {
+		log.Printf("  skip default global role grant: %v", err)
+	} else if seededRoles > 0 {
+		log.Printf("  granted the default global role to %d user(s)", seededRoles)
 	}
 
 	kcOrgs, err := s.kc.GetAllOrganizations(ctx, token)

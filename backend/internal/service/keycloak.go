@@ -483,8 +483,7 @@ func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clie
 		if role == nil || role.Name == nil || *role.Name == "" {
 			continue
 		}
-		switch *role.Name {
-		case "admin", "moderator", "visitor":
+		if isGlobalRole(*role.Name) {
 			selected = append(selected, *role.Name)
 		}
 	}
@@ -493,12 +492,29 @@ func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clie
 }
 
 // DefaultGlobalRole is the global role every user of the user realm receives: provisioning
-// grants it to newly registered users and the seeder grants it to users without any global role.
+// grants it to users whose token carries no global role, the startup sync and the seeder grant
+// it to users without any global role.
 const DefaultGlobalRole = "visitor"
 
-// EnsureDefaultGlobalRole grants the default global role to a user unless they hold it already.
-// It runs when the API provisions a newly registered Keycloak user, so every account starts
-// with a visible role on the admin permissions page (EVENTHUB-299).
+// globalRoles lists every global role a user of the user realm may hold. The default role
+// completes the set, so "holds no global role at all" is testable everywhere: users holding
+// any of these roles keep exactly their roles (EVENTHUB-299).
+var globalRoles = []string{"admin", "moderator", DefaultGlobalRole}
+
+// isGlobalRole reports whether name is a global role users may hold.
+func isGlobalRole(name string) bool {
+	for _, roleName := range globalRoles {
+		if roleName == name {
+			return true
+		}
+	}
+	return false
+}
+
+// EnsureDefaultGlobalRole grants the default global role to a user unless they hold any global
+// role already: admins and moderators keep exactly their roles, the UI manages a single global
+// role per user. It runs when the API provisions a Keycloak user whose token carries no global
+// role, so every account starts with a visible role on the admin permissions page (EVENTHUB-299).
 func (k *KeycloakService) EnsureDefaultGlobalRole(ctx context.Context, keycloakUserID string) (err error) {
 	accessToken, err := k.adminToken(ctx)
 	if err != nil {
@@ -513,8 +529,10 @@ func (k *KeycloakService) EnsureDefaultGlobalRole(ctx context.Context, keycloakU
 	if err != nil {
 		return fmt.Errorf("read existing roles for %s: %w", keycloakUserID, err)
 	}
+	// The token may be stale (granted before an admin assigned the user a global role), so the
+	// check reads the current roles instead of trusting the request's token alone.
 	for _, role := range currentRoles {
-		if role != nil && role.Name != nil && *role.Name == DefaultGlobalRole {
+		if role != nil && role.Name != nil && isGlobalRole(*role.Name) {
 			return nil
 		}
 	}
@@ -543,7 +561,7 @@ func (k *KeycloakService) EnsureDefaultGlobalRoles(ctx context.Context, accessTo
 		return 0, fmt.Errorf("resolve backend client id: %w", err)
 	}
 	withRole := make(map[string]struct{})
-	for _, roleName := range []string{"admin", "moderator", DefaultGlobalRole} {
+	for _, roleName := range globalRoles {
 		ids, err := k.userIDsOfClientRole(ctx, accessToken, clientID, roleName)
 		if err != nil {
 			return 0, err
@@ -644,7 +662,10 @@ func (k *KeycloakService) SetUserGlobalRoles(ctx context.Context, keycloakUserID
 	unlock := lockGlobalRoleUpdate(k.cfg.UserRealm, clientID)
 	defer unlock()
 
-	allowed := map[string]struct{}{"admin": {}, "moderator": {}, "visitor": {}}
+	allowed := make(map[string]struct{}, len(globalRoles))
+	for _, name := range globalRoles {
+		allowed[name] = struct{}{}
+	}
 	for _, name := range desired {
 		if _, ok := allowed[name]; !ok {
 			return nil, fmt.Errorf("unsupported role %q", name)
