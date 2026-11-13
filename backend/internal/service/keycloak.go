@@ -492,6 +492,129 @@ func (k *KeycloakService) userGlobalRoles(ctx context.Context, accessToken, clie
 	return selected, nil
 }
 
+// DefaultGlobalRole is the global role every user of the user realm receives: provisioning
+// grants it to newly registered users and the seeder grants it to users without any global role.
+const DefaultGlobalRole = "visitor"
+
+// EnsureDefaultGlobalRole grants the default global role to a user unless they hold it already.
+// It runs when the API provisions a newly registered Keycloak user, so every account starts
+// with a visible role on the admin permissions page (EVENTHUB-299).
+func (k *KeycloakService) EnsureDefaultGlobalRole(ctx context.Context, keycloakUserID string) (err error) {
+	accessToken, err := k.adminToken(ctx)
+	if err != nil {
+		return fmt.Errorf("fetch admin token: %w", err)
+	}
+	defer func() { k.dropAdminTokenIfRejected(err) }()
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return fmt.Errorf("resolve backend client id: %w", err)
+	}
+	currentRoles, err := k.client.GetClientRolesByUserID(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID)
+	if err != nil {
+		return fmt.Errorf("read existing roles for %s: %w", keycloakUserID, err)
+	}
+	for _, role := range currentRoles {
+		if role != nil && role.Name != nil && *role.Name == DefaultGlobalRole {
+			return nil
+		}
+	}
+	role, err := k.defaultGlobalRole(ctx, accessToken, clientID)
+	if err != nil {
+		return err
+	}
+	if err := k.client.AddClientRolesToUser(ctx, accessToken, k.cfg.UserRealm, clientID, keycloakUserID, []gocloak.Role{*role}); err != nil {
+		return fmt.Errorf("add default role to user: %w", err)
+	}
+	return nil
+}
+
+// EnsureDefaultGlobalRoles grants the default global role to every user of the user realm that
+// holds no global role at all, so realms seeded before the role existed converge on the same
+// state as freshly seeded ones (EVENTHUB-299). Users with any global role, e.g. admin, keep
+// exactly their roles; users without an email address (service accounts) are skipped.
+// Reports how many users received the role.
+func (k *KeycloakService) EnsureDefaultGlobalRoles(ctx context.Context, accessToken string) (count int, err error) {
+	users, err := k.GetAllUsers(ctx, accessToken)
+	if err != nil {
+		return 0, fmt.Errorf("list users: %w", err)
+	}
+	clientID, err := k.backendClientID(ctx, accessToken)
+	if err != nil {
+		return 0, fmt.Errorf("resolve backend client id: %w", err)
+	}
+	withRole := make(map[string]struct{})
+	for _, roleName := range []string{"admin", "moderator", DefaultGlobalRole} {
+		ids, err := k.userIDsOfClientRole(ctx, accessToken, clientID, roleName)
+		if err != nil {
+			return 0, err
+		}
+		for _, id := range ids {
+			withRole[id] = struct{}{}
+		}
+	}
+	var defaultRole *gocloak.Role
+	for _, user := range users {
+		if user == nil || user.ID == nil || *user.ID == "" {
+			continue
+		}
+		// Service accounts have no email address; the default role is meant for real users.
+		if user.Email == nil || *user.Email == "" {
+			continue
+		}
+		if _, ok := withRole[*user.ID]; ok {
+			continue
+		}
+		if defaultRole == nil {
+			defaultRole, err = k.defaultGlobalRole(ctx, accessToken, clientID)
+			if err != nil {
+				return count, err
+			}
+		}
+		if err := k.client.AddClientRolesToUser(ctx, accessToken, k.cfg.UserRealm, clientID, *user.ID, []gocloak.Role{*defaultRole}); err != nil {
+			return count, fmt.Errorf("add default role to user %s: %w", *user.ID, err)
+		}
+		count++
+	}
+	return count, nil
+}
+
+func (k *KeycloakService) userIDsOfClientRole(ctx context.Context, accessToken, clientID, roleName string) ([]string, error) {
+	maxResults := 100
+	first := 0
+	var ids []string
+	for {
+		users, err := k.client.GetUsersByClientRoleName(ctx, accessToken, k.cfg.UserRealm, clientID, roleName, gocloak.GetUsersByRoleParams{
+			First: &first,
+			Max:   &maxResults,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list users with role %q: %w", roleName, err)
+		}
+		for _, user := range users {
+			if user != nil && user.ID != nil && *user.ID != "" {
+				ids = append(ids, *user.ID)
+			}
+		}
+		if len(users) < maxResults {
+			return ids, nil
+		}
+		first += maxResults
+	}
+}
+
+func (k *KeycloakService) defaultGlobalRole(ctx context.Context, accessToken, clientID string) (*gocloak.Role, error) {
+	roles, err := k.client.GetClientRoles(ctx, accessToken, k.cfg.UserRealm, clientID, gocloak.GetRoleParams{})
+	if err != nil {
+		return nil, fmt.Errorf("list available global roles: %w", err)
+	}
+	for _, role := range roles {
+		if role != nil && role.Name != nil && *role.Name == DefaultGlobalRole {
+			return role, nil
+		}
+	}
+	return nil, fmt.Errorf("role %q is missing in Keycloak", DefaultGlobalRole)
+}
+
 func lockGlobalRoleUpdate(realm, clientID string) func() {
 	key := realm + ":" + clientID
 	globalRoleUpdateLocksMu.Lock()

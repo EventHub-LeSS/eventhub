@@ -42,6 +42,9 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 	if err := s.seedUsers(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureDefaultGlobalRoles(ctx); err != nil {
+		return err
+	}
 	if err := s.seedOrganizations(ctx); err != nil {
 		return err
 	}
@@ -137,6 +140,20 @@ func (s *KeycloakSeeder) seedUsers(ctx context.Context) error {
 			return fmt.Errorf("create user %q: %w", mu.Username, err)
 		}
 		log.Printf("  created user %s", mu.Username)
+	}
+	return nil
+}
+
+// ensureDefaultGlobalRoles repairs realms seeded before the default global role existed: every
+// user that holds no global role at all receives it (EVENTHUB-299). Freshly seeded users are
+// covered by the same pass, so seeding does not need its own role assignment.
+func (s *KeycloakSeeder) ensureDefaultGlobalRoles(ctx context.Context) error {
+	updated, err := s.kc.EnsureDefaultGlobalRoles(ctx, s.token)
+	if err != nil {
+		return fmt.Errorf("ensure default global role: %w", err)
+	}
+	if updated > 0 {
+		log.Printf("keycloak: granted the default global role to %d user(s)", updated)
 	}
 	return nil
 }

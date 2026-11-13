@@ -146,7 +146,7 @@ func main() {
 		}
 
 		protected := v1.Group("")
-		protected.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService))
+		protected.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService, keycloakService))
 		protected.GET("/users/me", handler.CurrentUser)
 		protected.GET("/notifications", notificationHandler.ListNotificationsHandler)
 		protected.PATCH("/notifications/:notificationId/read", notificationHandler.MarkNotificationReadHandler)
@@ -247,7 +247,7 @@ func main() {
 	}
 	// Any signed-in user may request an organization. The row is inactive until an admin approves it.
 	orgs := v1.Group("/organizations")
-	orgs.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService))
+	orgs.Use(authenticator.Middleware(), middleware.ProvisionAPIUser(userRepo, keycloakService, keycloakService))
 	{
 		orgs.POST("/", orgHandler.CreateOrganization)
 	}

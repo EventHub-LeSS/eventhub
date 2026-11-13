@@ -43,9 +43,17 @@ func ResolveUserForPrincipal(userRepo repository.UserRepository, principal *Prin
 	return user, nil
 }
 
+// DefaultGlobalRoleAssigner grants a Keycloak user their default global role, e.g. the visitor
+// role every account starts with (EVENTHUB-299).
+type DefaultGlobalRoleAssigner interface {
+	EnsureDefaultGlobalRole(ctx context.Context, keycloakUserID string) error
+}
+
 // EnsureUserForPrincipal resolves the API user like ResolveUserForPrincipal and creates it from the
-// Keycloak profile when the user registered in Keycloak but is not yet known to the API.
-func EnsureUserForPrincipal(ctx context.Context, userRepo repository.UserRepository, profiles UserProfileSource, principal *Principal) (*model.UserModel, error) {
+// Keycloak profile when the user registered in Keycloak but is not yet known to the API. Freshly
+// provisioned users receive the default global role from the assigner; a failed grant is only
+// logged, the next seed run grants the role to users without any global role.
+func EnsureUserForPrincipal(ctx context.Context, userRepo repository.UserRepository, profiles UserProfileSource, roles DefaultGlobalRoleAssigner, principal *Principal) (*model.UserModel, error) {
 	user, err := ResolveUserForPrincipal(userRepo, principal)
 	if err != nil || user != nil || userRepo == nil || profiles == nil || principal == nil {
 		return user, err
@@ -69,16 +77,21 @@ func EnsureUserForPrincipal(ctx context.Context, userRepo repository.UserReposit
 		}
 		return nil, err
 	}
+	if roles != nil {
+		if err := roles.EnsureDefaultGlobalRole(ctx, principal.Subject); err != nil {
+			slog.Warn("default global role grant failed", "keycloak_user_id", principal.Subject, "error", err)
+		}
+	}
 	slog.Info("provisioned API user from Keycloak", "user_id", user.UserID, "keycloak_user_id", user.KeycloakUserID)
 	return user, nil
 }
 
 // ProvisionAPIUser makes sure an authenticated Keycloak user also exists in the API database.
 // Failures are only logged: handlers that need the API user report its absence themselves.
-func ProvisionAPIUser(userRepo repository.UserRepository, profiles UserProfileSource) gin.HandlerFunc {
+func ProvisionAPIUser(userRepo repository.UserRepository, profiles UserProfileSource, roles DefaultGlobalRoleAssigner) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if principal, ok := PrincipalFromContext(c); ok {
-			if _, err := EnsureUserForPrincipal(c.Request.Context(), userRepo, profiles, principal); err != nil {
+			if _, err := EnsureUserForPrincipal(c.Request.Context(), userRepo, profiles, roles, principal); err != nil {
 				slog.Error("API user provisioning failed", "keycloak_user_id", principal.Subject, "error", err)
 			}
 		}
