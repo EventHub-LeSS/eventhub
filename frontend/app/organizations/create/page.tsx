@@ -84,7 +84,10 @@ export default async function CreateOrganizationPage() {
               einzureichen.
             </p>
           </div>
-          <CreateOrganizationForm defaultOrgAdmin={user.email} />
+          <CreateOrganizationForm
+            defaultOrgAdmin={user.email}
+            sessionOrganizations={user.organizations}
+          />
         </div>
       </div>
     </main>
