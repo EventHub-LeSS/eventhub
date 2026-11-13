@@ -1,5 +1,6 @@
 import { ArrowLeftIcon } from "lucide-react"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { getSession, requireOrganizer } from "@/features/auth"
 import { DraftForm, getEventCatalog } from "@/features/events"
@@ -7,6 +8,10 @@ import { Button } from "@/features/shared/components/ui/button"
 
 export default async function NewEventDraftPage() {
   const user = await requireOrganizer()
+  // Creating events needs the event_manager role, the API refuses others.
+  if (!user.organizationRoles.includes("event_manager")) {
+    redirect("/organizer")
+  }
   const session = await getSession()
   const catalog = await getEventCatalog(session?.accessToken ?? "")
 
