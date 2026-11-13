@@ -1,6 +1,7 @@
 import { CirclePlusIcon, TicketsIcon } from "lucide-react"
 import Link from "next/link"
 
+import { getSession, requireOrganizer } from "@/features/auth"
 import {
   DashboardFilters,
   getDashboardReviews,
@@ -10,7 +11,6 @@ import {
   ReviewsDashboard,
   SalesDashboard,
 } from "@/features/events"
-import { getSession, requireOrganizer } from "@/features/auth"
 import { Button } from "@/features/shared/components/ui/button"
 import {
   Card,
@@ -40,7 +40,7 @@ interface CurrentUserResponse {
 
 async function getUserFinancialRights(
   accessToken: string,
-  organizationAlias: string,
+  organizationAlias: string
 ): Promise<{ canViewFinance: boolean }> {
   try {
     const response = await fetch(`${envConfig.apiBaseUrl}/users/me`, {
@@ -76,6 +76,8 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
   const session = await getSession()
   const filters = parseDashboardFilters(await searchParams)
   const dashboard = await getOrganizerDashboardData(filters)
+  // Creating events needs the event_manager role, the API refuses others.
+  const canManage = user.organizationRoles.includes("event_manager")
 
   const [{ canViewFinance }, reviews] = await Promise.all([
     user.activeOrganization && session?.accessToken
@@ -104,7 +106,7 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
           Meine Veranstaltungen
         </Button>
         {/* Creating events needs the event_manager role, the API refuses others. */}
-        {user.organizationRoles.includes("event_manager") && (
+        {canManage && (
           <Button
             render={<Link href="/organizer/events/new" />}
             nativeButton={false}
@@ -117,7 +119,8 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
 
       {dashboard.status === "unavailable" && (
         <p className="text-sm text-destructive">
-          Das Dashboard konnte gerade nicht geladen werden. Bitte versuche es später erneut.
+          Das Dashboard konnte gerade nicht geladen werden. Bitte versuche es
+          später erneut.
         </p>
       )}
 
@@ -136,14 +139,18 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
               Du hast noch keine Veranstaltungen
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Erstelle eine Veranstaltung, um Auslastung und Verkäufe zu verfolgen.
+              {canManage
+                ? "Erstelle eine Veranstaltung, um Auslastung und Verkäufe zu verfolgen."
+                : "Bitte deine Organisation, eine Veranstaltung anzulegen, um Auslastung und Verkäufe zu verfolgen."}
             </p>
-            <Button
-              render={<Link href="/organizer/events/new" />}
-              nativeButton={false}
-            >
-              Veranstaltung erstellen
-            </Button>
+            {canManage && (
+              <Button
+                render={<Link href="/organizer/events/new" />}
+                nativeButton={false}
+              >
+                Veranstaltung erstellen
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -157,7 +164,11 @@ export default async function OrganizerPage({ searchParams }: PageProps) {
         )}
 
       {dashboard.status === "ok" && dashboard.events.length > 0 && (
-        <div className={canViewFinance ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"}>
+        <div
+          className={
+            canViewFinance ? "grid gap-6 lg:grid-cols-2" : "grid gap-6"
+          }
+        >
           <OccupancyDashboard events={dashboard.events} />
           {canViewFinance && <SalesDashboard events={dashboard.events} />}
         </div>
