@@ -11,6 +11,111 @@ import (
 	"testing"
 )
 
+func TestEnsureDefaultGlobalRoleSkipsUsersWithAnyGlobalRole(t *testing.T) {
+	for _, heldRole := range []string{"moderator", "admin", "visitor"} {
+		t.Run(heldRole, func(t *testing.T) {
+			// Any grant attempt is a regression of EVENTHUB-299: the admin UI manages a single
+			// global role per user, so a moderator must not receive the default role on top.
+			var mutations atomic.Int32
+			mux := http.NewServeMux()
+			mux.HandleFunc("POST /realms/eventhub/protocol/openid-connect/token", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := io.Copy(io.Discard, r.Body); err != nil {
+					t.Fatalf("read token request: %v", err)
+				}
+				if _, err := io.WriteString(w, `{"access_token":"test-service-token","expires_in":300}`); err != nil {
+					t.Fatalf("write token response: %v", err)
+				}
+			})
+			mux.HandleFunc("GET /admin/realms/eventhub/clients", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := io.WriteString(w, `[{"id":"client-backend","clientId":"backend"}]`); err != nil {
+					t.Fatalf("write clients response: %v", err)
+				}
+			})
+			mux.HandleFunc("GET /admin/realms/eventhub/users/user-1/role-mappings/clients/client-backend", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := io.WriteString(w, `[{"id":"role-held","name":"`+heldRole+`"}]`); err != nil {
+					t.Fatalf("write user roles response: %v", err)
+				}
+			})
+			mux.HandleFunc("POST /admin/realms/eventhub/users/user-1/role-mappings/clients/client-backend", func(http.ResponseWriter, *http.Request) {
+				mutations.Add(1)
+			})
+			mux.HandleFunc("DELETE /admin/realms/eventhub/users/user-1/role-mappings/clients/client-backend", func(http.ResponseWriter, *http.Request) {
+				mutations.Add(1)
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			kc := NewKeycloakService(KeycloakClientConfig{
+				Host:         server.URL,
+				AdminRealm:   "eventhub",
+				UserRealm:    "eventhub",
+				ClientID:     "backend",
+				ClientSecret: "test-secret",
+			})
+			if err := kc.EnsureDefaultGlobalRole(context.Background(), "user-1"); err != nil {
+				t.Fatalf("err=%v, want nil", err)
+			}
+			if got := mutations.Load(); got != 0 {
+				t.Fatalf("unexpected mutation calls=%d", got)
+			}
+		})
+	}
+}
+
+func TestEnsureDefaultGlobalRoleGrantsUsersWithoutGlobalRole(t *testing.T) {
+	var grants atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /realms/eventhub/protocol/openid-connect/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Fatalf("read token request: %v", err)
+		}
+		if _, err := io.WriteString(w, `{"access_token":"test-service-token","expires_in":300}`); err != nil {
+			t.Fatalf("write token response: %v", err)
+		}
+	})
+	mux.HandleFunc("GET /admin/realms/eventhub/clients", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, `[{"id":"client-backend","clientId":"backend"}]`); err != nil {
+			t.Fatalf("write clients response: %v", err)
+		}
+	})
+	mux.HandleFunc("GET /admin/realms/eventhub/users/user-1/role-mappings/clients/client-backend", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, `[]`); err != nil {
+			t.Fatalf("write user roles response: %v", err)
+		}
+	})
+	mux.HandleFunc("GET /admin/realms/eventhub/clients/client-backend/roles", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.WriteString(w, `[{"id":"role-visitor","name":"visitor"}]`); err != nil {
+			t.Fatalf("write available roles response: %v", err)
+		}
+	})
+	mux.HandleFunc("POST /admin/realms/eventhub/users/user-1/role-mappings/clients/client-backend", func(http.ResponseWriter, *http.Request) {
+		grants.Add(1)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	kc := NewKeycloakService(KeycloakClientConfig{
+		Host:         server.URL,
+		AdminRealm:   "eventhub",
+		UserRealm:    "eventhub",
+		ClientID:     "backend",
+		ClientSecret: "test-secret",
+	})
+	if err := kc.EnsureDefaultGlobalRole(context.Background(), "user-1"); err != nil {
+		t.Fatalf("err=%v, want nil", err)
+	}
+	if got := grants.Load(); got != 1 {
+		t.Fatalf("grant calls=%d, want exactly 1", got)
+	}
+}
+
 func TestSetUserGlobalRolesRejectsRemovingLastGlobalAdmin(t *testing.T) {
 	var mutations atomic.Int32
 	mux := http.NewServeMux()

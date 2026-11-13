@@ -96,6 +96,16 @@ func main() {
 		log.Printf("  created user %s (%s)", safeStr(kcUser.Username), user.UserID)
 	}
 
+	// Users without any global role receive the default global role, so every account starts
+	// with a visible role on the admin permissions page (EVENTHUB-299). The grant is idempotent
+	// and re-runs are no-ops.
+	seededRoles, err := keycloakService.EnsureDefaultGlobalRoles(ctx, accessToken)
+	if err != nil {
+		log.Printf("  skip default global role grant: %v", err)
+	} else if seededRoles > 0 {
+		log.Printf("  granted the default global role to %d user(s)", seededRoles)
+	}
+
 	// --- Sync organizations ---
 	log.Println("syncing organizations...")
 	kcOrgs, err := keycloakService.GetAllOrganizations(ctx, accessToken)
