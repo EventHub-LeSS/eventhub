@@ -79,8 +79,8 @@ func (s *userProfileStub) UserProfile(_ context.Context, keycloakUserID string) 
 }
 
 type roleAssignerStub struct {
-	calls   []string
-	err     error
+	calls []string
+	err   error
 }
 
 func (s *roleAssignerStub) EnsureDefaultGlobalRole(_ context.Context, keycloakUserID string) error {
