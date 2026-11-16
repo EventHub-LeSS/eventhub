@@ -6,6 +6,7 @@ import { authConfig } from "@/features/auth/lib/config"
 import {
   buildLogoutUrl,
   createAuthorizationRequest,
+  endSessionBackchannel,
   exchangeCode,
 } from "@/features/auth/lib/oidc"
 import { safeReturnTo } from "@/features/auth/lib/return-to"
@@ -99,11 +100,16 @@ export async function handleCallback(request: NextRequest) {
 }
 
 export async function handleLogout() {
+  const session = await readSession()
   await clearSessionCookie()
+
+  // 303 makes the browser follow the redirect with GET instead of repeating the POST.
+  if (session && (await endSessionBackchannel(session.refreshToken))) {
+    return NextResponse.redirect(appUrl("/"), 303)
+  }
 
   const logoutUrl = await buildLogoutUrl(`${authConfig.appBaseUrl}/`)
 
-  // 303 makes the browser follow the redirect with GET instead of repeating the POST.
   return NextResponse.redirect(logoutUrl, 303)
 }
 
