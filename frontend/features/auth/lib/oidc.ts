@@ -100,8 +100,57 @@ export async function refreshAccessToken(refreshToken: string) {
 }
 
 /**
- * No id_token_hint: Keycloak then asks the user to confirm the logout, but it also cannot
- * dead-end on "Invalid parameter: id_token_hint" after the realm signing keys change.
+ * Ends the Keycloak SSO session server-to-server (Keycloak's non-browser logout:
+ * a POST to the end-session endpoint with the refresh token), so the user never
+ * sees a Keycloak page. Returns false if the session may still be active, in
+ * which case the caller should fall back to the browser redirect.
+ */
+export async function endSessionBackchannel(refreshToken: string) {
+  try {
+    const config = await getOidcConfig()
+    const endpoint = config.serverMetadata().end_session_endpoint
+
+    if (!endpoint) {
+      return false
+    }
+
+    const body = new URLSearchParams({
+      client_id: authConfig.clientId,
+      refresh_token: refreshToken,
+    })
+    if (authConfig.clientSecret) {
+      body.set("client_secret", authConfig.clientSecret)
+    }
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (response.ok) {
+      return true
+    }
+
+    // invalid_grant means the refresh token's session is already gone, which is
+    // the outcome we wanted anyway.
+    const error = await response
+      .json()
+      .then((data: { error?: unknown }) => data.error)
+      .catch(() => undefined)
+
+    return error === "invalid_grant"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Fallback for when the back-channel logout fails. No id_token_hint: Keycloak then asks
+ * the user to confirm the logout, but it also cannot dead-end on
+ * "Invalid parameter: id_token_hint" after the realm signing keys change.
  */
 export async function buildLogoutUrl(postLogoutRedirectUri: string) {
   const config = await getOidcConfig()
