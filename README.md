@@ -1,4 +1,4 @@
-# eventhub
+# Eventhub
 
 ## Projekt klonen und starten
 
