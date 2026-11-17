@@ -1,7 +1,6 @@
 "use client"
 
 import {
-  ClipboardCheckIcon,
   CompassIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
@@ -79,11 +78,6 @@ export function Navbar({ user }: NavbarProps) {
   const role = user?.role ?? "guest"
   const extraLinks: NavLink[] = user?.isAdmin
     ? [
-        {
-          label: "Anträge",
-          href: "/admin/organizer-applications",
-          icon: ClipboardCheckIcon,
-        },
         {
           label: "Moderation",
           href: "/admin/moderation",

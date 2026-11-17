@@ -7,6 +7,7 @@ import {
   CompassIcon,
   HistoryIcon,
   MapPinIcon,
+  QrCodeIcon,
   StarIcon,
   TicketIcon,
   TicketXIcon,
@@ -18,6 +19,11 @@ import { useState } from "react"
 import { CancelBookingDialog } from "@/features/bookings/components/cancel-booking-dialog"
 import { CancelledByNotice } from "@/features/bookings/components/cancelled-by-notice"
 import { RatingDialog } from "@/features/bookings/components/rating-dialog"
+import { TicketQrDialog } from "@/features/bookings/components/ticket-qr-dialog"
+import {
+  TicketStatusBadge,
+  type TicketKind,
+} from "@/features/bookings/components/ticket-status-badge"
 import {
   formatAmount,
   formatEventPeriod,
@@ -30,7 +36,6 @@ import type {
   OwnBookingEvent,
   TicketView,
 } from "@/features/bookings/lib/types"
-import { Badge } from "@/features/shared/components/ui/badge"
 import { Button } from "@/features/shared/components/ui/button"
 import { Card, CardContent } from "@/features/shared/components/ui/card"
 import { cn } from "@/features/shared/lib/utils"
@@ -82,6 +87,7 @@ export function OwnTickets({
 }: OwnTicketsProps) {
   const [view, setView] = useState<TicketView>(initialView)
   const [cancelling, setCancelling] = useState<OwnBooking | null>(null)
+  const [qrTicket, setQrTicket] = useState<OwnBooking | null>(null)
   const [ratingFor, setRatingFor] = useState<OwnBookingEvent | null>(null)
   const [rated, setRated] = useState<Record<string, LocalRating>>({})
 
@@ -110,7 +116,7 @@ export function OwnTickets({
   function renderTicket(ticket: OwnBooking) {
     if (view === "upcoming") {
       return (
-        <TicketCard ticket={ticket}>
+        <TicketCard ticket={ticket} onShowQr={() => setQrTicket(ticket)}>
           <Button
             variant="destructive"
             size="sm"
@@ -126,7 +132,11 @@ export function OwnTickets({
 
     if (view === "cancelled") {
       return (
-        <TicketCard ticket={ticket} kind="cancelled">
+        <TicketCard
+          ticket={ticket}
+          kind="cancelled"
+          onShowQr={() => setQrTicket(ticket)}
+        >
           {hasRefund(ticket) && (
             <span className="text-sm font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
               {formatAmount(ticket.refundAmount)} erstattet
@@ -151,7 +161,11 @@ export function OwnTickets({
     const hasScore = typeof score === "number" && score >= 1
 
     return (
-      <TicketCard ticket={ticket} kind="past">
+      <TicketCard
+        ticket={ticket}
+        kind="past"
+        onShowQr={() => setQrTicket(ticket)}
+      >
         {event &&
           (hasScore || local ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
@@ -284,6 +298,20 @@ export function OwnTickets({
           }
         />
       )}
+
+      {qrTicket && (
+        <TicketQrDialog
+          key={qrTicket.bookingId}
+          ticket={qrTicket}
+          kind={view === "upcoming" ? "valid" : view}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setQrTicket(null)
+            }
+          }}
+        />
+      )}
     </Tabs.Root>
   )
 }
@@ -310,10 +338,12 @@ function RatingStars({ score }: { score: number }) {
 function TicketCard({
   ticket,
   kind = "valid",
+  onShowQr,
   children,
 }: {
   ticket: OwnBooking
-  kind?: "valid" | "past" | "cancelled"
+  kind?: TicketKind
+  onShowQr?: () => void
   children?: React.ReactNode
 }) {
   const { event } = ticket
@@ -335,15 +365,7 @@ function TicketCard({
               {event?.title ?? "Veranstaltung nicht mehr verfügbar"}
             </p>
           )}
-          {kind === "cancelled" ? (
-            <Badge variant="destructive">Storniert</Badge>
-          ) : past ? (
-            <Badge variant="outline">Vergangen</Badge>
-          ) : (
-            <Badge className="bg-emerald-600 text-white dark:bg-emerald-500 dark:text-black">
-              Gültig
-            </Badge>
-          )}
+          <TicketStatusBadge kind={kind} />
         </div>
 
         {event && (
@@ -373,8 +395,14 @@ function TicketCard({
           <CancelledByNotice cancelledBy={ticket.cancelledBy} />
         )}
 
-        {children && (
+        {(onShowQr || children) && (
           <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-3">
+            {onShowQr && (
+              <Button size="lg" onClick={onShowQr}>
+                <QrCodeIcon />
+                Ticket anzeigen
+              </Button>
+            )}
             {children}
           </div>
         )}
