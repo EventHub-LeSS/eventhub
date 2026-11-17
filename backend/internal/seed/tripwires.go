@@ -18,9 +18,9 @@ import (
 // markers are the deterministic seed UUIDs and marker accounts of the data definitions,
 // so the check is cheap and needs no mutation.
 const (
-	mockMarkerEventTag  = "evt-1"                          // first mock event of the ref seeder
-	mockMarkerUserEmail = "finn.betz@grossmeister.de"      // demo admin of the ref seeder
-	liveMarkerEventTag  = "live-evt-1"                     // first event of the live seeder
+	mockMarkerEventTag  = "evt-1"                              // first mock event of the ref seeder
+	mockMarkerUserEmail = "finn.betz@grossmeister.de"          // demo admin of the ref seeder
+	liveMarkerEventTag  = "live-evt-1"                         // first event of the live seeder
 	liveMarkerUserEmail = "sabine.vogt@provadis-hochschule.de" // live org admin
 )
 
