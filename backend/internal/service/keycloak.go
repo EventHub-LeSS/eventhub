@@ -172,7 +172,7 @@ const organizationGroupsMapper = "oidc-organization-group-membership-mapper"
 // aliases that carries no groups, so members would get no organization roles, and the backend
 // rejects such tokens. Realms imported before the mapper was added to the realm file keep the old
 // scope, because --import-realm skips existing realms. The mapper config matches
-// core/realms/eventhub-realm.json; addOrganizationId is deliberately left alone so repaired realms
+// the realm files (core/realms/ref-realm.json, live-realm.json); addOrganizationId is deliberately left alone so repaired realms
 // issue the same claim as freshly imported ones (EVENTHUB-188). Reports whether it was added.
 func (k *KeycloakService) EnsureOrganizationGroupsMapper(ctx context.Context, accessToken, realm string) (bool, error) {
 	scopesURL := strings.TrimRight(k.cfg.Host, "/") + "/admin/realms/" + realm + "/client-scopes"

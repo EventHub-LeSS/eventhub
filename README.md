@@ -19,7 +19,13 @@ docker compose up -d
 ```
 
 - Admin-Konsole: <http://localhost:5433/admin> (`admin` / `admin`)
-- Der Realm `eventhub` wird beim ersten Start aus `core/realms/eventhub-realm.json` importiert.
+- Der Realm `eventhub` wird beim ersten Start aus der Realm-Datei importiert.
+  Diese ist pro Deployment bestimmt: `core/realms/ref-realm.json` (Standard,
+  volle Demo-Daten) oder `core/realms/live-realm.json` (minimale Live-Konfiguration).
+  Die Auswahl erfolgt über `COMPOSE_PROJECT_NAME` (`ref` oder `live`, Standard `ref`).
+  **Wichtig:** Die Variable muss explizit gesetzt sein (in `core/.env` bzw. in der
+  Deployment-Umgebung) – ohne sie interpoliert Compose den Verzeichnisnamen
+  (`core`) und die Realm-Datei würde nicht gefunden.
 
 Beim ersten Start wird ein eigenes Keycloak-Image gebaut, das das Login-Theme enthält
 (siehe unten). Das dauert einige Minuten, danach greift der Docker-Cache.
@@ -29,7 +35,8 @@ Beim ersten Start wird ein eigenes Keycloak-Image gebaut, das das Login-Theme en
 Bei **jedem Start** wendet der Container die Realm-Datei mit dem mitgelieferten
 Tool `realm-sync` (`core/realm-sync/`) nicht-destruktiv an:
 
-- Alles, was in `core/realms/eventhub-realm.json` konfiguriert ist, wird
+- Alles, was in der jeweiligen Realm-Datei (`core/realms/ref-realm.json` bzw.
+  `core/realms/live-realm.json`) konfiguriert ist, wird
   angelegt oder in-place aktualisiert (Realm-Settings, Clients, Client-Scopes,
   Rollen, Nutzer, Organisationen inkl. Members).
 - Alles, was **nicht** in der Datei steht, bleibt erhalten: zur Laufzeit
@@ -138,7 +145,8 @@ Eindeutigkeit von Name und Alias per Unique-Index.
 Für Keycloak-Admin-Aufrufe, z. B. das Vergeben von Organisationsrollen, meldet sich die API
 per Client Credentials mit dem `backend`-Client an. Dessen Service-Konto hat nur die Rollen
 `manage-organizations`, `manage-users` und `view-clients` aus `realm-management`, kein `realm-admin`.
-Frische Realms bekommen es über `core/realms/eventhub-realm.json`, dessen Grants der realm-sync
+Frische Realms bekommen es über die jeweilige Realm-Datei (`core/realms/ref-realm.json`
+bzw. `live-realm.json`), deren Grants der realm-sync
 bei jedem Start auch auf bestehende Volumes anwendet. Zur Not richtet `docker compose up api-seed`
 das Service-Konto nachträglich ein.
 

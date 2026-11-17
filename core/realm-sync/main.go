@@ -1,5 +1,6 @@
-// realm-sync applies the EventHub realm file (eventhub-realm.json) to a RUNNING
-// Keycloak server non-destructively.
+// realm-sync applies the EventHub realm file to a RUNNING Keycloak server
+// non-destructively. The file is per-deployment: <deployment>-realm.json
+// (ref-realm.json or live-realm.json).
 //
 // Why it exists: Keycloak's two built-in import paths are unsuitable for
 // continuous configuration management.
@@ -40,11 +41,19 @@ import (
 )
 
 const (
-	defaultRealmFile   = "/opt/keycloak/data/import/eventhub-realm.json"
 	defaultSyncTimeout = 10 * time.Minute
 	pollInterval       = 3 * time.Second
 	pageSize           = 100
 )
+
+// defaultRealmFile returns the per-deployment realm file path: the file is
+// named <deployment>-realm.json (ref-realm.json or live-realm.json) and the
+// deployment matches the compose project name, defaulting to "ref". The
+// entrypoint script derives REALM_IMPORT_FILE the same way.
+func defaultRealmFile() string {
+	deployment := envOr("COMPOSE_PROJECT_NAME", "ref")
+	return "/opt/keycloak/data/import/" + deployment + "-realm.json"
+}
 
 type config struct {
 	host        string // e.g. http://localhost:8080
@@ -72,7 +81,7 @@ func main() {
 		realm:       envOr("KEYCLOAK_REALM", "eventhub"),
 		adminUser:   envOr("KEYCLOAK_ADMIN_USERNAME", "admin"),
 		adminPass:   envOr("KEYCLOAK_ADMIN_PASSWORD", "admin"),
-		realmFile:   envOr("REALM_IMPORT_FILE", defaultRealmFile),
+		realmFile:   envOr("REALM_IMPORT_FILE", defaultRealmFile()),
 		syncTimeout: defaultSyncTimeout,
 	}
 
