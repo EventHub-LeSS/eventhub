@@ -22,7 +22,8 @@ import (
 // one exists: the three organizations are created by approving organizer applications that the
 // seeded users "submitted" through the contact form, so applications, audit entries and the
 // approval notifications look exactly like production data. Everything else (events, bookings,
-// payments) is seeded like the mock data, with deterministic IDs, so the seeder is idempotent.
+// payments and the ratings of the completed events) is seeded like the mock data, with
+// deterministic IDs, so the seeder is idempotent.
 
 // liveAdminEmail is the global admin of the live realm (core/realms/live-realm.json), who
 // reviews the organizer applications. Resolved by email, because the realm stores the username
@@ -190,6 +191,49 @@ type liveBooking struct {
 	bookedDaysAgo int
 }
 
+// liveRatingTexts holds the review texts of the mass ratings by score, so the very many ratings
+// of the completed events stay varied without hand-writing each one.
+var liveRatingTexts = map[int][]string{
+	5: {
+		"Absolut großartig, wir kommen wieder!",
+		"Beste Veranstaltung des Jahres, einfach empfehlenswert.",
+		"Tolle Atmosphäre und perfektes Programm, fünf Sterne!",
+		"Von der Organisation bis zum Schluss alles top.",
+		"Ein rundum gelungener Abend, gerne wieder!",
+		"Hat der ganzen Gruppe gefallen, absolute Empfehlung.",
+	},
+	4: {
+		"Sehr gute Veranstaltung, kleine Verbesserungsmöglichkeiten.",
+		"Hat Spaß gemacht, würden wir wieder besuchen.",
+		"Gute Stimmung, gut organisiert, gerne wieder.",
+		"Solides Programm und freundliches Team.",
+		"Fast perfekt, nur die Anreise war stressig.",
+		"Schöne Veranstaltung, das Preis-Leistungs-Verhältnis stimmt.",
+	},
+	3: {
+		"Ganz okay, aber nichts Besonderes.",
+		"Einige Highlights, einige Schwachstellen.",
+		"Durchschnittlich, die Pause war zu lang.",
+		"Okay, aber die Warteschlangen waren nervig.",
+		"Gute Idee, mäßige Umsetzung.",
+	},
+	2: {
+		"Leider enttäuschend, die Organisation war chaotisch.",
+		"Zuwenig geboten für den Preis.",
+		"Der Sound war schlecht, wir sind früher gegangen.",
+		"Zuwenig Personal, unfreundlich an der Kasse.",
+	},
+	1: {
+		"Völlig chaotisch, würde nicht empfehlen.",
+		"Leider ein kompletter Reinfall.",
+		"Nicht mal die Basics haben funktioniert. Schade.",
+	},
+}
+
+// liveRatingScores is the deterministic score pattern of the mass ratings, weighted like real
+// reviews: mostly 4s and 5s, a few 3s, rare 1s and 2s (average ≈ 4.1).
+var liveRatingScores = []int{5, 4, 5, 4, 3, 5, 4, 5, 2, 4, 5, 3, 4, 5, 1, 4, 5, 4, 3, 5}
+
 // LiveSeeder builds the content of the live deployment (see the package comment of the data
 // definitions above). It is idempotent: re-runs skip everything that already exists.
 type LiveSeeder struct {
@@ -242,7 +286,10 @@ func (s *LiveSeeder) SeedAll(ctx context.Context) error {
 	if err := s.seedEvents(ctx); err != nil {
 		return err
 	}
-	return s.seedBookings(ctx)
+	if err := s.seedBookings(ctx); err != nil {
+		return err
+	}
+	return s.seedRatings(ctx)
 }
 
 // seedUsers creates the ten live accounts in Keycloak with the password "password".
@@ -503,59 +550,152 @@ func (s *LiveSeeder) seedBookings(_ context.Context) error {
 
 	now := time.Now()
 	for _, b := range all {
-		id := seedUUID(b.tag)
-		var existing model.BookingModel
-		if err := s.db.Where("booking_id = ?", id).First(&existing).Error; err == nil {
-			continue
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("find booking %q: %w", b.tag, err)
-		}
-
-		userID, ok := s.userByEmail[b.userEmail]
-		if !ok {
-			return fmt.Errorf("user %q not found for booking %q", b.userEmail, b.tag)
-		}
 		event, ok := s.eventByTag[b.eventTag]
 		if !ok {
 			return fmt.Errorf("event %q not found for booking %q", b.eventTag, b.tag)
 		}
-		line := event.Price.Mul(decimal.NewFromInt(int64(b.tickets)))
-
 		bookedAt := now.AddDate(0, 0, -b.bookedDaysAgo)
 		// Defensiv gegen Datenfehler: die Buchung liegt immer vor dem Eventstart.
 		if bookedAt.After(event.StartTime) {
 			bookedAt = event.StartTime.Add(-24 * time.Hour)
 		}
+		if err := s.createBookingWithPayment(b, event, bookedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-		payID := seedUUID(b.tag + "-pay")
-		var payment model.PaymentModel
-		if err := s.db.Where("payment_id = ?", payID).First(&payment).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			pm := model.PaymentModel{
-				PaymentID: payID,
-				Amount:    line,
-				Status:    model.PaymentStatusPaid,
-				CreatedAt: bookedAt,
-			}
-			if err := s.db.Create(&pm).Error; err != nil {
-				return fmt.Errorf("create payment for booking %q: %w", b.tag, err)
-			}
-		} else if err != nil {
-			return fmt.Errorf("find payment for booking %q: %w", b.tag, err)
-		}
+// createBookingWithPayment creates the confirmed booking with its paid payment (the transaction
+// whose amount is tickets times the event price) unless the booking already exists (idempotent).
+func (s *LiveSeeder) createBookingWithPayment(b liveBooking, event model.EventModel, bookedAt time.Time) error {
+	bkgID := seedUUID(b.tag)
+	var existing model.BookingModel
+	if err := s.db.Where("booking_id = ?", bkgID).First(&existing).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("find booking %q: %w", b.tag, err)
+	}
 
-		bk := model.BookingModel{
-			BookingID:       id,
-			UserID:          &userID,
-			EventID:         &event.EventID,
-			PaymentID:       &payID,
-			NumberOfTickets: b.tickets,
-			Status:          model.BookingStatusConfirmed,
-			LineAmount:      &line,
-			CreatedAt:       bookedAt,
+	userID, ok := s.userByEmail[b.userEmail]
+	if !ok {
+		return fmt.Errorf("user %q not found for booking %q", b.userEmail, b.tag)
+	}
+	line := event.Price.Mul(decimal.NewFromInt(int64(b.tickets)))
+
+	payID := seedUUID(b.tag + "-pay")
+	var payment model.PaymentModel
+	if err := s.db.Where("payment_id = ?", payID).First(&payment).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+		pm := model.PaymentModel{
+			PaymentID: payID,
+			Amount:    line,
+			Status:    model.PaymentStatusPaid,
+			CreatedAt: bookedAt,
 		}
-		if err := s.db.Create(&bk).Error; err != nil {
-			return fmt.Errorf("create booking %q: %w", b.tag, err)
+		if err := s.db.Create(&pm).Error; err != nil {
+			return fmt.Errorf("create payment for booking %q: %w", b.tag, err)
 		}
+	} else if err != nil {
+		return fmt.Errorf("find payment for booking %q: %w", b.tag, err)
+	}
+
+	bk := model.BookingModel{
+		BookingID:       bkgID,
+		UserID:          &userID,
+		EventID:         &event.EventID,
+		PaymentID:       &payID,
+		NumberOfTickets: b.tickets,
+		Status:          model.BookingStatusConfirmed,
+		LineAmount:      &line,
+		CreatedAt:       bookedAt,
+	}
+	if err := s.db.Create(&bk).Error; err != nil {
+		return fmt.Errorf("create booking %q: %w", b.tag, err)
+	}
+	return nil
+}
+
+// seedRatings gives the completed events a very dense rating history: every live user gets a
+// backdated booking for every completed event and rates it exactly once (the UI allows one
+// rating per visitor and event), and the three past bookings of the admin account are rated as
+// well. The score pattern keeps the distribution realistic; the low scores stay hidden so the
+// moderation queue has content.
+func (s *LiveSeeder) seedRatings(_ context.Context) error {
+	log.Println("live seed: seeding ratings...")
+	now := time.Now()
+	rated := 0
+	for eIdx, e := range liveEvents {
+		if e.status != model.EventStatusCompleted {
+			continue
+		}
+		event, ok := s.eventByTag[e.tag]
+		if !ok {
+			return fmt.Errorf("event %q not found", e.tag)
+		}
+		for uIdx, mu := range liveUsers {
+			bkgTag := fmt.Sprintf("live-rbkg-%d-%d", eIdx, uIdx)
+			b := liveBooking{tag: bkgTag, userEmail: mu.Email, eventTag: e.tag, tickets: 1 + (eIdx+uIdx)%4}
+			bookedAt := event.StartTime.AddDate(0, 0, -(1 + (eIdx+uIdx)%10))
+			if err := s.createBookingWithPayment(b, event, bookedAt); err != nil {
+				return err
+			}
+
+			scoreIdx := (eIdx*3 + uIdx*7) % len(liveRatingScores)
+			score := liveRatingScores[scoreIdx]
+			pool := liveRatingTexts[score]
+			text := pool[(eIdx+uIdx)%len(pool)]
+			ratedAt := event.EndTime.AddDate(0, 0, 1+uIdx%5)
+			if ratedAt.After(now) {
+				ratedAt = now
+			}
+			if err := s.createRating(fmt.Sprintf("live-rat-%d-%d", eIdx, uIdx), seedUUID(bkgTag), score, text, score >= 3, ratedAt); err != nil {
+				return err
+			}
+			rated++
+		}
+	}
+
+	// The admin's three past bookings are rated too.
+	for i, b := range liveAdminBookings {
+		event, ok := s.eventByTag[b.eventTag]
+		if !ok {
+			return fmt.Errorf("event %q not found for booking %q", b.eventTag, b.tag)
+		}
+		scoreIdx := (i*7 + len(liveUsers)) % len(liveRatingScores)
+		score := liveRatingScores[scoreIdx]
+		pool := liveRatingTexts[score]
+		text := pool[(i+len(liveUsers))%len(pool)]
+		ratingTag := fmt.Sprintf("live-rat-admin-%d", i+1)
+		if err := s.createRating(ratingTag, seedUUID(b.tag), score, text, score >= 3, event.EndTime.AddDate(0, 0, 1+i)); err != nil {
+			return err
+		}
+		rated++
+	}
+
+	log.Printf("  ensured %d ratings", rated)
+	return nil
+}
+
+// createRating creates the rating of a booking if it does not exist yet (idempotent).
+func (s *LiveSeeder) createRating(tag string, bookingID uuid.UUID, score int, text string, visible bool, ratedAt time.Time) error {
+	id := seedUUID(tag)
+	var existing model.RatingModel
+	if err := s.db.Where("rating_id = ?", id).First(&existing).Error; err == nil {
+		return nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("find rating %q: %w", tag, err)
+	}
+	rt := model.RatingModel{
+		RatingID:  id,
+		BookingID: &bookingID,
+		Score:     score,
+		Text:      text,
+		IsVisible: visible,
+		CreatedAt: ratedAt,
+		UpdatedAt: ratedAt,
+	}
+	if err := s.db.Create(&rt).Error; err != nil {
+		return fmt.Errorf("create rating %q: %w", tag, err)
 	}
 	return nil
 }
