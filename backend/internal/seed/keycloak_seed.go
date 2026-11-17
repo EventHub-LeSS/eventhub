@@ -27,16 +27,7 @@ func NewKeycloakSeeder(kc *service.KeycloakService, realm, token string) *Keyclo
 }
 
 func (s *KeycloakSeeder) Seed(ctx context.Context) error {
-	if err := s.ensureOrganizationClaimName(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureOrganizationGroupsMapper(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureServiceAccount(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureEmailUsernames(ctx); err != nil {
+	if err := s.EnsureRealmRepairs(ctx); err != nil {
 		return err
 	}
 	if err := s.seedUsers(ctx); err != nil {
@@ -49,6 +40,22 @@ func (s *KeycloakSeeder) Seed(ctx context.Context) error {
 		return err
 	}
 	return s.seedMemberships(ctx)
+}
+
+// EnsureRealmRepairs applies the idempotent repairs that keep realms imported by older realm
+// files working: mapper settings of the organization scope, the backend service account and
+// email usernames. The live seeder runs the same repairs before it uses the realm.
+func (s *KeycloakSeeder) EnsureRealmRepairs(ctx context.Context) error {
+	if err := s.ensureOrganizationClaimName(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureOrganizationGroupsMapper(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureServiceAccount(ctx); err != nil {
+		return err
+	}
+	return s.ensureEmailUsernames(ctx)
 }
 
 // ensureOrganizationClaimName repairs realms that were imported before claim.name was added

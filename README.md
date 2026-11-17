@@ -71,6 +71,18 @@ weiterhin:
 docker compose up api-seed
 ```
 
+Der Seed hängt am Deployment (`DEPLOYMENT` kommt aus `COMPOSE_PROJECT_NAME`):
+In **ref** läuft `./seed` (`backend/cmd/seed`) und erzeugt die Mock-Daten –
+Demo-Nutzer, vier Organisationen und Mock-Veranstaltungen inkl. Buchungen und
+Bewertungen. In **live** läuft stattdessen `./seed-live` (`backend/cmd/seed-live`),
+das die Inhalte über den echten Nutzerfluss anlegt: Die drei Organisationen
+(Provadis Hochschule, Telekom, Stadthalle Bremen) entstehen über eingereichte
+Veranstalter-Bewerbungen samt Genehmigung durch das Admin-Konto, dazu 10
+veröffentlichte Veranstaltungen der nächsten 30 Tage, je 3 abgeschlossene
+Veranstaltungen pro Organisation, Buchungen der 10 Demo-Nutzer (Passwort
+`password`) inkl. Zahlungen und einige gebuchte Vergangenheits-Veranstaltungen
+des Admin-Kontos.
+
 Für einen kompletten Neuanfang (leere Datenbanken) bleibt:
 
 ```bash

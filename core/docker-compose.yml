@@ -59,8 +59,11 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     restart: "no"
-    command: ["./seed"]
+    # Deployment-specific seeding: ref seeds the mock data (./seed), live seeds its own content
+    # through the real user flow (./seed-live). DEPLOYMENT comes from the compose project name.
+    command: ["sh", "-c", "if [ \"$$DEPLOYMENT\" = \"live\" ]; then exec ./seed-live; else exec ./seed; fi"]
     environment:
+      DEPLOYMENT: ${COMPOSE_PROJECT_NAME:-ref}
       DB_HOST: api-db
       DB_PORT: "5432"
       DB_USER: ${API_DB_USER:-eventhub}

@@ -8,12 +8,14 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o migrate ./cmd/migrate
 RUN CGO_ENABLED=0 GOOS=linux go build -o seed ./cmd/seed
+RUN CGO_ENABLED=0 GOOS=linux go build -o seed-live ./cmd/seed-live
 
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /app/api .
 COPY --from=builder /app/migrate .
 COPY --from=builder /app/seed .
+COPY --from=builder /app/seed-live .
 COPY --from=builder /app/migrations ./migrations
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
