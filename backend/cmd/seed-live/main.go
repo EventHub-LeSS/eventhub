@@ -84,6 +84,12 @@ func main() {
 		log.Fatal("failed to authenticate against Keycloak after retries")
 	}
 
+	// Fail fast when the target still carries mock seed data instead of stacking live
+	// content on top of demo data (see seed.EnsureNoMockData for the cleanup).
+	if err := seed.EnsureNoMockData(ctx, database, keycloakService, keycloakCfg.UserRealm, accessToken); err != nil {
+		log.Fatalf("live seed: %v", err)
+	}
+
 	liveSeeder := seed.NewLiveSeeder(database, keycloakService, repository.NewTransactor(database), keycloakCfg.UserRealm, accessToken)
 	if err := liveSeeder.SeedAll(ctx); err != nil {
 		log.Fatalf("live seed failed: %v", err)

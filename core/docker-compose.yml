@@ -58,10 +58,16 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      # Bakes the deployment flavor into the local image, like the CI pipelines do
+      # (ref image seeds mock data, live image seeds the live content).
+      args:
+        DEPLOYMENT: ${COMPOSE_PROJECT_NAME:-ref}
     restart: "no"
-    # Deployment-specific seeding: ref seeds the mock data (./seed), live seeds its own content
-    # through the real user flow (./seed-live). DEPLOYMENT comes from the compose project name.
-    command: ["sh", "-c", "if [ \"$$DEPLOYMENT\" = \"live\" ]; then exec ./seed-live; else exec ./seed; fi"]
+    # ./seed is the single entry point for every deployment: the baked image flavor
+    # decides whether it seeds the mock data (ref) or the live content (live). The
+    # DEPLOYMENT env below overrides the baked value, which keeps the dispatch working
+    # with images built before the flavor existed.
+    command: ["./seed"]
     environment:
       DEPLOYMENT: ${COMPOSE_PROJECT_NAME:-ref}
       DB_HOST: api-db

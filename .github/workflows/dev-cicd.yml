@@ -48,6 +48,10 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          # Bakes the deployment flavor into the image: ./seed seeds the mock data
+          # in ref deployments (seed-live runs in the live image).
+          build-args: |
+            DEPLOYMENT=ref
           tags: ghcr.io/${{ steps.owner.outputs.owner }}/backend:dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
