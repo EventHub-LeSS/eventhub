@@ -129,6 +129,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.keycloak
+      args:
+        # Per-deployment realm file: ref-realm.json (default, full demo data)
+        # or live-realm.json (minimal live configuration).
+        REALM_FILE: ${COMPOSE_PROJECT_NAME:-ref}-realm.json
     container_name: keycloak_dev
     command: start-dev --import-realm
     environment:
@@ -141,11 +145,14 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8081}
       KC_LOG_LEVEL: INFO
+      # Selects the same per-deployment realm file inside the container that
+      # the bind-mount below provides; keeps entrypoint and mount in sync.
+      REALM_IMPORT_FILE: /opt/keycloak/data/import/${COMPOSE_PROJECT_NAME:-ref}-realm.json
     # The realm file is bind-mounted so that changes apply on the next start
     # without rebuilding the image: --import-realm uses it on a fresh database
     # and the entrypoint's realm-sync applies it non-destructively afterwards.
     volumes:
-      - ./realms/eventhub-realm.json:/opt/keycloak/data/import/eventhub-realm.json:ro
+      - ./realms/${COMPOSE_PROJECT_NAME:-ref}-realm.json:/opt/keycloak/data/import/${COMPOSE_PROJECT_NAME:-ref}-realm.json:ro
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
     depends_on:
