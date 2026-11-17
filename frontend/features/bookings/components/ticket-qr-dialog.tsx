@@ -51,7 +51,7 @@ export function TicketQrDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-dvh max-w-none gap-0 overflow-y-auto rounded-none p-0 sm:max-w-none">
-        <div className="mx-auto flex min-h-full w-full max-w-md flex-col items-center justify-center gap-8 p-6 pt-16">
+        <div className="flex min-h-full w-full flex-col items-center justify-center gap-8 p-6 pt-16 lg:gap-12 lg:p-12 lg:pt-12">
           <DialogHeader className="items-center gap-2 text-center">
             <DialogTitle className="text-2xl">
               {event?.title ?? "Veranstaltung nicht mehr verfügbar"}
@@ -62,58 +62,60 @@ export function TicketQrDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col items-center gap-4">
-            <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-border">
-              <QRCode
-                value={QR_CODE_URL}
-                title="QR-Code"
-                className="size-56 sm:size-72"
-              />
+          <div className="flex w-full flex-col items-center justify-center gap-8 lg:flex-row lg:gap-16">
+            <div className="flex flex-col items-center gap-4">
+              <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-border">
+                <QRCode
+                  value={QR_CODE_URL}
+                  title="QR-Code"
+                  className="size-56 sm:size-72 lg:size-96"
+                />
+              </div>
             </div>
-          </div>
 
-          <dl className="grid w-full gap-2">
-            {event && (
-              <>
+            <dl className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:max-w-3xl lg:flex-1 lg:grid-cols-2 lg:content-center">
+              {event && (
+                <>
+                  <DetailRow
+                    icon={CalendarIcon}
+                    label="Zeitraum"
+                    value={formatEventPeriod(event.startTime, event.endTime)}
+                  />
+                  <DetailRow
+                    icon={MapPinIcon}
+                    label="Ort"
+                    value={formatLocation(event.location)}
+                  />
+                  <DetailRow
+                    icon={TicketIcon}
+                    label="Tickets"
+                    value={
+                      ticket.amount !== null
+                        ? `${formatTicketCount(ticket.numberOfTickets)} · ${formatAmount(ticket.amount)}`
+                        : formatTicketCount(ticket.numberOfTickets)
+                    }
+                  />
+                </>
+              )}
+              {hasRefund(ticket) && (
                 <DetailRow
-                  icon={CalendarIcon}
-                  label="Zeitraum"
-                  value={formatEventPeriod(event.startTime, event.endTime)}
+                  icon={RotateCcwIcon}
+                  label="Erstattet"
+                  value={formatAmount(ticket.refundAmount)}
                 />
-                <DetailRow
-                  icon={MapPinIcon}
-                  label="Ort"
-                  value={formatLocation(event.location)}
-                />
-                <DetailRow
-                  icon={TicketIcon}
-                  label="Tickets"
-                  value={
-                    ticket.amount !== null
-                      ? `${formatTicketCount(ticket.numberOfTickets)} · ${formatAmount(ticket.amount)}`
-                      : formatTicketCount(ticket.numberOfTickets)
-                  }
-                />
-              </>
-            )}
-            {hasRefund(ticket) && (
+              )}
               <DetailRow
-                icon={RotateCcwIcon}
-                label="Erstattet"
-                value={formatAmount(ticket.refundAmount)}
+                icon={HashIcon}
+                label="Buchungsnummer"
+                value={ticket.bookingId}
               />
-            )}
-            <DetailRow
-              icon={HashIcon}
-              label="Buchungsnummer"
-              value={ticket.bookingId}
-            />
-            <DetailRow
-              icon={ClockIcon}
-              label="Gebucht am"
-              value={formatDateTime(ticket.bookedAt)}
-            />
-          </dl>
+              <DetailRow
+                icon={ClockIcon}
+                label="Gebucht am"
+                value={formatDateTime(ticket.bookedAt)}
+              />
+            </dl>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
