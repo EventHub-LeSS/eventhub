@@ -27,10 +27,11 @@ RUN CGO_ENABLED=0 go build -trimpath -o /realm-sync .
 
 FROM quay.io/keycloak/keycloak:26.7
 
-# The realm file is per-deployment (ref-realm.json or live-realm.json);
-# compose passes REALM_FILE derived from COMPOSE_PROJECT_NAME. Baked in as a
-# fallback only: compose bind-mounts the current file, so realm changes apply
-# without a rebuild.
+# The realm file is per-deployment (ref-realm.json or live-realm.json); compose passes
+# REALM_FILE derived from COMPOSE_PROJECT_NAME. It is baked in under the fixed name
+# eventhub-realm.json because Keycloak's --import-realm requires the file name to be
+# <realm>-realm.json. Baked in as a fallback only: compose bind-mounts the current file,
+# so realm changes apply without a rebuild.
 ARG REALM_FILE=ref-realm.json
 
 COPY --from=theme \
@@ -38,7 +39,7 @@ COPY --from=theme \
     /opt/keycloak/providers/eventhub-theme.jar
 
 RUN mkdir -p /opt/keycloak/data/import
-COPY --chown=1000:0 --chmod=644 realms/${REALM_FILE} /opt/keycloak/data/import/${REALM_FILE}
+COPY --chown=1000:0 --chmod=644 realms/${REALM_FILE} /opt/keycloak/data/import/eventhub-realm.json
 COPY --chown=1000:0 --chmod=755 entrypoint-realm-override.sh /opt/keycloak/entrypoint-realm-override.sh
 COPY --from=realm-sync --chown=1000:0 --chmod=755 /realm-sync /opt/keycloak/realm-sync
 

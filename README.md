@@ -23,8 +23,11 @@ docker compose up -d
   Diese ist pro Deployment bestimmt: `core/realms/ref-realm.json` (Standard,
   volle Demo-Daten) oder `core/realms/live-realm.json` (minimale Live-Konfiguration).
   Die Auswahl erfolgt über `COMPOSE_PROJECT_NAME` (`ref` oder `live`, Standard `ref`).
-  **Wichtig:** Die Variable muss explizit gesetzt sein (in `core/.env` bzw. in der
-  Deployment-Umgebung) – ohne sie interpoliert Compose den Verzeichnisnamen
+  Im Container heißt die Datei immer `eventhub-realm.json`, denn `--import-realm`
+  verlangt den Dateinamen `<realm>-realm.json` – die Deployment-Datei wird unter
+  diesem Namen eingehängt bzw. eingebaut.
+  **Wichtig:** `COMPOSE_PROJECT_NAME` muss explizit gesetzt sein (in `core/.env`
+  bzw. in der Deployment-Umgebung) – ohne ihn interpoliert Compose den Verzeichnisnamen
   (`core`) und die Realm-Datei würde nicht gefunden.
 
 Beim ersten Start wird ein eigenes Keycloak-Image gebaut, das das Login-Theme enthält
@@ -70,6 +73,18 @@ weiterhin:
 ```bash
 docker compose up api-seed
 ```
+
+Der Seed hängt am Deployment (`DEPLOYMENT` kommt aus `COMPOSE_PROJECT_NAME`):
+In **ref** läuft `./seed` (`backend/cmd/seed`) und erzeugt die Mock-Daten –
+Demo-Nutzer, vier Organisationen und Mock-Veranstaltungen inkl. Buchungen und
+Bewertungen. In **live** läuft stattdessen `./seed-live` (`backend/cmd/seed-live`),
+das die Inhalte über den echten Nutzerfluss anlegt: Die drei Organisationen
+(Provadis Hochschule, Telekom, Stadthalle Bremen) entstehen über eingereichte
+Veranstalter-Bewerbungen samt Genehmigung durch das Admin-Konto, dazu 10
+veröffentlichte Veranstaltungen der nächsten 30 Tage, je 3 abgeschlossene
+Veranstaltungen pro Organisation, Buchungen der 10 Demo-Nutzer (Passwort
+`password`) inkl. Zahlungen und einige gebuchte Vergangenheits-Veranstaltungen
+des Admin-Kontos.
 
 Für einen kompletten Neuanfang (leere Datenbanken) bleibt:
 

@@ -27,6 +27,15 @@ func main() {
 		log.Printf("ignoring unreadable .env: %v", err)
 	}
 
+	// The mock seeder belongs to the ref deployment: the api-seed service runs ./seed-live in
+	// live. The guard also stops a manual run from polluting a live deployment with demo data.
+	switch deployment := os.Getenv("DEPLOYMENT"); deployment {
+	case "", "ref":
+	default:
+		log.Printf("skipping mock seed: this seeder only runs in the ref deployment (DEPLOYMENT=%q, live runs ./seed-live)", deployment)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 

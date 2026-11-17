@@ -64,6 +64,8 @@ jobs:
           context: ./core
           file: ./core/Dockerfile.keycloak
           push: true
+          build-args: |
+            REALM_FILE=live-realm.json
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner }}/keycloak:${{ github.ref_name }}
             ghcr.io/${{ steps.owner.outputs.owner }}/keycloak:latest

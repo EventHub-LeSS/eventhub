@@ -2,8 +2,7 @@
 #
 # Realm import behavior
 # ---------------------
-# Every container start applies the deployment's realm file (ref-realm.json or
-# live-realm.json, selected via COMPOSE_PROJECT_NAME) with the
+# Every container start applies the realm file with the
 # bundled `realm-sync` tool once the server is up. The sync is non-destructive
 # and idempotent: everything configured in the file is created or updated in
 # place, while anything NOT in the file is preserved (organizations created
@@ -33,7 +32,7 @@ if [ "${KC_REALM_SYNC:-true}" = "true" ]; then
         export KEYCLOAK_REALM="${KEYCLOAK_REALM:-eventhub}"
         export KEYCLOAK_ADMIN_USERNAME="${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}"
         export KEYCLOAK_ADMIN_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}"
-        export REALM_IMPORT_FILE="${REALM_IMPORT_FILE:-/opt/keycloak/data/import/${COMPOSE_PROJECT_NAME:-ref}-realm.json}"
+        export REALM_IMPORT_FILE="${REALM_IMPORT_FILE:-/opt/keycloak/data/import/eventhub-realm.json}"
         if ! /opt/keycloak/realm-sync; then
             echo "entrypoint: realm-sync FAILED (see log above); the server keeps running with the previously applied configuration"
         fi

@@ -81,7 +81,7 @@
   ],
   "users": [
     {
-      "username": "admin@eventub.de",
+      "username": "admin@eventhub.de",
       "email": "admin@eventhub.de",
       "emailVerified": true,
       "enabled": true,
