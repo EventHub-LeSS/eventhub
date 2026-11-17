@@ -23,8 +23,11 @@ docker compose up -d
   Diese ist pro Deployment bestimmt: `core/realms/ref-realm.json` (Standard,
   volle Demo-Daten) oder `core/realms/live-realm.json` (minimale Live-Konfiguration).
   Die Auswahl erfolgt über `COMPOSE_PROJECT_NAME` (`ref` oder `live`, Standard `ref`).
-  **Wichtig:** Die Variable muss explizit gesetzt sein (in `core/.env` bzw. in der
-  Deployment-Umgebung) – ohne sie interpoliert Compose den Verzeichnisnamen
+  Im Container heißt die Datei immer `eventhub-realm.json`, denn `--import-realm`
+  verlangt den Dateinamen `<realm>-realm.json` – die Deployment-Datei wird unter
+  diesem Namen eingehängt bzw. eingebaut.
+  **Wichtig:** `COMPOSE_PROJECT_NAME` muss explizit gesetzt sein (in `core/.env`
+  bzw. in der Deployment-Umgebung) – ohne ihn interpoliert Compose den Verzeichnisnamen
   (`core`) und die Realm-Datei würde nicht gefunden.
 
 Beim ersten Start wird ein eigenes Keycloak-Image gebaut, das das Login-Theme enthält

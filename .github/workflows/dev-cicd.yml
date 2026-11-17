@@ -58,6 +58,8 @@ jobs:
           context: ./core
           file: ./core/Dockerfile.keycloak
           push: true
+          build-args: |
+            REALM_FILE=ref-realm.json
           tags: ghcr.io/${{ steps.owner.outputs.owner }}/keycloak:dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
