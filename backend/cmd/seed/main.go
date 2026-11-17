@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"backend/internal/db"
+	"backend/internal/repository"
 	"backend/internal/seed"
 	"backend/internal/service"
 
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -27,14 +29,21 @@ func main() {
 		log.Printf("ignoring unreadable .env: %v", err)
 	}
 
-	// The mock seeder belongs to the ref deployment: the api-seed service runs ./seed-live in
-	// live. The guard also stops a manual run from polluting a live deployment with demo data.
-	switch deployment := os.Getenv("DEPLOYMENT"); deployment {
-	case "", "ref":
+	// ./seed is the single seed entry point for every deployment: which content it
+	// seeds is baked into the image as ENV DEPLOYMENT (build arg of the CI pipelines),
+	// so the deployment stacks all run the same command without any configuration —
+	// the same pattern as the per-deployment realm file. Local dev composes may
+	// override the baked value with an explicit DEPLOYMENT environment variable.
+	deployment := os.Getenv("DEPLOYMENT")
+	switch deployment {
+	case "", "ref", "live":
 	default:
-		log.Printf("skipping mock seed: this seeder only runs in the ref deployment (DEPLOYMENT=%q, live runs ./seed-live)", deployment)
-		return
+		log.Fatalf("unknown DEPLOYMENT %q: expected \"ref\" or \"live\"", deployment)
 	}
+	if deployment == "" {
+		deployment = "ref"
+	}
+	log.Printf("seeding the %q deployment...", deployment)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -65,22 +74,37 @@ func main() {
 	// user login would additionally depend on a demo account existing in the deployed
 	// realm and on direct access grants staying enabled on the frontend client.
 	log.Printf("authenticating as service account %q against realm %q at %s", keycloakCfg.ClientID, keycloakCfg.AdminRealm, keycloakCfg.Host)
-	var accessToken string
-	maxRetries := 10
-	for i := 0; i < maxRetries; i++ {
-		token, err := keycloakService.ServiceAccountToken(ctx)
-		if err == nil {
-			accessToken = token
-			break
-		}
-		log.Printf("  login attempt %d/%d failed: %v", i+1, maxRetries, err)
-		if i < maxRetries-1 {
-			diagnoseTokenEndpoint(ctx, keycloakCfg)
-			time.Sleep(5 * time.Second)
-		}
+	accessToken := authenticate(ctx, keycloakService, keycloakCfg)
+
+	fmt.Println()
+	switch deployment {
+	case "live":
+		runLiveSeed(ctx, database, keycloakService, keycloakCfg, accessToken)
+	default:
+		runMockSeed(ctx, database, keycloakService, keycloakCfg, accessToken)
 	}
-	if accessToken == "" {
-		log.Fatal("failed to authenticate against Keycloak after retries")
+}
+
+func runLiveSeed(ctx context.Context, database *gorm.DB, keycloakService *service.KeycloakService, keycloakCfg service.KeycloakClientConfig, accessToken string) {
+	// Fail fast when the target still carries mock seed data instead of stacking live
+	// content on top of demo data (see seed.EnsureNoMockData for the cleanup).
+	if err := seed.EnsureNoMockData(ctx, database, keycloakService, keycloakCfg.UserRealm, accessToken); err != nil {
+		log.Fatalf("live seed: %v", err)
+	}
+
+	liveSeeder := seed.NewLiveSeeder(database, keycloakService, repository.NewTransactor(database), keycloakCfg.UserRealm, accessToken)
+	if err := liveSeeder.SeedAll(ctx); err != nil {
+		log.Fatalf("live seed failed: %v", err)
+	}
+
+	log.Println("Seed complete: live content created in Keycloak and database")
+}
+
+func runMockSeed(ctx context.Context, database *gorm.DB, keycloakService *service.KeycloakService, keycloakCfg service.KeycloakClientConfig, accessToken string) {
+	// Fail fast when the target already contains live deployment content instead of
+	// polluting it with demo data (see seed.EnsureNoLiveData).
+	if err := seed.EnsureNoLiveData(ctx, database, keycloakService, keycloakCfg.UserRealm, accessToken); err != nil {
+		log.Fatalf("mock seed: %v", err)
 	}
 
 	seeder := seed.NewSeeder(database, keycloakService)
@@ -88,8 +112,26 @@ func main() {
 		log.Fatalf("seed failed: %v", err)
 	}
 
-	fmt.Println()
 	log.Println("Seed complete: mock data created in Keycloak and database")
+}
+
+// authenticate obtains the service account token, retrying while Keycloak is still
+// coming up, and logs a raw diagnostics probe after every failed attempt.
+func authenticate(ctx context.Context, keycloakService *service.KeycloakService, keycloakCfg service.KeycloakClientConfig) string {
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		token, err := keycloakService.ServiceAccountToken(ctx)
+		if err == nil {
+			return token
+		}
+		log.Printf("  login attempt %d/%d failed: %v", i+1, maxRetries, err)
+		if i < maxRetries-1 {
+			diagnoseTokenEndpoint(ctx, keycloakCfg)
+			time.Sleep(5 * time.Second)
+		}
+	}
+	log.Fatal("failed to authenticate against Keycloak after retries")
+	return ""
 }
 
 // diagnoseTokenEndpoint repeats the service-account token request as a plain HTTP call

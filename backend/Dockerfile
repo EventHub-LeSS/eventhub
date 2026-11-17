@@ -12,6 +12,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o seed-live ./cmd/seed-live
 
 FROM alpine:latest
 WORKDIR /root/
+# Which deployment this image serves: "ref" (demo/mock data) or "live". CI bakes the
+# flavor per pipeline (dev-cicd: ref, live-cicd: live), so ./seed seeds the right
+# content without any configuration in the deployment stacks — the same pattern as
+# the per-deployment realm file. A DEPLOYMENT environment variable (local dev
+# compose) overrides the baked value.
+ARG DEPLOYMENT=ref
+ENV DEPLOYMENT=${DEPLOYMENT}
 COPY --from=builder /app/api .
 COPY --from=builder /app/migrate .
 COPY --from=builder /app/seed .

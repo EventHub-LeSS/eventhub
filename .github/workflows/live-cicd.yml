@@ -50,6 +50,10 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          # Bakes the deployment flavor into the image: ./seed seeds the live content
+          # through the real user flow (the dev image bakes ref and seeds mock data).
+          build-args: |
+            DEPLOYMENT=live
           tags: |
             ghcr.io/${{ steps.owner.outputs.owner }}/backend:${{ github.ref_name }}
             ghcr.io/${{ steps.owner.outputs.owner }}/backend:latest
